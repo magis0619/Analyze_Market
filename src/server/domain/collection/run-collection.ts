@@ -20,6 +20,13 @@ import { GBP_SOURCE, OWN_SALON_SOURCE, PIPELINE_SOURCE, PLACES_SOURCE } from './
 
 const RUNNING_GUARD_MINUTES = 5;
 
+/** collection_runs.source → integrations.provider */
+const SOURCE_TO_PROVIDER: Record<string, 'google_places' | 'own_salon' | 'gbp' | undefined> = {
+  [PLACES_SOURCE]: 'google_places',
+  [OWN_SALON_SOURCE]: 'own_salon',
+  [GBP_SOURCE]: 'gbp',
+};
+
 export interface CollectionResult {
   ok: boolean;
   message: string;
@@ -276,11 +283,24 @@ export async function runCollection(salonId: string): Promise<CollectionResult> 
     }
   }
 
-  // integrations.last_synced_at を更新
-  await db
-    .update(integrations)
-    .set({ lastSyncedAt: sql`now()`, status: outcomes.every((o) => o.ok) ? 'active' : 'error' })
-    .where(eq(integrations.salonId, salonId));
+  // integrations の状態はソース単位で更新する。
+  // 全行を一括更新すると、Places の失敗が GBP 連携まで error にしてしまい、
+  // 実際には生きている連携に「再連携してください」と表示されてしまう。
+  for (const outcome of outcomes) {
+    const provider = SOURCE_TO_PROVIDER[outcome.source];
+    if (!provider) continue;
+    await db
+      .update(integrations)
+      .set({
+        lastSyncedAt: sql`now()`,
+        // GBPのトークン失効は token-store 側が error にするので、
+        // ここでは成功時に active へ戻すだけにとどめる
+        ...(outcome.ok ? { status: 'active' as const } : {}),
+      })
+      .where(
+        and(eq(integrations.salonId, salonId), eq(integrations.provider, provider)),
+      );
+  }
 
   let newEventCount = 0;
   let coachError: string | null = null;

@@ -5,6 +5,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 import { organizations } from './auth';
@@ -35,16 +36,21 @@ export const salons = pgTable('salons', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const integrations = pgTable('integrations', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  salonId: uuid('salon_id')
-    .notNull()
-    .references(() => salons.id),
-  provider: text('provider', { enum: ['google_places', 'own_salon', 'gbp'] }).notNull(),
-  status: text('status', { enum: ['active', 'error', 'disconnected'] })
-    .notNull()
-    .default('active'),
-  // 実APIの認証情報を保存する場合は暗号化して格納する (GBP OAuth は BACKLOG)
-  encryptedCredentials: text('encrypted_credentials'),
-  lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
-});
+export const integrations = pgTable(
+  'integrations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    salonId: uuid('salon_id')
+      .notNull()
+      .references(() => salons.id),
+    provider: text('provider', { enum: ['google_places', 'own_salon', 'gbp'] }).notNull(),
+    status: text('status', { enum: ['active', 'error', 'disconnected'] })
+      .notNull()
+      .default('active'),
+    /** OAuthトークン等。src/server/crypto/secret-box.ts で暗号化して格納する */
+    encryptedCredentials: text('encrypted_credentials'),
+    lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+  },
+  // 1サロン1プロバイダ。ソース単位の status 更新が確実に1行を指すようにする
+  (t) => [uniqueIndex('integrations_salon_provider_uq').on(t.salonId, t.provider)],
+);

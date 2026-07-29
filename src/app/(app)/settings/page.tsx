@@ -8,6 +8,8 @@ import { SalonSettingsForm } from '@/features/settings/SalonSettingsForm';
 import { OwnSalonDataForm } from '@/features/settings/OwnSalonDataForm';
 import { formatDateTime } from '@/features/shared/labels';
 import { getGbpConnectionSummary } from '@/server/domain/integrations/queries';
+import { GbpIntegrationCard } from '@/features/settings/GbpIntegrationCard';
+import { SOURCE_LABELS } from '@/server/domain/collection/sources';
 
 export const metadata = { title: '設定 | Salon Area Coach AI' };
 
@@ -18,7 +20,12 @@ const RUN_STATUS_LABELS: Record<string, string> = {
   failed: '失敗',
 };
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ gbp?: string }>;
+}) {
+  const { gbp } = await searchParams;
   const user = await requireUser();
   const salon = await getSalonByOrganization(user.organizationId);
   if (!salon) redirect('/onboarding');
@@ -77,9 +84,16 @@ export default async function SettingsPage() {
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-3 text-sm font-semibold text-slate-500">
+          Googleビジネスプロフィール連携
+        </h2>
+        <GbpIntegrationCard salonId={salon.id} summary={gbpConnection} statusParam={gbp} />
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="mb-1 text-sm font-semibold text-slate-500">自店舗データ</h2>
         <p className="mb-4 text-xs text-slate-500">
-          Google ビジネスプロフィール連携は今後対応予定です (BACKLOG.md 参照)。
+          収集時に自店舗の評価・口コミをどこから取得するかを選びます。
         </p>
         <OwnSalonDataForm
           salonId={salon.id}
@@ -107,7 +121,7 @@ export default async function SettingsPage() {
                 {runs.map((run) => (
                   <tr key={run.id} className="border-b border-slate-100 text-xs last:border-0">
                     <td className="px-2 py-1.5 whitespace-nowrap">{formatDateTime(run.startedAt)}</td>
-                    <td className="px-2 py-1.5">{run.source}</td>
+                    <td className="px-2 py-1.5">{SOURCE_LABELS[run.source] ?? run.source}</td>
                     <td className="px-2 py-1.5">
                       <span
                         className={

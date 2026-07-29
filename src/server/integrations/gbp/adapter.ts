@@ -39,6 +39,9 @@ export class RealOwnSalonAdapter
     this.stats = { billableCalls: 0 };
 
     if (isGbpFixtureMode()) {
+      // フィクスチャでも同期時刻は記録する (設定画面の「最終同期」が空のままだと
+      // 連携が動いているのか判断できない)
+      await touchGbpSyncedAt(this.salonId);
       return normalizeGbpReviews(fixtureReviews as GbpReviewsResponse);
     }
 

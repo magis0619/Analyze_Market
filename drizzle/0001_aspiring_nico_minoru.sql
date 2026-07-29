@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "integrations_salon_provider_uq" ON "integrations" USING btree ("salon_id","provider");
