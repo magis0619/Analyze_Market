@@ -124,7 +124,13 @@ export class MockGooglePlacesAdapter
 
   normalize(raw: PlacesNearbyResponse): NormalizedCollection {
     const collection = normalizeNearbyResponse(raw);
-    collection.costMetadata = { ...collection.costMetadata, nearbySearchRequests: 0, mock: 1 };
+    collection.costMetadata = {
+      ...collection.costMetadata,
+      nearbySearchRequests: 0,
+      billableCalls: 0,
+      resultSetSaturated: 0,
+      mock: 1,
+    };
     return collection;
   }
 }

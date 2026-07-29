@@ -4,6 +4,7 @@ import { requireUser } from '@/server/auth/session';
 import { getSalonByOrganization } from '@/server/domain/salons/queries';
 import { getDashboardData } from '@/server/queries/dashboard';
 import { CollectNowButton } from '@/features/collection/CollectNowButton';
+import { getPlacesModeLabel } from '@/server/integrations/modes';
 import {
   DIFFICULTY_LABELS,
   RECOMMENDATION_STATUS_LABELS,
@@ -252,7 +253,7 @@ export default async function DashboardPage() {
               </span>
               {item.source === 'google_places' ? (
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-500">
-                  {process.env.GOOGLE_MAPS_API_KEY ? 'Google Places API' : 'デモ'}
+                  {getPlacesModeLabel()}
                 </span>
               ) : null}
               {item.source === 'own_salon' ? (

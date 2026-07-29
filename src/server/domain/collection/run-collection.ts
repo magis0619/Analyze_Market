@@ -8,7 +8,8 @@ import {
   observations,
   salons,
 } from '@/server/db/schema';
-import { getGooglePlacesAdapter } from '@/server/integrations/google-places';
+import { createGooglePlacesAdapter } from '@/server/integrations/google-places';
+import { getPlacesMode } from '@/server/integrations/modes';
 import { getOwnSalonAdapter } from '@/server/integrations/own-salon';
 import type { NormalizedCollection } from '@/server/integrations/types';
 import { detectChanges } from '@/server/domain/diff/diff-engine';
@@ -102,6 +103,19 @@ interface SourceRunOutcome {
   source: string;
   ok: boolean;
   error?: string;
+  costMetadata?: Record<string, number>;
+}
+
+/**
+ * エラーメッセージから資格情報らしき文字列を除去する。
+ * 外部APIのエラー本文にはトークンが含まれうるため、
+ * collection_runs.error_summary へ書く前に必ず通すこと。
+ */
+export function redactSecrets(text: string): string {
+  return text
+    .replace(/\b(ya29|1\/\/)[\w./~+-]+/g, '[redacted]')
+    .replace(/\b(AIza)[\w-]{10,}/g, '[redacted]')
+    .replace(/\b(sk-ant-)[\w-]{10,}/g, '[redacted]');
 }
 
 async function runSource(
@@ -126,9 +140,9 @@ async function runSource(
         costMetadata: collection.costMetadata,
       })
       .where(eq(collectionRuns.id, run.id));
-    return { source, ok: true };
+    return { source, ok: true, costMetadata: collection.costMetadata };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = redactSecrets(error instanceof Error ? error.message : String(error));
     await db
       .update(collectionRuns)
       .set({ status: 'failed', completedAt: sql`now()`, errorSummary: message.slice(0, 500) })
@@ -197,20 +211,28 @@ export async function runCollection(salonId: string): Promise<CollectionResult> 
   const dataNotes: string[] = [];
 
   // 競合 (Google Places / モック)
-  const placesRunIndex = await countSuccessRuns(salonId, 'google_places');
-  const placesAdapter = getGooglePlacesAdapter(salonId, placesRunIndex);
-  outcomes.push(
-    await runSource(salonId, 'google_places', async () => {
-      const raw = await placesAdapter.collect({
-        latitude: salon.latitude,
-        longitude: salon.longitude,
-        radiusM: salon.tradeAreaRadiusM,
-      });
-      return placesAdapter.normalize(raw);
-    }),
-  );
-  if (placesAdapter.mode === 'mock') {
+  // runIndex はモックのシナリオ進行専用なので、実API時は算出しない (無駄なCOUNTを避ける)
+  const placesIsMock = getPlacesMode() === 'mock';
+  const placesAdapter = createGooglePlacesAdapter({
+    salonId,
+    runIndex: placesIsMock ? await countSuccessRuns(salonId, 'google_places') : 0,
+  });
+  const placesOutcome = await runSource(salonId, 'google_places', async () => {
+    const raw = await placesAdapter.collect({
+      latitude: salon.latitude,
+      longitude: salon.longitude,
+      radiusM: salon.tradeAreaRadiusM,
+    });
+    return placesAdapter.normalize(raw);
+  });
+  outcomes.push(placesOutcome);
+  if (placesIsMock) {
     dataNotes.push('競合データはデモデータです (GOOGLE_MAPS_API_KEY 未設定)。');
+  }
+  if (placesOutcome.costMetadata?.resultSetSaturated === 1) {
+    dataNotes.push(
+      '商圏内の美容院が取得上限(20件)に達しています。境界付近の店舗は収集ごとに出入りする可能性があります。',
+    );
   }
 
   // 自店舗 (デモモードのみアダプタ収集。手入力は保存済み観測を使う)

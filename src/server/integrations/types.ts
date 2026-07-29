@@ -30,7 +30,13 @@ export interface NormalizedObservationDraft {
 export interface NormalizedCollection {
   entities: NormalizedEntity[];
   observations: NormalizedObservationDraft[];
-  /** API呼び出し回数などコスト監査用 */
+  /**
+   * コスト監査用メタデータ。collection_runs.cost_metadata に保存される。
+   *
+   * **契約**: すべてのアダプタは `billableCalls` (課金対象となった外部API呼び出し回数、
+   * 再試行を含む。モックは 0) を必ず含めること。予算enforcement (domain/collection/budget.ts)
+   * はこのキーだけを見る。それ以外のキーは自由 (件数などの詳細)。
+   */
   costMetadata: Record<string, number>;
 }
 

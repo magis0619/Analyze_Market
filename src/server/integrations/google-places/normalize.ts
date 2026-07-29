@@ -24,7 +24,6 @@ export function normalizeNearbyResponse(raw: PlacesNearbyResponse): NormalizedCo
       attributes: {
         types: place.types ?? [],
         formattedAddress: place.formattedAddress ?? null,
-        weekdayDescriptions: place.regularOpeningHours?.weekdayDescriptions ?? null,
       },
     });
 
