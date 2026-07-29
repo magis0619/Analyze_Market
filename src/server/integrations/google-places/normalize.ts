@@ -32,6 +32,7 @@ export function normalizeNearbyResponse(raw: PlacesNearbyResponse): NormalizedCo
       collection.observations.push({
         externalSource: 'google_places',
         externalId: place.id,
+        source: 'google_places',
         metricKey: 'rating',
         numericValue: place.rating,
       });
@@ -40,6 +41,7 @@ export function normalizeNearbyResponse(raw: PlacesNearbyResponse): NormalizedCo
       collection.observations.push({
         externalSource: 'google_places',
         externalId: place.id,
+        source: 'google_places',
         metricKey: 'review_count',
         numericValue: place.userRatingCount,
       });
@@ -47,6 +49,7 @@ export function normalizeNearbyResponse(raw: PlacesNearbyResponse): NormalizedCo
     collection.observations.push({
       externalSource: 'google_places',
       externalId: place.id,
+      source: 'google_places',
       metricKey: 'business_status',
       textValue: place.businessStatus ?? 'OPERATIONAL',
     });

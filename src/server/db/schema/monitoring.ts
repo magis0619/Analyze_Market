@@ -12,7 +12,17 @@ import {
 import { salons } from './salons';
 
 export type EntityType = 'own_salon' | 'competitor' | 'facility' | 'region';
-export type ExternalSource = 'google_places' | 'own_salon_mock' | 'manual' | 'osm' | 'resas';
+/**
+ * external_source の値。entities では観測対象の識別体系 ('own_salon' は自店舗の固定キー)、
+ * observations の source では実際のデータ取得元 ('own_salon_mock' / 'manual' など) を表す。
+ */
+export type ExternalSource =
+  | 'google_places'
+  | 'own_salon'
+  | 'own_salon_mock'
+  | 'manual'
+  | 'osm'
+  | 'resas';
 
 /** 観測対象の共通マスタ (自店舗・競合・施設・地域) */
 export const entities = pgTable(

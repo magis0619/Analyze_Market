@@ -11,10 +11,14 @@ export interface NormalizedEntity {
   attributes: Record<string, unknown>;
 }
 
-/** 正規化済みの観測値 (observations への insert 素材)。entity は externalId で参照する */
+/**
+ * 正規化済みの観測値 (observations への insert 素材)。
+ * externalSource/externalId は対象エンティティの参照、source は実際のデータ取得元。
+ */
 export interface NormalizedObservationDraft {
   externalSource: ExternalSource;
   externalId: string;
+  source: ExternalSource;
   metricKey: string;
   numericValue?: number;
   textValue?: string;
