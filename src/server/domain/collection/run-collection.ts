@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, inArray, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { db } from '@/server/db/client';
 import {
   changeEvents,
@@ -151,6 +151,31 @@ async function runSource(
   }
 }
 
+/** この時間を超えて running のままの run は、応答が返らなかったものとみなす */
+const STALE_RUN_MINUTES = 10;
+
+/**
+ * タイムアウト等で running のまま残った collection_runs を failed に倒す。
+ * アダプタ側の AbortSignal が新規発生を防ぎ、この関数が既存の孤児を回収する。
+ */
+async function reconcileStaleRuns(salonId: string): Promise<void> {
+  const staleBefore = new Date(Date.now() - STALE_RUN_MINUTES * 60 * 1000);
+  await db
+    .update(collectionRuns)
+    .set({
+      status: 'failed',
+      completedAt: sql`now()`,
+      errorSummary: '応答がないまま終了しました (タイムアウト)',
+    })
+    .where(
+      and(
+        eq(collectionRuns.salonId, salonId),
+        eq(collectionRuns.status, 'running'),
+        lt(collectionRuns.startedAt, staleBefore),
+      ),
+    );
+}
+
 /**
  * 収集パイプライン (仕様05 週次監視フローの cron なし版)。
  * 1. 実行中ガード
@@ -163,6 +188,10 @@ export async function runCollection(salonId: string): Promise<CollectionResult> 
   if (!salon) {
     return { ok: false, message: '店舗が見つかりません', newEventCount: 0 };
   }
+
+  // 応答が返らないまま残った running 行を先に回収する。
+  // これをしないと孤児1件が実行中ガードを永久にブロックしてしまう。
+  await reconcileStaleRuns(salonId);
 
   // 実行中ガード: 直近5分以内に running のパイプラインがあれば中断
   const guardAfter = new Date(Date.now() - RUNNING_GUARD_MINUTES * 60 * 1000);
