@@ -10,6 +10,8 @@ import { formatDateTime } from '@/features/shared/labels';
 import { getGbpConnectionSummary } from '@/server/domain/integrations/queries';
 import { GbpIntegrationCard } from '@/features/settings/GbpIntegrationCard';
 import { SOURCE_LABELS } from '@/server/domain/collection/sources';
+import { BUCKET_LABELS, COST_BUCKETS } from '@/server/domain/collection/budget';
+import { checkBudget } from '@/server/domain/collection/budget-gate';
 
 export const metadata = { title: '設定 | Salon Area Coach AI' };
 
@@ -52,6 +54,7 @@ export default async function SettingsPage({
   }
 
   const gbpConnection = await getGbpConnectionSummary(salon.id);
+  const budget = await checkBudget(salon.id, salon.salonProfile.dataMode);
 
   const runs = await db
     .select()
@@ -102,6 +105,63 @@ export default async function SettingsPage({
           currentReviewCount={currentReviewCount}
           gbpReady={gbpConnection.ready}
         />
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-1 text-sm font-semibold text-slate-500">API利用状況</h2>
+        <p className="mb-4 text-xs text-slate-500">
+          外部APIの呼び出し回数 (日本時間の日次 / 月次)。上限に達したデータは収集をスキップし、前回値を表示します。
+          {budget.billableActive
+            ? ''
+            : ' 現在は課金される連携が有効になっていないため、実行間隔の制限はかかりません。'}
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[420px] text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
+                <th className="px-2 py-1.5 font-medium">対象</th>
+                <th className="px-2 py-1.5 font-medium">本日</th>
+                <th className="px-2 py-1.5 font-medium">今月</th>
+                <th className="px-2 py-1.5 font-medium">状態</th>
+              </tr>
+            </thead>
+            <tbody>
+              {COST_BUCKETS.map((bucket) => {
+                const isBlocked = budget.verdict.blocked.includes(bucket);
+                return (
+                  <tr key={bucket} className="border-b border-slate-100 last:border-0">
+                    <td className="px-2 py-1.5">{BUCKET_LABELS[bucket]}</td>
+                    <td className="px-2 py-1.5 tabular-nums">
+                      {budget.verdict.usage.daily[bucket]} / {budget.verdict.limits.dailyCalls[bucket]}
+                    </td>
+                    <td className="px-2 py-1.5 tabular-nums">
+                      {budget.verdict.usage.monthly[bucket]} /{' '}
+                      {budget.verdict.limits.monthlyCalls[bucket]}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {isBlocked ? (
+                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                          上限
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-xs text-slate-500">
+          本日のAIトークン: {budget.verdict.usage.dailyAiTokens.toLocaleString('ja-JP')} /{' '}
+          {budget.verdict.limits.dailyAiTokens.toLocaleString('ja-JP')}
+          {budget.nextAllowedAt ? ' ／ 次回収集は実行間隔の制限中です' : ''}
+        </p>
+        <p className="mt-1 text-xs text-slate-400">
+          上限は .env の PLACES_DAILY_CALL_LIMIT / AI_DAILY_CALL_LIMIT / AI_DAILY_TOKEN_LIMIT /
+          COLLECTION_MIN_INTERVAL_MINUTES などで変更できます。実際の請求額は各プロバイダのコンソールで確認してください。
+        </p>
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">

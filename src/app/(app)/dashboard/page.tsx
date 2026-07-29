@@ -5,9 +5,12 @@ import { getSalonByOrganization } from '@/server/domain/salons/queries';
 import { getDashboardData } from '@/server/queries/dashboard';
 import { CollectNowButton } from '@/features/collection/CollectNowButton';
 import { getPlacesModeLabel } from '@/server/integrations/modes';
+import { checkBudget } from '@/server/domain/collection/budget-gate';
+import { BUCKET_LABELS } from '@/server/domain/collection/budget';
 import { SOURCE_LABELS } from '@/server/domain/collection/sources';
 import {
   DIFFICULTY_LABELS,
+  OWN_SALON_MODE_LABELS,
   RECOMMENDATION_STATUS_LABELS,
   RISK_LEVEL_LABELS,
   SEVERITY_BADGE_CLASSES,
@@ -55,7 +58,8 @@ export default async function DashboardPage() {
   const salon = await getSalonByOrganization(user.organizationId);
   if (!salon) redirect('/onboarding');
 
-  const data = await getDashboardData(salon.id);
+  const data = await getDashboardData(salon.id, salon.salonProfile.dataMode);
+  const budget = await checkBudget(salon.id, salon.salonProfile.dataMode);
   const topEvents = [...data.events]
     .sort(
       (a, b) =>
@@ -69,8 +73,24 @@ export default async function DashboardPage() {
     <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">今週の経営判断</h1>
-        <CollectNowButton salonId={salon.id} />
+        <CollectNowButton salonId={salon.id} blockedReason={budget.reason} />
       </div>
+
+      {/* 上限に達したバケットがある場合の予告。全滅ならボタン側にも文言が出る */}
+      {budget.verdict.blocked.length > 0 ? (
+        <div
+          role="status"
+          className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          <p className="font-medium">
+            API利用上限に達しています: {budget.verdict.blocked.map((b) => BUCKET_LABELS[b]).join(' / ')}
+          </p>
+          <p className="mt-1 text-xs">
+            該当データは今回の収集をスキップし、前回値を表示しています。上限は日本時間の0時にリセットされます
+            (設定 &gt; API利用状況)。
+          </p>
+        </div>
+      ) : null}
 
       {/* 1. 今週の総評 */}
       {/* 実AI生成が期待されているのにフォールバックされた = 実API経路が壊れている。
@@ -272,9 +292,9 @@ export default async function DashboardPage() {
                   {getPlacesModeLabel()}
                 </span>
               ) : null}
-              {item.source === 'own_salon' ? (
+              {item.source === 'own_salon' || item.source === 'gbp' ? (
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-500">
-                  {salon.salonProfile.dataMode === 'demo' ? 'デモ' : '手入力'}
+                  {OWN_SALON_MODE_LABELS[salon.salonProfile.dataMode]}
                 </span>
               ) : null}
               <span className="text-xs text-slate-400">

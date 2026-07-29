@@ -43,7 +43,8 @@ export function normalizeOwnSalonSnapshot(
         numericValue: raw.reviewCount,
       },
     ],
-    costMetadata: { reviewsReturned: raw.reviews.length },
+    // billableCalls はアダプタ契約 (types.ts) の必須キー。GBPアダプタが上書きする
+    costMetadata: { billableCalls: 0, reviewsReturned: raw.reviews.length },
   };
 
   for (const review of raw.reviews) {

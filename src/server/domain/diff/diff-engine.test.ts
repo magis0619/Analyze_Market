@@ -59,7 +59,7 @@ function addReview(
 
 const NOW = new Date('2026-07-29T00:00:00Z');
 /** 未返信判定が発火しない既定clock (since=now なので境界跨ぎが起きない) */
-const CLOCK = { now: NOW, since: NOW };
+const CLOCK = { now: NOW, since: NOW, competitorDataFresh: true };
 
 describe('detectChanges', () => {
   it('初回 (prevが空) は差分イベントを生成しない', () => {
@@ -104,6 +104,42 @@ describe('detectChanges', () => {
     const events = detectChanges([COMPETITOR], prev, curr, CLOCK);
     expect(events[0]?.eventType).toBe('competitor_closed');
     expect(events[0]?.title).toContain('消失');
+  });
+
+  describe('competitorDataFresh=false (Places未取得: API障害・予算上限・タイムアウト)', () => {
+    const STALE = { ...CLOCK, competitorDataFresh: false };
+
+    it('不在を閉店と解釈しない (全競合への偽イベント量産を防ぐ)', () => {
+      const prev = snapshot((s) => {
+        addStatus(s, COMPETITOR.entityId, 'OPERATIONAL');
+        addMetric(s, COMPETITOR.entityId, 'rating', 4.1);
+      });
+      // 取得できなかった回は curr の presentEntityIds が空になる
+      const curr = snapshot((s) => addMetric(s, COMPETITOR.entityId, 'rating', 4.1));
+      curr.presentEntityIds.clear();
+
+      expect(detectChanges([COMPETITOR], prev, curr, STALE)).toHaveLength(0);
+      // 同じ入力で fresh=true なら消失として検知される (この差が今回の防波堤)
+      expect(detectChanges([COMPETITOR], prev, curr, CLOCK)[0]?.eventType).toBe(
+        'competitor_closed',
+      );
+    });
+
+    it('新規競合も出さない', () => {
+      const prev = snapshot((s) => addStatus(s, 'ent-other', 'OPERATIONAL'));
+      const curr = snapshot((s) => addStatus(s, COMPETITOR.entityId, 'OPERATIONAL'));
+      expect(detectChanges([COMPETITOR], prev, curr, STALE)).toHaveLength(0);
+    });
+
+    it('評価変化は前回値同士の比較になるため差分0だが、実際に動いていれば検知する', () => {
+      const prev = snapshot((s) => addMetric(s, COMPETITOR.entityId, 'rating', 4.1));
+      const same = snapshot((s) => addMetric(s, COMPETITOR.entityId, 'rating', 4.1));
+      expect(detectChanges([COMPETITOR], prev, same, STALE)).toHaveLength(0);
+
+      const moved = snapshot((s) => addMetric(s, COMPETITOR.entityId, 'rating', 4.4));
+      const events = detectChanges([COMPETITOR], prev, moved, STALE);
+      expect(events[0]?.eventType).toBe('rating_change');
+    });
   });
 
   it('rating_change: |Δ|=0.09は検知せず、0.1で検知する (境界値)', () => {
@@ -166,28 +202,28 @@ describe('own_unreplied_review (7日超の未返信)', () => {
     const prev = snapshot((s) => addReview(s, OWN.entityId, 'r-1', 3, false, daysAgo(8)));
     const curr = snapshot((s) => addReview(s, OWN.entityId, 'r-1', 3, false, daysAgo(8)));
 
-    const first = detectChanges([OWN], prev, curr, { now: NOW, since: daysAgo(2) });
+    const first = detectChanges([OWN], prev, curr, { now: NOW, since: daysAgo(2), competitorDataFresh: true });
     const unreplied = first.filter((e) => e.eventType === 'own_unreplied_review');
     expect(unreplied).toHaveLength(1);
     expect(unreplied[0]?.severity).toBe('high');
     expect(unreplied[0]?.title).toContain('8日間未返信');
 
     // 次の収集: 既に境界を跨ぎ済みなので再発火しない (エンジンは状態を持たないため重要)
-    const second = detectChanges([OWN], prev, curr, { now: NOW, since: daysAgo(0.5) });
+    const second = detectChanges([OWN], prev, curr, { now: NOW, since: daysAgo(0.5), competitorDataFresh: true });
     expect(second.filter((e) => e.eventType === 'own_unreplied_review')).toHaveLength(0);
   });
 
   it('7日未満なら発火しない', () => {
     const prev = snapshot((s) => addReview(s, OWN.entityId, 'r-1', 3, false, daysAgo(6)));
     const curr = snapshot((s) => addReview(s, OWN.entityId, 'r-1', 3, false, daysAgo(6)));
-    const events = detectChanges([OWN], prev, curr, { now: NOW, since: daysAgo(2) });
+    const events = detectChanges([OWN], prev, curr, { now: NOW, since: daysAgo(2), competitorDataFresh: true });
     expect(events.filter((e) => e.eventType === 'own_unreplied_review')).toHaveLength(0);
   });
 
   it('返信済みなら経過日数によらず発火しない', () => {
     const prev = snapshot((s) => addReview(s, OWN.entityId, 'r-1', 3, true, daysAgo(30)));
     const curr = snapshot((s) => addReview(s, OWN.entityId, 'r-1', 3, true, daysAgo(30)));
-    const events = detectChanges([OWN], prev, curr, { now: NOW, since: daysAgo(2) });
+    const events = detectChanges([OWN], prev, curr, { now: NOW, since: daysAgo(2), competitorDataFresh: true });
     expect(events.filter((e) => e.eventType === 'own_unreplied_review')).toHaveLength(0);
   });
 
@@ -197,7 +233,7 @@ describe('own_unreplied_review (7日超の未返信)', () => {
       addReview(s, OWN.entityId, 'r-existing', 5, true, daysAgo(1));
       addReview(s, OWN.entityId, 'r-backfilled', 3, false, daysAgo(60));
     });
-    const events = detectChanges([OWN], prev, curr, { now: NOW, since: daysAgo(2) });
+    const events = detectChanges([OWN], prev, curr, { now: NOW, since: daysAgo(2), competitorDataFresh: true });
     expect(events.filter((e) => e.eventType === 'own_unreplied_review')).toHaveLength(1);
   });
 
@@ -209,13 +245,13 @@ describe('own_unreplied_review (7日超の未返信)', () => {
         addReview(s, OWN.entityId, `old-${i}`, 3, false, daysAgo(10 + i));
       }
     });
-    const events = detectChanges([OWN], prev, curr, { now: NOW, since: daysAgo(2) });
+    const events = detectChanges([OWN], prev, curr, { now: NOW, since: daysAgo(2), competitorDataFresh: true });
     expect(events.filter((e) => e.eventType === 'own_unreplied_review')).toHaveLength(3);
   });
 
   it('初回実行 (prevが空) では発火しない', () => {
     const curr = snapshot((s) => addReview(s, OWN.entityId, 'r-1', 3, false, daysAgo(30)));
-    const events = detectChanges([OWN], emptySnapshot(), curr, { now: NOW, since: null });
+    const events = detectChanges([OWN], emptySnapshot(), curr, { now: NOW, since: null, competitorDataFresh: true });
     expect(events).toHaveLength(0);
   });
 });

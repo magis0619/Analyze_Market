@@ -9,7 +9,13 @@ export function normalizeNearbyResponse(raw: PlacesNearbyResponse): NormalizedCo
   const collection: NormalizedCollection = {
     entities: [],
     observations: [],
-    costMetadata: { nearbySearchRequests: 1, placesReturned: raw.places?.length ?? 0 },
+    // billableCalls はアダプタ契約 (types.ts) の必須キー。
+    // 実際に外部APIを叩いたアダプタが normalize 後に上書きする。
+    costMetadata: {
+      billableCalls: 0,
+      nearbySearchRequests: 1,
+      placesReturned: raw.places?.length ?? 0,
+    },
   };
 
   for (const place of raw.places ?? []) {

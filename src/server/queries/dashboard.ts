@@ -1,7 +1,11 @@
 import 'server-only';
 import { FALLBACK_GENERATOR_KIND } from '@/server/ai';
 import { getAiMode } from '@/server/integrations/modes';
-import { DISPLAY_SOURCES } from '@/server/domain/collection/sources';
+import {
+  DISPLAY_SOURCES,
+  GBP_SOURCE,
+  OWN_SALON_SOURCE,
+} from '@/server/domain/collection/sources';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/server/db/client';
 import {
@@ -12,6 +16,7 @@ import {
   observations,
   recommendations,
   type ChangeEventType,
+  type OwnSalonDataMode,
   type RecommendationStatus,
   type Severity,
 } from '@/server/db/schema';
@@ -229,8 +234,15 @@ async function loadCompetitorStats(salonId: string): Promise<CompetitorStats> {
   };
 }
 
-async function loadFreshness(salonId: string): Promise<SourceFreshness[]> {
-  const sources = [...DISPLAY_SOURCES];
+async function loadFreshness(
+  salonId: string,
+  dataMode: OwnSalonDataMode,
+): Promise<SourceFreshness[]> {
+  // GBP連携中は自店舗データの行が source='gbp' で書かれるため、
+  // own_salon のまま引くと連携前の古い時刻が「最終更新」に出てしまう
+  const sources = DISPLAY_SOURCES.map((source) =>
+    source === OWN_SALON_SOURCE && dataMode === 'gbp' ? GBP_SOURCE : source,
+  );
   const result: SourceFreshness[] = [];
   for (const source of sources) {
     const [row] = await db
@@ -253,14 +265,17 @@ async function loadFreshness(salonId: string): Promise<SourceFreshness[]> {
   return result;
 }
 
-export async function getDashboardData(salonId: string): Promise<DashboardData> {
+export async function getDashboardData(
+  salonId: string,
+  dataMode: OwnSalonDataMode,
+): Promise<DashboardData> {
   const report = await loadLatestReport(salonId);
   const [recs, events, kpi, competitorStats, freshness] = await Promise.all([
     loadRecommendations(salonId, report?.id ?? null),
     loadRecentEvents(salonId),
     loadKpi(salonId),
     loadCompetitorStats(salonId),
-    loadFreshness(salonId),
+    loadFreshness(salonId, dataMode),
   ]);
   // 実AI経路が期待されているのにフォールバックで生成された = 実APIが壊れている
   const aiDegraded =

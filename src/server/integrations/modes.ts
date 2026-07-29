@@ -19,3 +19,14 @@ export function getAiMode(): AiMode {
 export function getPlacesModeLabel(): string {
   return getPlacesMode() === 'real' ? 'Google Places API' : 'デモ';
 }
+
+/**
+ * GBPのAPI割当承認を待たずに連携経路全体を動かすためのフィクスチャモード。
+ * 同じ normalize 経路・同じ sourceName を通るので、設定UI・未返信検出・
+ * ダッシュボード表示・劣化時の挙動まで承認前に検証できる。
+ *
+ * 予算判定もこれを見る (フィクスチャは課金しないため、実行間隔で縛らない)。
+ */
+export function isGbpFixtureMode(): boolean {
+  return process.env.GBP_FIXTURE_MODE === '1';
+}

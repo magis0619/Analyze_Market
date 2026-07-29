@@ -9,7 +9,7 @@ import {
   recommendations,
   salons,
 } from '@/server/db/schema';
-import { getCoachGenerator } from '@/server/ai';
+import { FALLBACK_GENERATOR_KIND, getCoachGenerator } from '@/server/ai';
 import { redactSecrets } from '@/server/integrations/redact';
 import { AI_COACH_SOURCE } from '@/server/domain/collection/sources';
 import { COACH_PROMPT_VERSION } from '@/server/ai/prompt';
@@ -39,11 +39,17 @@ function addDays(date: Date, days: number): Date {
  * AIコーチ入力を組み立てて生成し、coaching_reports + recommendations を保存する。
  * 同一 period_end (同日) の既存レポートは置換するが、実施ステータスが付いた提案は残す。
  */
+export interface GenerateReportOptions {
+  /** 予算上限に達しているためAI呼び出しを行わない (ルールベースで生成する) */
+  aiBlocked?: boolean;
+}
+
 export async function generateAndPersistReport(
   salon: SalonRow,
   newEvents: ChangeEventRow[],
   periodStart: Date,
   dataNotes: string[],
+  options: GenerateReportOptions = {},
 ): Promise<{ reportId: string }> {
   const now = new Date();
 
@@ -176,21 +182,28 @@ export async function generateAndPersistReport(
     dataNotes,
   });
 
-  const { output, generatorKind, usage, degraded } = await getCoachGenerator().generate(input);
+  const aiBlocked = options.aiBlocked ?? false;
+  const { output, generatorKind, usage, degraded } = await getCoachGenerator({
+    forceFallback: aiBlocked,
+  }).generate(input);
 
   // 生成方式と結果を collection_runs に残す。
   // 実AI経路が壊れていてもフォールバックで画面は正常に見えるため、
   // ここに失敗を書かないと「壊れているのに気づけない」状態になる。
+  // 上限による抑制は障害ではないので failed ではなく partial で区別する。
   await db.insert(collectionRuns).values({
     salonId: salon.id,
     source: AI_COACH_SOURCE,
-    status: degraded ? 'failed' : 'success',
+    status: aiBlocked ? 'partial' : degraded ? 'failed' : 'success',
     completedAt: sql`now()`,
-    errorSummary: degraded
-      ? redactSecrets(`AI生成失敗(${degraded.reason}): ${degraded.message}`).slice(0, 500)
-      : null,
+    errorSummary: aiBlocked
+      ? 'AI利用上限に達したため簡易生成に切り替えました'
+      : degraded
+        ? redactSecrets(`AI生成失敗(${degraded.reason}): ${degraded.message}`).slice(0, 500)
+        : null,
     costMetadata: {
-      billableCalls: degraded ? 0 : 1,
+      // 実際に使われた生成方式から数える (上限抑制・失敗フォールバックはどちらも0)
+      billableCalls: generatorKind === FALLBACK_GENERATOR_KIND ? 0 : 1,
       inputTokens: usage?.input_tokens ?? 0,
       outputTokens: usage?.output_tokens ?? 0,
       cacheReadInputTokens: usage?.cache_read_input_tokens ?? 0,

@@ -32,7 +32,7 @@ export interface ReviewPoint {
 }
 
 /**
- * 差分検知の時刻基準。
+ * 差分検知の時刻基準と、今回のデータ取得状況。
  * 差分エンジンは状態を持たないため、「7日経過」のような時間依存の判定を
  * 1回だけ発火させるには前回実行時刻 (since) が必要になる。
  */
@@ -40,6 +40,14 @@ export interface DiffClock {
   now: Date;
   /** 前回パイプライン完了時刻。初回は null */
   since: Date | null;
+  /**
+   * 今回の実行で競合データ (Places) を取得できたか。
+   *
+   * false のときは「不在」を閉店と解釈してはいけない。取得できなかっただけで
+   * 全競合が curr から消えるため、API障害・予算上限・タイムアウトのたびに
+   * 商圏内の全店舗へ competitor_closed が量産され、それがAIコーチの根拠になる。
+   */
+  competitorDataFresh: boolean;
 }
 
 /**

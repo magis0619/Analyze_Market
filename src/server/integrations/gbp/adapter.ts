@@ -1,5 +1,6 @@
 import 'server-only';
 import type { DataSourceAdapter, NormalizedCollection } from '../types';
+import { isGbpFixtureMode } from '../modes';
 import { normalizeOwnSalonSnapshot } from '../own-salon/normalize';
 import type { OwnSalonInput, OwnSalonSnapshot } from '../own-salon/types';
 import { listReviews, type GbpCallStats } from './client';
@@ -12,14 +13,7 @@ import fixtureReviews from './fixtures/reviews.page0.json';
 /** 期限のこの秒数前になったら先回りして更新する */
 const REFRESH_MARGIN_MS = 120_000;
 
-/**
- * GBPのAPI割当承認を待たずに連携経路全体を動かすためのフィクスチャモード。
- * 同じ normalize 経路・同じ sourceName を通るので、設定UI・未返信検出・
- * ダッシュボード表示・劣化時の挙動まで承認前に検証できる。
- */
-export function isGbpFixtureMode(): boolean {
-  return process.env.GBP_FIXTURE_MODE === '1';
-}
+export { isGbpFixtureMode };
 
 export class RealOwnSalonAdapter
   implements DataSourceAdapter<OwnSalonInput, OwnSalonSnapshot>

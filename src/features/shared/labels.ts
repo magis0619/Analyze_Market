@@ -1,4 +1,16 @@
-import type { ChangeEventType, RecommendationStatus, Severity } from '@/server/db/schema';
+import type {
+  ChangeEventType,
+  OwnSalonDataMode,
+  RecommendationStatus,
+  Severity,
+} from '@/server/db/schema';
+
+/** 自店舗データの取得方法を示すバッジ文言 */
+export const OWN_SALON_MODE_LABELS: Record<OwnSalonDataMode, string> = {
+  demo: 'デモ',
+  manual: '手入力',
+  gbp: 'GBP',
+};
 
 export const SEVERITY_LABELS: Record<Severity, string> = {
   critical: 'CRIT',

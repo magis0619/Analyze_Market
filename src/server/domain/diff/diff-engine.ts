@@ -47,7 +47,7 @@ export function detectChanges(
   for (const entity of entities) {
     if (entity.entityType === 'competitor') {
       if (entity.isExcluded) continue;
-      detectCompetitorChanges(entity, prev, curr, drafts);
+      detectCompetitorChanges(entity, prev, curr, clock, drafts);
     } else if (entity.entityType === 'own_salon') {
       detectOwnSalonChanges(entity, prev, curr, drafts);
       detectUnrepliedReviews(entity, prev, curr, clock, drafts);
@@ -126,10 +126,19 @@ function detectCompetitorChanges(
   entity: DiffEntity,
   prev: Snapshot,
   curr: Snapshot,
+  clock: DiffClock,
   drafts: ChangeEventDraft[],
 ): void {
   const wasPresent = prev.presentEntityIds.has(entity.entityId);
   const isPresent = curr.presentEntityIds.has(entity.entityId);
+
+  // 今回 Places を取得できていない場合、curr には誰も居ないので
+  // 「不在」は閉店の証拠にならない。存在ベースの判定を一切行わない
+  // (評価・口コミ数の比較は前回値同士になり差分0なので安全に通す)。
+  if (!clock.competitorDataFresh) {
+    detectCompetitorMetricChanges(entity, prev, curr, drafts);
+    return;
+  }
 
   // 新規競合: 前回存在せず今回存在
   if (!wasPresent && isPresent) {
@@ -176,6 +185,19 @@ function detectCompetitorChanges(
     });
   }
 
+  detectCompetitorMetricChanges(entity, prev, curr, drafts);
+}
+
+/**
+ * 評価・口コミ数の比較。存在判定に依存しないため、
+ * 今回 Places を取得できなかった場合でも安全に通せる (前回値同士の比較になり差分0)。
+ */
+function detectCompetitorMetricChanges(
+  entity: DiffEntity,
+  prev: Snapshot,
+  curr: Snapshot,
+  drafts: ChangeEventDraft[],
+): void {
   // 評価変化
   const prevRating = prev.metrics.get(metricKeyOf(entity.entityId, 'rating'));
   const currRating = curr.metrics.get(metricKeyOf(entity.entityId, 'rating'));

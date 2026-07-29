@@ -16,6 +16,7 @@ import { detectChanges } from '@/server/domain/diff/diff-engine';
 import { loadDiffInputs } from '@/server/domain/diff/snapshot';
 import { generateAndPersistReport } from '@/server/domain/coaching/generate-report';
 import { redactSecrets } from '@/server/integrations/redact';
+import { blockedBucketNote, checkBudget } from './budget-gate';
 import { GBP_SOURCE, OWN_SALON_SOURCE, PIPELINE_SOURCE, PLACES_SOURCE } from './sources';
 
 const RUNNING_GUARD_MINUTES = 5;
@@ -206,6 +207,14 @@ export async function runCollection(salonId: string): Promise<CollectionResult> 
     return { ok: false, message: '収集は既に実行中です。しばらく待ってください。', newEventCount: 0 };
   }
 
+  // 予算の関門。ボタンのdisableはUXであって関門ではないので、
+  // アダプタを1つも生成しないこの位置でサーバ側から止める。
+  const budget = await checkBudget(salonId, salon.salonProfile.dataMode);
+  if (!budget.allowed) {
+    return { ok: false, message: budget.reason ?? 'API利用上限に達しています', newEventCount: 0 };
+  }
+  const blocked = budget.verdict.blocked;
+
   // 前回の差分基準時刻 = 直近に差分検知まで完了したパイプラインの完了時刻。
   // (開始時刻を使うと、その実行自身が挿入した観測が prev に含まれず差分を取り逃す。
   //  完了時刻なら、収集間にオーナーが手入力した観測も次回の curr 側に入る)
@@ -237,45 +246,57 @@ export async function runCollection(salonId: string): Promise<CollectionResult> 
   // 競合 (Google Places / モック)
   // runIndex はモックのシナリオ進行専用なので、実API時は算出しない (無駄なCOUNTを避ける)
   const placesIsMock = getPlacesMode() === 'mock';
-  const placesAdapter = createGooglePlacesAdapter({
-    salonId,
-    runIndex: placesIsMock ? await countSuccessRuns(salonId, PLACES_SOURCE) : 0,
-  });
-  const placesOutcome = await runSource(salonId, PLACES_SOURCE, async () => {
-    const raw = await placesAdapter.collect({
-      latitude: salon.latitude,
-      longitude: salon.longitude,
-      radiusM: salon.tradeAreaRadiusM,
+  if (blocked.includes('places')) {
+    dataNotes.push(blockedBucketNote('places'));
+  } else {
+    const placesAdapter = createGooglePlacesAdapter({
+      salonId,
+      runIndex: placesIsMock ? await countSuccessRuns(salonId, PLACES_SOURCE) : 0,
     });
-    return placesAdapter.normalize(raw);
-  });
-  outcomes.push(placesOutcome);
-  if (placesIsMock) {
-    dataNotes.push('競合データはデモデータです (GOOGLE_MAPS_API_KEY 未設定)。');
-  }
-  if (placesOutcome.costMetadata?.resultSetSaturated === 1) {
-    dataNotes.push(
-      '商圏内の美容院が取得上限(20件)に達しています。境界付近の店舗は収集ごとに出入りする可能性があります。',
-    );
+    const placesOutcome = await runSource(salonId, PLACES_SOURCE, async () => {
+      const raw = await placesAdapter.collect({
+        latitude: salon.latitude,
+        longitude: salon.longitude,
+        radiusM: salon.tradeAreaRadiusM,
+      });
+      return placesAdapter.normalize(raw);
+    });
+    outcomes.push(placesOutcome);
+    if (placesIsMock) {
+      dataNotes.push('競合データはデモデータです (GOOGLE_MAPS_API_KEY 未設定)。');
+    }
+    if (placesOutcome.costMetadata?.resultSetSaturated === 1) {
+      dataNotes.push(
+        '商圏内の美容院が取得上限(20件)に達しています。境界付近の店舗は収集ごとに出入りする可能性があります。',
+      );
+    }
   }
 
   // 自店舗 (demo=モック / gbp=GBP連携 / manual=保存済みの手入力観測)
   const ownDataMode = salon.salonProfile.dataMode;
-  const ownSelection = await getOwnSalonAdapter({
-    dataMode: ownDataMode,
-    salonId,
-    runIndex: ownDataMode === 'demo' ? await countSuccessRuns(salonId, OWN_SALON_SOURCE) : 0,
-  });
-  if (ownSelection.adapter) {
-    const adapter = ownSelection.adapter;
-    outcomes.push(
-      await runSource(salonId, adapter.sourceName === 'gbp' ? GBP_SOURCE : OWN_SALON_SOURCE, async () => {
-        const raw = await adapter.collect({ salonName: salon.name });
-        return adapter.normalize(raw);
-      }),
-    );
+  if (blocked.includes('gbp') && ownDataMode === 'gbp') {
+    dataNotes.push(blockedBucketNote('gbp'));
+  } else {
+    const ownSelection = await getOwnSalonAdapter({
+      dataMode: ownDataMode,
+      salonId,
+      runIndex: ownDataMode === 'demo' ? await countSuccessRuns(salonId, OWN_SALON_SOURCE) : 0,
+    });
+    if (ownSelection.adapter) {
+      const adapter = ownSelection.adapter;
+      outcomes.push(
+        await runSource(
+          salonId,
+          adapter.sourceName === 'gbp' ? GBP_SOURCE : OWN_SALON_SOURCE,
+          async () => {
+            const raw = await adapter.collect({ salonName: salon.name });
+            return adapter.normalize(raw);
+          },
+        ),
+      );
+    }
+    dataNotes.push(ownSelection.note);
   }
-  dataNotes.push(ownSelection.note);
 
   for (const outcome of outcomes) {
     if (!outcome.ok) {
@@ -311,9 +332,14 @@ export async function runCollection(salonId: string): Promise<CollectionResult> 
       { latitude: salon.latitude, longitude: salon.longitude },
       cutoff,
     );
+    // 競合データを取得できなかった回は、不在を閉店と解釈させない。
+    // (取得できなければ全競合が curr から消えるため、そのまま差分を取ると
+    //  商圏内の全店舗に competitor_closed が立ち、それがAIコーチの根拠になる)
+    const competitorDataFresh = outcomes.some((o) => o.source === PLACES_SOURCE && o.ok);
     const drafts = detectChanges(diffInputs.entities, diffInputs.prev, diffInputs.curr, {
       now: new Date(),
       since: cutoff,
+      competitorDataFresh,
     });
     let insertedEvents: (typeof changeEvents.$inferSelect)[] = [];
     if (drafts.length > 0) {
@@ -335,12 +361,17 @@ export async function runCollection(salonId: string): Promise<CollectionResult> 
     newEventCount = insertedEvents.length;
 
     // AIコーチ生成 (失敗しても観測・イベントは確定済み)
+    // 上限到達時もレポート自体は作る。ルールベース生成は課金されないので、
+    // 画面を空にするより「簡易生成です」と明示して出す方が利用者の役に立つ。
+    const aiBlocked = blocked.includes('ai');
+    if (aiBlocked) dataNotes.push(blockedBucketNote('ai'));
     try {
       await generateAndPersistReport(
         salon,
         insertedEvents,
         cutoff ?? salon.createdAt,
         dataNotes,
+        { aiBlocked },
       );
     } catch (error) {
       coachError = error instanceof Error ? error.message : String(error);

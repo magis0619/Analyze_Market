@@ -66,13 +66,18 @@ class ResilientCoachGenerator implements CoachGenerator {
   }
 }
 
+export interface CoachGeneratorOptions {
+  /** 予算上限などで実API呼び出しを禁じる。キーがあってもルールベースを使う */
+  forceFallback?: boolean;
+}
+
 /**
  * ANTHROPIC_API_KEY があれば Anthropic 生成 (実行時エラーはルールベースへフォールバック)、
  * なければルールベース生成を返す。
  */
-export function getCoachGenerator(): CoachGenerator {
+export function getCoachGenerator(options: CoachGeneratorOptions = {}): CoachGenerator {
   const fallback = new FallbackCoachGenerator();
-  if (getAiMode() === 'fallback') return fallback;
+  if (options.forceFallback || getAiMode() === 'fallback') return fallback;
   const anthropic = new AnthropicCoachGenerator(
     createAnthropicMessagesClient(process.env.ANTHROPIC_API_KEY as string),
   );
