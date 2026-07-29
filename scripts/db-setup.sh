@@ -2,17 +2,26 @@
 # ローカル開発用 PostgreSQL 16 を冪等にセットアップして起動する。
 # - root で実行された場合は postgres ユーザー経由で initdb / pg_ctl を実行する
 #   (PostgreSQL は root での起動を拒否するため)
-# - データディレクトリ: /var/lib/postgresql/salon-area-coach-16
+# - データディレクトリ: root実行時は /var/lib/postgresql/salon-area-coach-16、
+#   それ以外 (通常のローカル開発機) は ~/.local/share/salon-area-coach/pgdata16
+#   (PGDATA環境変数で明示指定も可)
 # - ポート: 55432 (既存の 5432 と衝突しないように)
 # - 認証: 127.0.0.1 のみ listen + trust (開発専用。本番では使用しない)
 # 停止するには: scripts/db-setup.sh stop
 set -euo pipefail
 
-PGDATA="${PGDATA:-/var/lib/postgresql/salon-area-coach-16}"
 PGPORT="${PGPORT:-55432}"
 DB="${DB:-salon_area_coach}"
 
 cd "$(dirname "$0")/.."
+
+if [ -n "${PGDATA:-}" ]; then
+  : # 明示指定があればそれを使う
+elif [ "$(id -u)" = 0 ]; then
+  PGDATA=/var/lib/postgresql/salon-area-coach-16
+else
+  PGDATA="$HOME/.local/share/salon-area-coach/pgdata16"
+fi
 
 # PGBIN の決定: 環境変数 > よくあるインストール先の自動検出 > PATH上のinitdb
 detect_pgbin() {
@@ -76,7 +85,11 @@ fi
 
 if [ ! -f "$PGDATA/PG_VERSION" ]; then
   echo "==> initdb: $PGDATA"
-  mkdir -p "$PGDATA"
+  if ! mkdir -p "$PGDATA" 2>/dev/null; then
+    echo "error: $PGDATA を作成できません (権限不足の可能性)。" >&2
+    echo "  書き込み可能な場所を PGDATA で指定してください: PGDATA=\$HOME/pgdata16 bash scripts/db-setup.sh" >&2
+    exit 1
+  fi
   if [ "$(id -u)" = 0 ] && id postgres >/dev/null 2>&1; then
     chown postgres:postgres "$PGDATA"
   fi
