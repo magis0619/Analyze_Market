@@ -7,6 +7,7 @@ import { getSalonByOrganization } from '@/server/domain/salons/queries';
 import { SalonSettingsForm } from '@/features/settings/SalonSettingsForm';
 import { OwnSalonDataForm } from '@/features/settings/OwnSalonDataForm';
 import { formatDateTime } from '@/features/shared/labels';
+import { getGbpConnectionSummary } from '@/server/domain/integrations/queries';
 
 export const metadata = { title: '設定 | Salon Area Coach AI' };
 
@@ -42,6 +43,8 @@ export default async function SettingsPage() {
       else currentReviewCount = row?.value ?? null;
     }
   }
+
+  const gbpConnection = await getGbpConnectionSummary(salon.id);
 
   const runs = await db
     .select()
@@ -83,6 +86,7 @@ export default async function SettingsPage() {
           currentMode={salon.salonProfile.dataMode}
           currentRating={currentRating}
           currentReviewCount={currentReviewCount}
+          gbpReady={gbpConnection.ready}
         />
       </section>
 

@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/server/db/client';
+import type { OwnSalonDataMode } from '@/server/db/schema';
 import { entities, integrations, observations, salons } from '@/server/db/schema';
 import { requireUser } from '@/server/auth/session';
 import { runCollection } from '@/server/domain/collection/run-collection';
@@ -209,12 +210,26 @@ export interface SetDataModeResult {
 /** 自店舗データモードの切替 + 手入力KPIの保存 (設定画面から使用) */
 export async function saveOwnSalonDataAction(
   salonId: string,
-  dataMode: 'demo' | 'manual',
+  dataMode: OwnSalonDataMode,
   manualKpi: z.infer<typeof manualKpiSchema> | null,
 ): Promise<SetDataModeResult> {
   const user = await requireUser();
   const salon = await getOwnedSalon(salonId, user.organizationId);
   if (!salon) return { error: '店舗が見つかりません', saved: false };
+
+  // 未接続のまま gbp を選ぶと、収集が黙って何もしない状態になるため拒否する
+  if (dataMode === 'gbp') {
+    const { getGbpConnectionSummary } = await import('@/server/domain/integrations/queries');
+    const summary = await getGbpConnectionSummary(salonId);
+    if (!summary.ready) {
+      return {
+        error: summary.connected
+          ? 'GBPの対象店舗が未選択です。先に店舗を選択してください。'
+          : 'GBP連携が未完了です。先にGoogleビジネスプロフィールと連携してください。',
+        saved: false,
+      };
+    }
+  }
 
   if (dataMode === 'manual' && manualKpi) {
     const parsed = manualKpiSchema.safeParse(manualKpi);

@@ -1,0 +1,56 @@
+{
+  "reviews": [
+    {
+      "reviewId": "AbFvOqk_fixture_0001",
+      "name": "accounts/000/locations/000/reviews/AbFvOqk_fixture_0001",
+      "reviewer": { "displayName": "T. Yamada" },
+      "starRating": "FIVE",
+      "comment": "カラーの仕上がりがとても良かったです。また伺います。",
+      "createTime": "2026-07-05T01:00:00Z",
+      "updateTime": "2026-07-05T01:00:00Z",
+      "reviewReply": {
+        "comment": "ありがとうございます。またのご来店をお待ちしております。",
+        "updateTime": "2026-07-05T09:00:00Z"
+      }
+    },
+    {
+      "reviewId": "AbFvOqk_fixture_0002",
+      "name": "accounts/000/locations/000/reviews/AbFvOqk_fixture_0002",
+      "reviewer": { "displayName": "M. Sato" },
+      "starRating": "FOUR",
+      "comment": "落ち着いた雰囲気で丁寧に対応してもらえました。",
+      "createTime": "2026-07-12T05:30:00Z",
+      "updateTime": "2026-07-12T05:30:00Z",
+      "reviewReply": {
+        "comment": "ご来店ありがとうございました。",
+        "updateTime": "2026-07-12T10:00:00Z"
+      }
+    },
+    {
+      "reviewId": "AbFvOqk_fixture_0003",
+      "name": "accounts/000/locations/000/reviews/AbFvOqk_fixture_0003",
+      "reviewer": { "displayName": "K. Suzuki" },
+      "starRating": "TWO",
+      "comment": "予約時間に案内されず30分待ちました。仕上がりは普通でした。",
+      "createTime": "2026-07-18T09:00:00Z",
+      "updateTime": "2026-07-18T09:00:00Z"
+    },
+    {
+      "reviewId": "AbFvOqk_fixture_0004",
+      "name": "accounts/000/locations/000/reviews/AbFvOqk_fixture_0004",
+      "reviewer": { "displayName": "A. Tanaka", "isAnonymous": false },
+      "starRating": "FIVE",
+      "createTime": "2026-07-23T03:00:00Z",
+      "updateTime": "2026-07-23T03:00:00Z"
+    },
+    {
+      "reviewId": "AbFvOqk_fixture_0005",
+      "name": "accounts/000/locations/000/reviews/AbFvOqk_fixture_0005",
+      "reviewer": { "displayName": "Anonymous", "isAnonymous": true },
+      "starRating": "STAR_RATING_UNSPECIFIED",
+      "createTime": "2026-07-24T03:00:00Z"
+    }
+  ],
+  "averageRating": 4.2,
+  "totalReviewCount": 41
+}

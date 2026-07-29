@@ -13,6 +13,9 @@ export function severityFor(eventType: ChangeEventType, ctx: SeverityContext = {
       return 'high';
     case 'own_low_rating_review':
       return 'high';
+    case 'own_unreplied_review':
+      // 仕様04: 7日超の未返信は高。検索閲覧者に見え続けるため
+      return 'high';
     case 'own_rating_change':
       return (ctx.delta ?? 0) < 0 ? 'medium' : 'low';
     case 'competitor_closed':

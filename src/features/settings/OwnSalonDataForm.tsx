@@ -3,12 +3,15 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { saveOwnSalonDataAction } from '@/server/domain/salons/actions';
+import type { OwnSalonDataMode } from '@/server/db/schema';
 
 interface Props {
   salonId: string;
-  currentMode: 'demo' | 'manual';
+  currentMode: OwnSalonDataMode;
   currentRating: number | null;
   currentReviewCount: number | null;
+  /** GBP連携が完了し、店舗選択も済んでいるか */
+  gbpReady: boolean;
 }
 
 interface ReviewForm {
@@ -19,12 +22,18 @@ interface ReviewForm {
 const inputClass =
   'w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm focus:border-slate-500 focus:outline-none';
 
-export function OwnSalonDataForm({ salonId, currentMode, currentRating, currentReviewCount }: Props) {
+export function OwnSalonDataForm({
+  salonId,
+  currentMode,
+  currentRating,
+  currentReviewCount,
+  gbpReady,
+}: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
-  const [mode, setMode] = useState<'demo' | 'manual'>(currentMode);
+  const [mode, setMode] = useState<OwnSalonDataMode>(currentMode);
   const [rating, setRating] = useState(currentRating !== null ? String(currentRating) : '4.0');
   const [reviewCount, setReviewCount] = useState(
     currentReviewCount !== null ? String(currentReviewCount) : '0',
@@ -97,20 +106,31 @@ export function OwnSalonDataForm({ salonId, currentMode, currentRating, currentR
           {message}
         </p>
       ) : null}
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         {(
           [
-            ['demo', 'デモデータ'],
-            ['manual', '手入力'],
+            ['demo', 'デモデータ', true],
+            ['manual', '手入力', true],
+            ['gbp', gbpReady ? 'GBP連携' : 'GBP連携 (連携が必要です)', gbpReady],
           ] as const
-        ).map(([value, label]) => (
+        ).map(([value, label, enabled]) => (
           <label
             key={value}
-            className={`flex cursor-pointer items-center gap-2 rounded border px-4 py-2 text-sm ${
-              mode === value ? 'border-slate-900 bg-slate-50 font-medium' : 'border-slate-200'
+            title={enabled ? undefined : '設定のGoogleビジネスプロフィール連携から接続してください'}
+            className={`flex items-center gap-2 rounded border px-4 py-2 text-sm ${
+              !enabled
+                ? 'cursor-not-allowed border-slate-200 text-slate-300'
+                : mode === value
+                  ? 'cursor-pointer border-slate-900 bg-slate-50 font-medium'
+                  : 'cursor-pointer border-slate-200'
             }`}
           >
-            <input type="radio" checked={mode === value} onChange={() => setMode(value)} />
+            <input
+              type="radio"
+              disabled={!enabled}
+              checked={mode === value}
+              onChange={() => setMode(value)}
+            />
             {label}
           </label>
         ))}
@@ -187,6 +207,10 @@ export function OwnSalonDataForm({ salonId, currentMode, currentRating, currentR
             ) : null}
           </div>
         </div>
+      ) : mode === 'gbp' ? (
+        <p className="text-xs text-slate-500">
+          Googleビジネスプロフィールから評価・口コミ・返信状況を取得します。
+        </p>
       ) : (
         <p className="text-xs text-slate-500">
           デモモードでは収集のたびに架空の評価・口コミが変化します。

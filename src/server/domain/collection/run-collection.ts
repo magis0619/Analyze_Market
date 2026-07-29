@@ -16,7 +16,7 @@ import { detectChanges } from '@/server/domain/diff/diff-engine';
 import { loadDiffInputs } from '@/server/domain/diff/snapshot';
 import { generateAndPersistReport } from '@/server/domain/coaching/generate-report';
 import { redactSecrets } from '@/server/integrations/redact';
-import { OWN_SALON_SOURCE, PIPELINE_SOURCE, PLACES_SOURCE } from './sources';
+import { GBP_SOURCE, OWN_SALON_SOURCE, PIPELINE_SOURCE, PLACES_SOURCE } from './sources';
 
 const RUNNING_GUARD_MINUTES = 5;
 
@@ -252,23 +252,23 @@ export async function runCollection(salonId: string): Promise<CollectionResult> 
     );
   }
 
-  // 自店舗 (デモモードのみアダプタ収集。手入力は保存済み観測を使う)
-  const ownAdapter = getOwnSalonAdapter(
-    salon.salonProfile.dataMode,
+  // 自店舗 (demo=モック / gbp=GBP連携 / manual=保存済みの手入力観測)
+  const ownDataMode = salon.salonProfile.dataMode;
+  const ownSelection = await getOwnSalonAdapter({
+    dataMode: ownDataMode,
     salonId,
-    await countSuccessRuns(salonId, OWN_SALON_SOURCE),
-  );
-  if (ownAdapter) {
+    runIndex: ownDataMode === 'demo' ? await countSuccessRuns(salonId, OWN_SALON_SOURCE) : 0,
+  });
+  if (ownSelection.adapter) {
+    const adapter = ownSelection.adapter;
     outcomes.push(
-      await runSource(salonId, OWN_SALON_SOURCE, async () => {
-        const raw = await ownAdapter.collect({ salonName: salon.name });
-        return ownAdapter.normalize(raw);
+      await runSource(salonId, adapter.sourceName === 'gbp' ? GBP_SOURCE : OWN_SALON_SOURCE, async () => {
+        const raw = await adapter.collect({ salonName: salon.name });
+        return adapter.normalize(raw);
       }),
     );
-    dataNotes.push('自店舗データはデモデータです。');
-  } else {
-    dataNotes.push('自店舗データはオーナーの手入力値です。');
   }
+  dataNotes.push(ownSelection.note);
 
   for (const outcome of outcomes) {
     if (!outcome.ok) {
@@ -291,7 +291,10 @@ export async function runCollection(salonId: string): Promise<CollectionResult> 
       { latitude: salon.latitude, longitude: salon.longitude },
       cutoff,
     );
-    const drafts = detectChanges(diffInputs.entities, diffInputs.prev, diffInputs.curr);
+    const drafts = detectChanges(diffInputs.entities, diffInputs.prev, diffInputs.curr, {
+      now: new Date(),
+      since: cutoff,
+    });
     let insertedEvents: (typeof changeEvents.$inferSelect)[] = [];
     if (drafts.length > 0) {
       insertedEvents = await db

@@ -20,6 +20,7 @@ export type ExternalSource =
   | 'google_places'
   | 'own_salon'
   | 'own_salon_mock'
+  | 'gbp'
   | 'manual'
   | 'osm'
   | 'resas';
@@ -107,7 +108,8 @@ export type ChangeEventType =
   | 'rating_change'
   | 'review_count_change'
   | 'own_low_rating_review'
-  | 'own_rating_change';
+  | 'own_rating_change'
+  | 'own_unreplied_review';
 
 export type Severity = 'low' | 'medium' | 'high' | 'critical';
 

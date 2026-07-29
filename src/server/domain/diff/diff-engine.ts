@@ -2,6 +2,7 @@ import { severityFor } from './severity';
 import {
   metricKeyOf,
   type ChangeEventDraft,
+  type DiffClock,
   type DiffEntity,
   type Snapshot,
 } from './types';
@@ -10,6 +11,15 @@ const RATING_CHANGE_THRESHOLD = 0.1;
 const REVIEW_COUNT_THRESHOLD = 5;
 const REVIEW_COUNT_THRESHOLD_PRIORITY = 3;
 const LOW_RATING_STAR = 2;
+/** 仕様04: この日数を超えて未返信の口コミは高重要度 */
+const UNREPLIED_THRESHOLD_DAYS = 7;
+const UNREPLIED_THRESHOLD_MS = UNREPLIED_THRESHOLD_DAYS * 24 * 60 * 60 * 1000;
+/**
+ * 1回の収集で出す未返信イベントの上限。
+ * GBP初回連携で過去の未返信口コミが大量に流入した場合に、
+ * 変化フィード (= AIコーチの根拠) が溢れるのを防ぐ。
+ */
+const MAX_UNREPLIED_EVENTS_PER_RUN = 3;
 
 function formatDistance(distanceM: number | null): string {
   if (distanceM === null) return '';
@@ -28,6 +38,7 @@ export function detectChanges(
   entities: DiffEntity[],
   prev: Snapshot,
   curr: Snapshot,
+  clock: DiffClock,
 ): ChangeEventDraft[] {
   const drafts: ChangeEventDraft[] = [];
   const isFirstRun = prev.presentEntityIds.size === 0 && prev.reviews.size === 0;
@@ -39,10 +50,65 @@ export function detectChanges(
       detectCompetitorChanges(entity, prev, curr, drafts);
     } else if (entity.entityType === 'own_salon') {
       detectOwnSalonChanges(entity, prev, curr, drafts);
+      detectUnrepliedReviews(entity, prev, curr, clock, drafts);
     }
   }
 
   return drafts;
+}
+
+/**
+ * 7日超の未返信口コミを検知する (仕様04)。
+ *
+ * 差分エンジンは状態を持たないため、単純に「未返信かつ7日超」で判定すると
+ * 毎回同じ口コミが再発火してしまう。以下のいずれかに限って発火させる:
+ *  a. 7日境界を (since, now] の間に跨いだ → 初めて古くなった回に1度だけ
+ *  b. prev に存在せず、観測時点で既に7日超 → GBP初回連携の過去分バックフィル
+ */
+function detectUnrepliedReviews(
+  entity: DiffEntity,
+  prev: Snapshot,
+  curr: Snapshot,
+  clock: DiffClock,
+  drafts: ChangeEventDraft[],
+): void {
+  const nowMs = clock.now.getTime();
+  const sinceMs = clock.since?.getTime() ?? null;
+
+  const candidates: { reviewId: string; createdAt: Date; observationId: string; star: number }[] =
+    [];
+
+  for (const [reviewId, review] of curr.reviews) {
+    if (review.replied) continue;
+    const staleAtMs = review.createdAt.getTime() + UNREPLIED_THRESHOLD_MS;
+    if (staleAtMs > nowMs) continue; // まだ7日経っていない
+
+    const crossedThisRun = sinceMs !== null && staleAtMs > sinceMs;
+    const backfilled = !prev.reviews.has(reviewId);
+    if (!crossedThisRun && !backfilled) continue;
+
+    candidates.push({
+      reviewId,
+      createdAt: review.createdAt,
+      observationId: review.observationId,
+      star: review.star,
+    });
+  }
+
+  // 新しいものから上限件数まで
+  candidates.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  for (const candidate of candidates.slice(0, MAX_UNREPLIED_EVENTS_PER_RUN)) {
+    const days = Math.floor((nowMs - candidate.createdAt.getTime()) / (24 * 60 * 60 * 1000));
+    drafts.push({
+      entityId: entity.entityId,
+      eventType: 'own_unreplied_review',
+      severity: severityFor('own_unreplied_review'),
+      title: `★${candidate.star}の口コミが${days}日間未返信です`,
+      description:
+        '未返信の口コミは検索結果でそのまま見え続けます。事実確認のうえ、丁寧な返信を投稿してください。',
+      evidenceObservationIds: [candidate.observationId],
+    });
+  }
 }
 
 function evidenceFor(entityId: string, snapshot: Snapshot): string[] {

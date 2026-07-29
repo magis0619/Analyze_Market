@@ -93,11 +93,34 @@ function templateInitialDiagnosis(input: CoachInput): CoachRecommendation | null
   return null;
 }
 
+function templateUnrepliedReview(events: CoachInput['change_events']): CoachRecommendation {
+  return {
+    title: '7日以上未返信の口コミにまとめて返信する',
+    action: '未返信のまま残っている口コミに、今週中に返信を投稿する。',
+    rationale: `7日以上返信されていない口コミがあります (${events.map((e) => e.title).join(' / ')})。未返信の口コミは検索結果でそのまま見え続け、閲覧者に「対応していない店」という印象を与えます。`,
+    evidence_event_ids: events.map((event) => event.id),
+    priority: 1,
+    difficulty: 'low',
+    expected_effect: '口コミ閲覧者への印象改善と、返信率の維持が期待できる方向性。',
+    deadline_days: 5,
+    steps: [
+      '未返信の口コミを古い順に確認する',
+      '定型文にならないよう、内容に触れた返信を1件ずつ作成する',
+      '今後は週1回、未返信の有無を確認する運用にする',
+    ],
+  };
+}
+
 export function generateFallbackCoachOutput(input: CoachInput): CoachOutput {
   const recommendations: CoachRecommendation[] = [];
 
   const lowRating = findEvents(input, 'own_low_rating_review');
   if (lowRating.length > 0) recommendations.push(templateLowRatingReview(lowRating));
+
+  const unreplied = findEvents(input, 'own_unreplied_review');
+  if (unreplied.length > 0 && recommendations.length < 3) {
+    recommendations.push(templateUnrepliedReview(unreplied));
+  }
 
   const newCompetitors = findEvents(input, 'new_competitor');
   if (newCompetitors.length > 0) recommendations.push(templateNewCompetitor(newCompetitors));

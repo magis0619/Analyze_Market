@@ -34,6 +34,7 @@ export const EVENT_TYPE_LABELS: Record<ChangeEventType, string> = {
   review_count_change: '競合の口コミ増加',
   own_low_rating_review: '自店舗の低評価口コミ',
   own_rating_change: '自店舗の評価変化',
+  own_unreplied_review: '自店舗の未返信口コミ',
 };
 
 export const RECOMMENDATION_STATUS_LABELS: Record<RecommendationStatus, string> = {

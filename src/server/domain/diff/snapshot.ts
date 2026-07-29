@@ -52,6 +52,7 @@ export async function loadDiffInputs(
       textValue: observations.textValue,
       jsonValue: observations.jsonValue,
       observedAt: observations.observedAt,
+      sourceUpdatedAt: observations.sourceUpdatedAt,
     })
     .from(observations)
     .where(
@@ -76,7 +77,7 @@ export async function loadDiffInputs(
 
     if (row.metricKey === 'review') {
       const json = row.jsonValue as
-        | { reviewId?: string; star?: number; replied?: boolean; comment?: string }
+        | { reviewId?: string; star?: number; replied?: boolean; comment?: string; createdAt?: string }
         | null;
       if (!json?.reviewId) continue;
       const point = {
@@ -84,6 +85,13 @@ export async function loadDiffInputs(
         star: typeof json.star === 'number' ? json.star : (row.numericValue ?? 0),
         replied: json.replied === true,
         comment: typeof json.comment === 'string' ? json.comment : '',
+        // 口コミの投稿日時。未返信経過日数の判定に使う。
+        // jsonValue.createdAt が無い場合は normalize が入れる sourceUpdatedAt、
+        // それも無ければ観測日時にフォールバックする
+        createdAt:
+          typeof json.createdAt === 'string' && !Number.isNaN(Date.parse(json.createdAt))
+            ? new Date(json.createdAt)
+            : (row.sourceUpdatedAt ?? row.observedAt),
       };
       if (inPrev) prev.reviews.set(json.reviewId, point);
       curr.reviews.set(json.reviewId, point);

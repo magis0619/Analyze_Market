@@ -9,8 +9,8 @@ import {
 } from 'drizzle-orm/pg-core';
 import { organizations } from './auth';
 
-/** 自店舗データの取得方法。demo=モックアダプタ / manual=オーナー手入力 */
-export type OwnSalonDataMode = 'demo' | 'manual';
+/** 自店舗データの取得方法。demo=モックアダプタ / manual=オーナー手入力 / gbp=GBP連携 */
+export type OwnSalonDataMode = 'demo' | 'manual' | 'gbp';
 
 export interface SalonProfile {
   salonType: string;

@@ -27,6 +27,19 @@ export interface ReviewPoint {
   star: number;
   replied: boolean;
   comment: string;
+  /** 口コミの投稿日時。未返信経過日数の判定に使う */
+  createdAt: Date;
+}
+
+/**
+ * 差分検知の時刻基準。
+ * 差分エンジンは状態を持たないため、「7日経過」のような時間依存の判定を
+ * 1回だけ発火させるには前回実行時刻 (since) が必要になる。
+ */
+export interface DiffClock {
+  now: Date;
+  /** 前回パイプライン完了時刻。初回は null */
+  since: Date | null;
 }
 
 /**
