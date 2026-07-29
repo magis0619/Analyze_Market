@@ -1,14 +1,34 @@
-import { AnthropicCoachGenerator, createAnthropicMessagesClient } from './anthropic';
+import {
+  AnthropicCoachGenerator,
+  CoachGenerationError,
+  createAnthropicMessagesClient,
+  type CoachFailureReason,
+  type CoachUsage,
+} from './anthropic';
 import { generateFallbackCoachOutput } from './fallback';
 import type { CoachInput } from './input-builder';
+import { getAiMode } from '@/server/integrations/modes';
 import type { CoachOutput } from './schema';
 
 export const FALLBACK_GENERATOR_KIND = 'rule-based-fallback';
+
+/** 実API経路が失敗してルールベースに落ちたことを呼び出し側へ伝える */
+export interface CoachDegradation {
+  reason: CoachFailureReason | 'unknown';
+  message: string;
+}
 
 export interface CoachGenerationResult {
   output: CoachOutput;
   /** 実際に使われた生成方式。coaching_reports.model に記録する */
   generatorKind: string;
+  usage: CoachUsage | null;
+  /**
+   * 実AI生成が期待されていたのに失敗した場合のみ設定される。
+   * 呼び出し側はこれを collection_runs / ダッシュボードに表面化させること
+   * (握りつぶすと「壊れているのに正常に見える」状態になる)。
+   */
+  degraded?: CoachDegradation;
 }
 
 export interface CoachGenerator {
@@ -20,6 +40,7 @@ class FallbackCoachGenerator implements CoachGenerator {
     return {
       output: generateFallbackCoachOutput(input),
       generatorKind: FALLBACK_GENERATOR_KIND,
+      usage: null,
     };
   }
 }
@@ -33,11 +54,14 @@ class ResilientCoachGenerator implements CoachGenerator {
 
   async generate(input: CoachInput): Promise<CoachGenerationResult> {
     try {
-      const output = await this.anthropic.generate(input);
-      return { output, generatorKind: this.anthropic.kind };
+      const { output, usage } = await this.anthropic.generate(input);
+      return { output, generatorKind: this.anthropic.kind, usage };
     } catch (error) {
+      const reason = error instanceof CoachGenerationError ? error.reason : 'unknown';
+      const message = error instanceof Error ? error.message : String(error);
       console.error('AIコーチ生成に失敗したためルールベースにフォールバックします:', error);
-      return this.fallback.generate(input);
+      const result = await this.fallback.generate(input);
+      return { ...result, degraded: { reason, message } };
     }
   }
 }
@@ -48,8 +72,9 @@ class ResilientCoachGenerator implements CoachGenerator {
  */
 export function getCoachGenerator(): CoachGenerator {
   const fallback = new FallbackCoachGenerator();
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return fallback;
-  const anthropic = new AnthropicCoachGenerator(createAnthropicMessagesClient(apiKey));
+  if (getAiMode() === 'fallback') return fallback;
+  const anthropic = new AnthropicCoachGenerator(
+    createAnthropicMessagesClient(process.env.ANTHROPIC_API_KEY as string),
+  );
   return new ResilientCoachGenerator(anthropic, fallback);
 }
