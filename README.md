@@ -8,7 +8,8 @@
 
 - **アカウント・店舗登録**: メール/パスワード認証、5ステップのオンボーディング (商圏半径 500m/1km、店舗プロフィール)
 - **競合スナップショット**: Google Places (New) Nearby Search による商圏内美容院の収集。地図 (MapLibre + OpenStreetMap) と一覧、距離/評価/口コミ数ソート、除外・重要競合フラグ
-- **差分検知エンジン**: 新規競合 / 閉店・消失 / 評価変化 / 口コミ急増 / 自店舗の低評価口コミ / 自店舗の評価変化を重要度付きで検知
+- **自店舗データ**: デモ / 手入力 / **Googleビジネスプロフィール連携** (OAuth、評価・口コミ・返信状況)
+- **差分検知エンジン**: 新規競合 / 閉店・消失 / 評価変化 / 口コミ急増 / 自店舗の低評価口コミ / 自店舗の評価変化 / **7日超の未返信口コミ** を重要度付きで検知
 - **AI経営コーチ**: 検知した変化を根拠に「今週やること」を最大3件提案 (Anthropic API 構造化出力)。全提案に根拠イベントIDを付与し DB 側で実在検証。AI 不可時はルールベース生成にフォールバック
 - **アクション管理**: 提案を 実施する/保留/却下/完了 (自己評価+メモ)。実施履歴は次回のAI生成に反映
 - **手動収集**: 「今すぐ収集」ボタンでいつでもスナップショット更新 (週次cronは BACKLOG)
@@ -17,7 +18,10 @@
 
 ## セットアップ
 
-前提: Node.js 22+ / PostgreSQL 16 のバイナリ (`/usr/lib/postgresql/16/bin`)
+前提: Node.js 22+ / PostgreSQL 16
+
+PostgreSQL のバイナリは Homebrew (Apple Silicon / Intel)、apt、yum、`PATH` の順に自動検出します。
+見つからない場合は `PGBIN=$(dirname $(which initdb)) npm run dev` のように明示してください。
 
 ```bash
 npm install
@@ -26,7 +30,8 @@ npm run dev        # predev で scripts/db-setup.sh が走り、DBを自動セ�
 
 `scripts/db-setup.sh` は冪等で、以下を行います。
 
-1. `initdb` (データディレクトリ: `/var/lib/postgresql/salon-area-coach-16`)
+1. `initdb` (データディレクトリ: root なら `/var/lib/postgresql/...`、
+   それ以外は `~/.local/share/salon-area-coach/pgdata16`。`PGDATA=` で上書き可)
 2. PostgreSQL を `127.0.0.1:55432` で起動 (trust認証、ループバックのみ。**開発専用**)
 3. `salon_area_coach` データベース作成
 4. `.env` 生成 (`AUTH_SECRET` 自動発行)
@@ -48,11 +53,26 @@ root で実行された場合は `runuser -u postgres` 経由で PostgreSQL を�
 
 `.env` にキーを設定するだけでアダプタが自動で実APIに切り替わります (コード変更不要)。
 
+**キーの取得手順は [docs/real-api-setup.md](./docs/real-api-setup.md) にまとめてあります。**
+GBPだけはGoogleの審査に数日〜数週間かかるため、使う予定があれば申請だけ先に出してください。
+
 | 環境変数 | 効果 |
 |---|---|
 | `GOOGLE_MAPS_API_KEY` | 競合収集が Google Places API (New) Nearby Search になる |
 | `ANTHROPIC_API_KEY` | 提案生成が Anthropic API (構造化出力) になる。失敗時はルールベースへフォールバック |
-| `ANTHROPIC_MODEL` | 使用モデル (既定: `claude-opus-5`) |
+| `ANTHROPIC_MODEL` / `ANTHROPIC_COACH_EFFORT` | 使用モデル (既定 `claude-opus-5`) と推論の深さ (既定 `medium`) |
+| `GOOGLE_OAUTH_CLIENT_ID` / `_SECRET` + `CREDENTIALS_ENC_KEYS` | 自店舗データをGBPから取得する (設定画面から連携) |
+| `GBP_FIXTURE_MODE=1` | GBPの審査を待つ間、記録済み応答で連携経路を通しで動かす |
+
+### コストの安全弁
+
+上限はサーバ側で強制され、既定値は保守的です。現在値は **設定 → API利用状況** に出ます。
+
+- データ種別 (競合 / 自店舗 / AI) ごとに独立して停止。片方が上限でも他方は動く
+- 上限に達した種別はスキップして前回値を表示。**取得できなかったことを「閉店」と誤検知しない**
+- AIが上限でもレポートは作る (ルールベースに切替え、その旨を明示)
+- `COLLECTION_MIN_INTERVAL_MINUTES` (既定60) で「今すぐ収集」の連打を防止。
+  課金される連携が1つも有効でない場合は適用しない
 
 ## アーキテクチャ
 
@@ -65,10 +85,14 @@ src/
     db/                 # Drizzle ORM クライアント + スキーマ (11テーブル)
     integrations/       # 外部APIアダプタ層 (collect=wire取得 / normalize=共通Observation化)
       google-places/    #   実API + 決定論的モック (シナリオステップ式)
-      own-salon/        #   自店舗データ (デモモック。実GBP連携は BACKLOG)
+      own-salon/        #   自店舗データ (デモモック / 手入力 / GBP)
+      gbp/              #   GBP OAuth + My Business v4 クライアント + フィクスチャ
+      modes.ts          #   モード判定の一元化 (バッジとfactoryが同じ関数を見る)
+      http.ts           #   共有リトライ (429/5xxのみ、Retry-After尊重)
+    crypto/             # OAuthトークンの保存時暗号化 (AES-256-GCM + 鍵ローテーション)
     ai/                 # AIコーチ (zodスキーマ / 入力builder / Anthropic / ルールベースfallback)
     domain/
-      collection/       # 収集パイプライン (実行ガード→収集→差分→レポート生成)
+      collection/       # 収集パイプライン (予算判定→実行ガード→収集→差分→レポート生成)
       diff/             # 純関数の差分エンジン + severity ルール
       coaching/         # コーチ入力組み立てとレポート永続化
     queries/            # 画面用リードクエリ
@@ -80,6 +104,10 @@ src/
 - 観測データは取得日時・出典・元IDを保持 (`observations` / `entities`)
 - AI提案には必ず根拠イベントIDが付き、存在しないIDの提案は破棄→1回だけ再生成→失敗時はルールベース
 - ソース単位の障害分離。取得失敗時は前回値と「最終更新」を表示し画面を落とさない
+- **取得できなかったことを変化として扱わない**。データが無い回は存在ベースの差分判定を行わない
+  (これをしないとAPI障害・上限到達のたびに全競合へ「消失」イベントが立ち、それがAIの根拠になる)
+- 実API経路の失敗は必ず表面化させる (収集履歴の行 + ダッシュボードの赤バナー)。
+  「壊れているのに正常に見える」状態を作らない
 - 数値状態は 改善/悪化/変化なし/観測不足 のテキスト表示 (色だけに依存しない)
 
 ## 開発コマンド
