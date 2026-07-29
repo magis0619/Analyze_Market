@@ -1,0 +1,34 @@
+{
+  "places": [
+    {
+      "id": "ChIJxxxxxxxxxxxxxxxxxxx1",
+      "displayName": { "text": "hair salon TESTA", "languageCode": "ja" },
+      "location": { "latitude": 35.6466, "longitude": 139.6522 },
+      "types": ["hair_salon", "point_of_interest", "establishment"],
+      "rating": 4.3,
+      "userRatingCount": 120,
+      "regularOpeningHours": {
+        "weekdayDescriptions": ["月曜日: 10時00分～19時00分", "火曜日: 定休日"]
+      },
+      "businessStatus": "OPERATIONAL",
+      "formattedAddress": "日本、〒154-0024 東京都世田谷区三軒茶屋１丁目"
+    },
+    {
+      "id": "ChIJxxxxxxxxxxxxxxxxxxx2",
+      "displayName": { "text": "Beauty Lounge B", "languageCode": "ja" },
+      "location": { "latitude": 35.6449, "longitude": 139.6541 },
+      "types": ["beauty_salon"],
+      "businessStatus": "OPERATIONAL",
+      "formattedAddress": "日本、東京都世田谷区太子堂２丁目"
+    },
+    {
+      "id": "ChIJxxxxxxxxxxxxxxxxxxx3",
+      "displayName": { "text": "closed salon C", "languageCode": "ja" },
+      "location": { "latitude": 35.6481, "longitude": 139.651 },
+      "types": ["hair_salon"],
+      "rating": 3.2,
+      "userRatingCount": 8,
+      "businessStatus": "CLOSED_TEMPORARILY"
+    }
+  ]
+}
