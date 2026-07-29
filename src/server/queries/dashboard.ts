@@ -1,4 +1,7 @@
 import 'server-only';
+import { FALLBACK_GENERATOR_KIND } from '@/server/ai';
+import { getAiMode } from '@/server/integrations/modes';
+import { DISPLAY_SOURCES } from '@/server/domain/collection/sources';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/server/db/client';
 import {
@@ -67,6 +70,8 @@ export interface SourceFreshness {
 
 export interface DashboardData {
   report: DashboardReport | null;
+  /** 実AI生成が期待されているのに直近レポートがフォールバックだった場合 true */
+  aiDegraded: boolean;
   recommendations: DashboardRecommendation[];
   events: DashboardEvent[];
   kpi: DashboardKpi;
@@ -225,7 +230,7 @@ async function loadCompetitorStats(salonId: string): Promise<CompetitorStats> {
 }
 
 async function loadFreshness(salonId: string): Promise<SourceFreshness[]> {
-  const sources = ['google_places', 'own_salon', 'pipeline'];
+  const sources = [...DISPLAY_SOURCES];
   const result: SourceFreshness[] = [];
   for (const source of sources) {
     const [row] = await db
@@ -257,5 +262,9 @@ export async function getDashboardData(salonId: string): Promise<DashboardData> 
     loadCompetitorStats(salonId),
     loadFreshness(salonId),
   ]);
-  return { report, recommendations: recs, events, kpi, competitorStats, freshness };
+  // 実AI経路が期待されているのにフォールバックで生成された = 実APIが壊れている
+  const aiDegraded =
+    getAiMode() === 'anthropic' && report !== null && report.model === FALLBACK_GENERATOR_KIND;
+
+  return { report, aiDegraded, recommendations: recs, events, kpi, competitorStats, freshness };
 }

@@ -5,6 +5,7 @@ import { getSalonByOrganization } from '@/server/domain/salons/queries';
 import { getDashboardData } from '@/server/queries/dashboard';
 import { CollectNowButton } from '@/features/collection/CollectNowButton';
 import { getPlacesModeLabel } from '@/server/integrations/modes';
+import { SOURCE_LABELS } from '@/server/domain/collection/sources';
 import {
   DIFFICULTY_LABELS,
   RECOMMENDATION_STATUS_LABELS,
@@ -19,11 +20,6 @@ import {
 
 export const metadata = { title: 'ダッシュボード | Salon Area Coach AI' };
 
-const SOURCE_LABELS: Record<string, string> = {
-  google_places: '競合データ',
-  own_salon: '自店舗データ',
-  pipeline: '差分・レポート生成',
-};
 
 function KpiDelta({
   current,
@@ -77,6 +73,20 @@ export default async function DashboardPage() {
       </div>
 
       {/* 1. 今週の総評 */}
+      {/* 実AI生成が期待されているのにフォールバックされた = 実API経路が壊れている。
+          中立的なバッジで済ませると「壊れているのに正常に見える」ため警告として出す */}
+      {data.aiDegraded ? (
+        <div
+          role="alert"
+          className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800"
+        >
+          <p className="font-medium">AI生成に失敗したため簡易生成に切り替わっています。</p>
+          <p className="mt-1 text-xs">
+            設定 &gt; 収集履歴 で「AIコーチ生成」の失敗理由を確認してください。
+          </p>
+        </div>
+      ) : null}
+
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <h2 className="text-sm font-semibold text-slate-500">今週の総評</h2>
@@ -86,7 +96,13 @@ export default async function DashboardPage() {
                 {RISK_LEVEL_LABELS[data.report.riskLevel] ?? data.report.riskLevel}
               </span>
               {data.report.model === 'rule-based-fallback' ? (
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-500">
+                <span
+                  className={`rounded-full border px-2 py-0.5 text-xs ${
+                    data.aiDegraded
+                      ? 'border-red-300 bg-red-50 text-red-700'
+                      : 'border-slate-200 bg-slate-50 text-slate-500'
+                  }`}
+                >
                   ルールベース生成
                 </span>
               ) : (

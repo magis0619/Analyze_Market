@@ -15,9 +15,9 @@ import type { NormalizedCollection } from '@/server/integrations/types';
 import { detectChanges } from '@/server/domain/diff/diff-engine';
 import { loadDiffInputs } from '@/server/domain/diff/snapshot';
 import { generateAndPersistReport } from '@/server/domain/coaching/generate-report';
+import { redactSecrets } from '@/server/integrations/redact';
+import { OWN_SALON_SOURCE, PIPELINE_SOURCE, PLACES_SOURCE } from './sources';
 
-/** パイプライン全体を表す collection_runs.source の値 */
-const PIPELINE_SOURCE = 'pipeline';
 const RUNNING_GUARD_MINUTES = 5;
 
 export interface CollectionResult {
@@ -104,18 +104,6 @@ interface SourceRunOutcome {
   ok: boolean;
   error?: string;
   costMetadata?: Record<string, number>;
-}
-
-/**
- * エラーメッセージから資格情報らしき文字列を除去する。
- * 外部APIのエラー本文にはトークンが含まれうるため、
- * collection_runs.error_summary へ書く前に必ず通すこと。
- */
-export function redactSecrets(text: string): string {
-  return text
-    .replace(/\b(ya29|1\/\/)[\w./~+-]+/g, '[redacted]')
-    .replace(/\b(AIza)[\w-]{10,}/g, '[redacted]')
-    .replace(/\b(sk-ant-)[\w-]{10,}/g, '[redacted]');
 }
 
 async function runSource(
@@ -244,9 +232,9 @@ export async function runCollection(salonId: string): Promise<CollectionResult> 
   const placesIsMock = getPlacesMode() === 'mock';
   const placesAdapter = createGooglePlacesAdapter({
     salonId,
-    runIndex: placesIsMock ? await countSuccessRuns(salonId, 'google_places') : 0,
+    runIndex: placesIsMock ? await countSuccessRuns(salonId, PLACES_SOURCE) : 0,
   });
-  const placesOutcome = await runSource(salonId, 'google_places', async () => {
+  const placesOutcome = await runSource(salonId, PLACES_SOURCE, async () => {
     const raw = await placesAdapter.collect({
       latitude: salon.latitude,
       longitude: salon.longitude,
@@ -268,11 +256,11 @@ export async function runCollection(salonId: string): Promise<CollectionResult> 
   const ownAdapter = getOwnSalonAdapter(
     salon.salonProfile.dataMode,
     salonId,
-    await countSuccessRuns(salonId, 'own_salon'),
+    await countSuccessRuns(salonId, OWN_SALON_SOURCE),
   );
   if (ownAdapter) {
     outcomes.push(
-      await runSource(salonId, 'own_salon', async () => {
+      await runSource(salonId, OWN_SALON_SOURCE, async () => {
         const raw = await ownAdapter.collect({ salonName: salon.name });
         return ownAdapter.normalize(raw);
       }),

@@ -1,14 +1,17 @@
-import { and, desc, eq, gte, inArray } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { db } from '@/server/db/client';
 import {
   changeEvents,
   coachingReports,
+  collectionRuns,
   entities,
   observations,
   recommendations,
   salons,
 } from '@/server/db/schema';
 import { getCoachGenerator } from '@/server/ai';
+import { redactSecrets } from '@/server/integrations/redact';
+import { AI_COACH_SOURCE } from '@/server/domain/collection/sources';
 import { COACH_PROMPT_VERSION } from '@/server/ai/prompt';
 import {
   buildCoachInput,
@@ -173,7 +176,26 @@ export async function generateAndPersistReport(
     dataNotes,
   });
 
-  const { output, generatorKind } = await getCoachGenerator().generate(input);
+  const { output, generatorKind, usage, degraded } = await getCoachGenerator().generate(input);
+
+  // 生成方式と結果を collection_runs に残す。
+  // 実AI経路が壊れていてもフォールバックで画面は正常に見えるため、
+  // ここに失敗を書かないと「壊れているのに気づけない」状態になる。
+  await db.insert(collectionRuns).values({
+    salonId: salon.id,
+    source: AI_COACH_SOURCE,
+    status: degraded ? 'failed' : 'success',
+    completedAt: sql`now()`,
+    errorSummary: degraded
+      ? redactSecrets(`AI生成失敗(${degraded.reason}): ${degraded.message}`).slice(0, 500)
+      : null,
+    costMetadata: {
+      billableCalls: degraded ? 0 : 1,
+      inputTokens: usage?.input_tokens ?? 0,
+      outputTokens: usage?.output_tokens ?? 0,
+      cacheReadInputTokens: usage?.cache_read_input_tokens ?? 0,
+    },
+  });
 
   return db.transaction(async (tx) => {
     // 同日レポートの置換: 実施ステータス付きの提案は保持する
