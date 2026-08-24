@@ -413,10 +413,11 @@ export class SpectateScreen implements GameScreen {
     } else if (this.panelOpen && hasReact) {
       drawSpr(ctx, 'hero_react', hx, hy);
     } else if (mining) {
-      drawSpr(ctx, `hero_mine_${Math.floor(this.clock * 4) % 2}`, hx, hy);
+      const f = Math.floor(Math.max(0, this.clock) * 4) % 2;
+      drawSpr(ctx, `hero_mine_${f}`, hx, hy);
     } else {
       const moving = this.displayDepth < this.targetDepth - 0.001 || !this.finished;
-      const f = moving ? Math.floor(this.clock * 5) % 4 : 0;
+      const f = moving ? Math.floor(Math.max(0, this.clock) * 5) % 4 : 0;
       drawSpr(ctx, `hero_walk_${f}`, hx, hy);
     }
   }

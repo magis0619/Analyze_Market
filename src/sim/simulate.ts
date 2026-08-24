@@ -449,7 +449,7 @@ export function simulate(input: SimInput): SimResult {
 
   if (st.fate === undefined) st.fate = 'survived';
   const last = st.events[st.events.length - 1];
-  if (st.fate === 'survived' && (!last || last.kind !== 'end')) {
+  if (st.fate !== 'died' && (!last || last.kind !== 'end')) {
     st.events.push({ kind: 'end', t: st.t });
   }
 

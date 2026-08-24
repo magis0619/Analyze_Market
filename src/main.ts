@@ -43,7 +43,7 @@ function loop(now: number): void {
     if (dtMs > 33.4) frameStats.over33_4++;
     frameStats.worst = Math.max(frameStats.worst, dtMs);
   }
-  const dt = Math.min(0.1, dtMs / 1000);
+  const dt = Math.min(0.1, Math.max(0, dtMs / 1000));
   app.screen.update(dt);
   app.screen.draw(screen.ctx);
   screen.present();
