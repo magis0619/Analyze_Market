@@ -502,7 +502,9 @@ export class SpectateScreen implements GameScreen {
     drawNineSlice(ctx, 'button', x, y, w, h);
     const fromEquip = o.sourceEquip.length > 0;
     if (fromEquip && !o.disabled) strokeRect1(ctx, x, y, w, h, THEME.gold);
-    const color = o.disabled ? THEME.faint : fromEquip ? THEME.gold : THEME.text;
+    // faint は button 地色とのコントラストが約1.05:1でほぼ不可視になるため
+    // 使わない（widgets.drawBtn と同じ失敗を避ける）。
+    const color = o.disabled ? THEME.dim : fromEquip ? THEME.gold : THEME.text;
     drawText(ctx, o.def.label, x + 10, y + Math.floor((h - 12) / 2), 12, color);
     // 根拠となる装備アイコン（因果の表示）。開いた瞬間は1回光る。
     const blink = this.panelFlash < 0.75 && Math.floor(this.panelFlash * 10) % 2 === 0;
@@ -520,11 +522,13 @@ export class SpectateScreen implements GameScreen {
       drawTextRight(ctx, `選べない（${o.disabledReason ?? ''}）`, x + w - 6, y + 4, 8, THEME.red);
     } else if (isSafe) {
       const tag = this.panelDuration <= 2 ? '……こうするしかない' : '5秒で自動';
-      drawText(ctx, tag, x + 10, y + h - 13, 8, THEME.faint);
+      drawText(ctx, tag, x + 10, y + h - 13, 8, THEME.dim);
     }
     if (fromEquip && !o.disabled) {
+      // goldDark はボタン地色(#5f6472)とのコントラスト比が約1.6:1しかなく
+      // 判読困難だった（批評ラウンド2 A-2）。gold（約3.6:1）に変更。
       drawText(ctx, `${o.sourceEquip.map(id => equipDef(id).name).join('と')}があるから選べる`,
-        x + 10, y + h - 11, 8, THEME.goldDark);
+        x + 10, y + h - 11, 8, THEME.gold);
     }
   }
 

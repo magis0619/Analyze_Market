@@ -1,6 +1,6 @@
 import type { App, GameScreen } from '../game/app';
 import { VW, VH } from '../render/screen';
-import { drawText, drawTextCentered, drawTextRight, drawTextWrapped } from '../render/font';
+import { drawText, drawTextCentered, drawTextRight, drawTextWrapped, textWidth } from '../render/font';
 import { drawNineSlice, drawSpr, fillRect, strokeRect1 } from '../render/draw';
 import { THEME } from './theme';
 import { sfx } from '../render/audio';
@@ -133,7 +133,7 @@ export class NegotiationScreen implements GameScreen {
     }
 
     // 棚
-    drawText(ctx, `棚（最大3点まで渡せる／▪は重さ）`, 8, 300, 8, THEME.dim);
+    drawText(ctx, `棚（最大3点まで渡せる）`, 8, 300, 8, THEME.dim);
     const cells = this.shelf();
     for (const c of cells) {
       const selIdx = this.selected.indexOf(c.id);
@@ -142,9 +142,16 @@ export class NegotiationScreen implements GameScreen {
       const def = equipDef(c.id);
       drawSpr(ctx, `icon_${c.id}`, c.x + Math.floor(c.w / 2) - 16, c.y + 4, 2);
       drawTextCentered(ctx, def.name, c.x + Math.floor(c.w / 2), c.y + 40, 8, THEME.text);
-      // 重量ピップ
+      // 重量：「重さ」ラベル＋点の数（1〜3）。点だけでは意味が伝わらなかった
+      // ため（批評ラウンド1・2で連続指摘）、各セルにラベルを直書きする。
+      const pipsW = def.weight * 6 - 2;
+      const labelW = textWidth('重さ', 8);
+      const groupX = c.x + Math.floor(c.w / 2) - Math.floor((labelW + 3 + pipsW) / 2);
+      // THEME.faint はボタン地色とのコントラストが約1:1で事実上不可視になる
+      // ため使わない（因果表示テキストと同種の失敗を避ける）。
+      drawText(ctx, '重さ', groupX, c.y + 52, 8, THEME.dim);
       for (let i = 0; i < def.weight; i++) {
-        drawSpr(ctx, 'weight_pip', c.x + Math.floor(c.w / 2) - def.weight * 3 + i * 6, c.y + 54);
+        drawSpr(ctx, 'weight_pip', groupX + labelW + 3 + i * 6, c.y + 54);
       }
       if (c.repairing) {
         ctx.fillStyle = 'rgba(26,20,32,0.68)';

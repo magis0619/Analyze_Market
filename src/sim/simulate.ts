@@ -175,16 +175,20 @@ function pickEvent(
     e.id !== 'E15' && !used.includes(e.id) && d >= e.minDepth && d <= e.maxDepth
   );
   if (pool.length > 0) {
-    // 「渡しておいた装備が効く」瞬間を作るため、装備で開き得るイベントへ65%寄せる。
+    // 「渡しておいた装備が効く」瞬間を作るため、装備で開き得るイベントへ40%寄せる。
     // 装備0点なら openable は常に空で、抽選は完全に一様（C6 を破らない）。
+    // 比率は65%から引き下げ済み：複数イベントに跨って有利な装備（縄梯子等）を
+    // 抽選面でも増幅してしまい、単品性能の差を超えて偏りを拡大させていたため
+    // （批評ラウンド2 B-1）。装備1つが2イベントに噛む場合、両方とも
+    // openable に入り抽選が二重に有利になるので、寄せ幅そのものを抑える。
     const openable = pool.filter(e => wouldOpenEquipOption(e, adv, carried));
-    const roll = rng.chance(0.65);
+    const roll = rng.chance(0.4);
     if (openable.length > 0 && roll) return rng.pick(openable);
     // 「1択＋5秒待ち」のパネルを減らすため、常時選択肢が2つあるイベントを優先
     const multi = pool.filter(e =>
       e.options.filter(o => !o.requires).length >= 2 || wouldOpenEquipOption(e, adv, carried)
     );
-    const roll2 = rng.chance(0.7);
+    const roll2 = rng.chance(0.5);
     if (multi.length > 0 && roll2) return rng.pick(multi);
     return rng.pick(pool);
   }
@@ -243,16 +247,16 @@ function applyOption(
   if (fx.dmg && fx.dmg !== 'none') {
     let dmg = 0;
     if (fx.dmg === 'fight') {
-      dmg = Math.floor(3 + st.depth * 0.7) + rng.int(3);
+      dmg = Math.floor(4 + st.depth * 0.9) + rng.int(4);
       const hasWeapon = st.carried.some(id => equipDef(id).kind === 'weapon');
       const hasArmor = st.carried.some(id => equipDef(id).kind === 'armor');
       if (hasWeapon) dmg -= 2;
       if (hasArmor) dmg -= 1;
-      dmg = Math.max(1, dmg);
+      dmg = Math.max(2, dmg);
     } else if (fx.dmg === 'small') {
       dmg = 2 + rng.int(2);
     } else {
-      dmg = 8 + rng.int(4);
+      dmg = 9 + rng.int(6);
     }
     st.hp -= dmg;
     st.events.push({
