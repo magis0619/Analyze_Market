@@ -33,10 +33,19 @@ function rowHash(n: number): number {
   return ((n * 2654435761) >>> 0);
 }
 
-/** 縦穴の中心タイル列（行ごとに緩やかに蛇行、決定論）。 */
-function shaftCenter(row: number): number {
-  if (row < 0) return 7;
-  return 7 + (rowHash(Math.floor(row / 3)) % 3) - 1;
+// はしごは1本の縦穴に通す（蛇行させると梯子が宙に浮いて見える）。
+// 代わりに行ごとに掘り広げた欠けを添えて単調さを消す。
+const SHAFT_COL = 7;
+
+function shaftCenter(_row: number): number {
+  return SHAFT_COL;
+}
+
+/** その行で追加で開いている列（横に掘り広げた跡）。なければ -1。 */
+function shaftNotch(row: number): number {
+  const h = rowHash(row);
+  if (h % 4 !== 0) return -1;
+  return SHAFT_COL + ((h >> 3) & 1 ? 2 : -2);
 }
 
 export class SpectateScreen implements GameScreen {
@@ -169,7 +178,7 @@ export class SpectateScreen implements GameScreen {
         }
         break;
       case 'log':
-        this.pushLog(ev.text, THEME.faint);
+        this.pushLog(ev.text, THEME.dim);
         break;
       case 'choice': {
         this.markers.push({ depth: ev.depth, icon: ev.icon });
@@ -313,17 +322,33 @@ export class SpectateScreen implements GameScreen {
     for (let r = firstRow; r <= lastRow; r++) {
       const sy = r * 16 - scroll;
       if (r < 0) {
-        // 地上（夜空と店の灯り）
+        // 地上（夜空・星・店）
         fillRect(ctx, DUN_X, sy, DUN_W, 16, '#0c0810');
-        if (r === -1) fillRect(ctx, DUN_X, sy + 12, DUN_W, 4, '#3c6430');
+        for (let col = 0; col < Math.ceil(DUN_W / 16); col++) {
+          const h = rowHash(r * 53 + col * 7);
+          if (h % 5 === 0) {
+            fillRect(ctx, DUN_X + col * 16 + (h % 13), sy + ((h >> 4) % 13), 1, 1, '#b8b0a8');
+          }
+        }
+        if (r === -1) {
+          fillRect(ctx, DUN_X, sy + 12, DUN_W, 4, '#3c6430');
+          // 店（穴の左脇の小屋）
+          const hx = DUN_X + (SHAFT_COL - 3) * 16;
+          fillRect(ctx, hx, sy - 10, 36, 22, '#5a3c22');
+          fillRect(ctx, hx - 4, sy - 16, 44, 8, '#802828');
+          fillRect(ctx, hx - 2, sy - 10, 40, 2, THEME.outline);
+          fillRect(ctx, hx + 24, sy - 4, 8, 16, '#e8c84c');
+          fillRect(ctx, hx + 6, sy - 4, 10, 8, '#0c0810');
+        }
         continue;
       }
       const s = Math.min(3, Math.floor(r / 9));
       const theme = STRATA[s];
       const c = shaftCenter(r);
+      const notch = shaftNotch(r);
       for (let col = 0; col < Math.ceil(DUN_W / 16); col++) {
         const sx = DUN_X + col * 16;
-        if (col >= c - 1 && col <= c + 1) {
+        if ((col >= c - 1 && col <= c + 1) || col === notch) {
           drawSpr(ctx, `wall_s${s}`, sx, sy);
         } else {
           const variant = (rowHash(r * 31 + col) & 1) === 0 ? 'a' : 'b';

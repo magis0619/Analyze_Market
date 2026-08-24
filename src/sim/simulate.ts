@@ -1,7 +1,7 @@
 import { Prng } from './prng';
 import type {
   AdvSnapshot, DungeonEventDef, EventOptionDef, OfferedOption,
-  PendingChoice, RunOutcome, SimEvent, SimInput, SimResult
+  RunOutcome, SimEvent, SimInput, SimResult
 } from './types';
 import { DUNGEON_EVENTS } from '../data/events';
 import { EQUIPMENT, equipDef, isLightOutfit, isOverweight } from '../data/equipment';
