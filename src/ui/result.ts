@@ -52,12 +52,12 @@ export class ResultScreen implements GameScreen {
 
     // 手紙
     drawNineSlice(ctx, 'frame', 12, 44, VW - 24, 150);
-    drawSpr(ctx, 'letter', 24, 56, 2);
-    drawText(ctx, died ? '『同行者からの手紙』' : `『${run.adv.name}の手記』`, 96, 60, 8, THEME.dim);
-    drawTextWrapped(ctx, `「${out.letterLine}」`, 28, 96, VW - 56, 12, THEME.text, 4);
+    drawSpr(ctx, 'letter', 24, 60, 2);
+    drawText(ctx, died ? '『同行者からの手紙』' : `『${run.adv.name}の手記』`, 100, 60, 8, THEME.dim);
+    drawTextWrapped(ctx, `「${out.letterLine}」`, 100, 76, VW - 128, 12, THEME.text, 4);
     if (out.letterEquip) {
-      drawSpr(ctx, `icon_${out.letterEquip}`, 28, 160);
-      drawText(ctx, equipDef(out.letterEquip).name, 50, 164, 8, THEME.gold);
+      drawSpr(ctx, `icon_${out.letterEquip}`, 24, 144);
+      drawText(ctx, `${equipDef(out.letterEquip).name}が立役者だった`, 46, 150, 8, THEME.gold);
     }
 
     // 到達深度
