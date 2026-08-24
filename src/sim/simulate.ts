@@ -25,7 +25,22 @@ const AMBIENT_LINES: readonly string[] = [
   '風が下から吹き上げてくる',
   '誰かの足跡が下へ続いている',
   '崩れた坑木をまたいで進む',
-  '冷たい空気が濃くなってきた'
+  '冷たい空気が濃くなってきた',
+  '小石がひとりでに転がり落ちた',
+  '梯子の段がひとつ欠けている',
+  '壁に爪で削った印が残る',
+  '遠くで何かの咆哮が反響した',
+  '足元から生ぬるい風が抜ける',
+  '鼠が壁の隙間へ逃げ込んだ',
+  '古い矢じりが岩に刺さっている',
+  '滴る水が帽子を叩いた',
+  '燃え尽きた松明が落ちている',
+  '壁の白い骨を横目に過ぎる',
+  '砂がさらさらと流れ落ちる',
+  '手すりほどの太い根が垂れる',
+  '空になった水筒が転がっている',
+  '岩の隙間から目が光った気がした',
+  '遠雷のような地鳴りがした'
 ];
 
 interface SimState {
@@ -38,6 +53,8 @@ interface SimState {
   usedHeal: boolean;
   carried: string[]; // 途中入手（E5）を含む
   usedEventIds: string[];
+  /** 選択の根拠として実際に使われた装備（消耗が進む） */
+  usedEquip: string[];
   events: SimEvent[];
   // 手紙用の記録
   bestUse?: { equipId: string; score: number; line: string };
@@ -163,6 +180,12 @@ function pickEvent(
     const openable = pool.filter(e => wouldOpenEquipOption(e, adv, carried));
     const roll = rng.chance(0.65);
     if (openable.length > 0 && roll) return rng.pick(openable);
+    // 「1択＋5秒待ち」のパネルを減らすため、常時選択肢が2つあるイベントを優先
+    const multi = pool.filter(e =>
+      e.options.filter(o => !o.requires).length >= 2 || wouldOpenEquipOption(e, adv, carried)
+    );
+    const roll2 = rng.chance(0.7);
+    if (multi.length > 0 && roll2) return rng.pick(multi);
     return rng.pick(pool);
   }
   // 範囲に該当なし：最も近い帯のイベントへフォールバック
@@ -207,6 +230,9 @@ function applyOption(
     if (first !== undefined && (!st.bestUse || score > st.bestUse.score)) {
       st.bestUse = { equipId: first, score, line: opt.def.logLine };
     }
+    for (const id of opt.sourceEquip) {
+      if (!st.usedEquip.includes(id)) st.usedEquip.push(id);
+    }
   }
   if (fx.heal) {
     st.usedHeal = true;
@@ -217,13 +243,16 @@ function applyOption(
   if (fx.dmg && fx.dmg !== 'none') {
     let dmg = 0;
     if (fx.dmg === 'fight') {
-      dmg = Math.floor(2 + st.depth * 0.55) + rng.int(3);
+      dmg = Math.floor(3 + st.depth * 0.7) + rng.int(3);
       const hasWeapon = st.carried.some(id => equipDef(id).kind === 'weapon');
-      if (hasWeapon) dmg = Math.max(1, dmg - 2);
+      const hasArmor = st.carried.some(id => equipDef(id).kind === 'armor');
+      if (hasWeapon) dmg -= 2;
+      if (hasArmor) dmg -= 1;
+      dmg = Math.max(1, dmg);
     } else if (fx.dmg === 'small') {
       dmg = 2 + rng.int(2);
     } else {
-      dmg = 7 + rng.int(4);
+      dmg = 8 + rng.int(4);
     }
     st.hp -= dmg;
     st.events.push({
@@ -321,13 +350,14 @@ export function simulate(input: SimInput): SimResult {
     t: 0, depth: 0, hp: adv.maxHp, timePenalty: 0,
     loot: [], gold: 0, usedHeal: false,
     carried: [...input.equipment],
-    usedEventIds: [], events: [], slayedGuardian: false
+    usedEventIds: [], usedEquip: [], events: [], slayedGuardian: false
   };
   st.events.push({ kind: 'depart', t: 0 });
   let choiceCursor = 0;
   let slot = 0;
   let lastStratum = -1;
   let nextAmbient = 5 + rng.int(4);
+  let lastAmbient = -1;
 
   for (let sec = 1; sec <= RUN_SECONDS; sec++) {
     st.t = sec;
@@ -346,7 +376,11 @@ export function simulate(input: SimInput): SimResult {
     }
 
     if (sec >= nextAmbient && !CHOICE_TIMES.includes(sec)) {
-      st.events.push({ kind: 'log', t: sec, text: rng.pick(AMBIENT_LINES) });
+      // 直前と同じ文言の連続を避ける
+      let idx = rng.int(AMBIENT_LINES.length);
+      if (idx === lastAmbient) idx = (idx + 1) % AMBIENT_LINES.length;
+      lastAmbient = idx;
+      st.events.push({ kind: 'log', t: sec, text: AMBIENT_LINES[idx] ?? '' });
       nextAmbient = sec + 6 + rng.int(5);
     }
 
@@ -415,7 +449,7 @@ export function simulate(input: SimInput): SimResult {
 
   if (st.fate === undefined) st.fate = 'survived';
   const last = st.events[st.events.length - 1];
-  if (st.fate === 'survived' && (!last || last.kind !== 'end')) {
+  if (st.fate !== 'died' && (!last || last.kind !== 'end')) {
     st.events.push({ kind: 'end', t: st.t });
   }
 
@@ -424,9 +458,11 @@ export function simulate(input: SimInput): SimResult {
   const consumed: string[] = [];
   if (st.usedHeal && input.equipment.includes('T4')) consumed.push('T4');
   if (st.fate !== 'died') {
+    // 使った装備ほど傷む：見立ての固定化を防ぎ、棚に自然なローテーションを作る
     for (const id of input.equipment) {
       if (consumed.includes(id)) continue;
-      if (rng.chance(0.12)) broken.push(id);
+      const wear = st.usedEquip.includes(id) ? 0.3 : 0.1;
+      if (rng.chance(wear)) broken.push(id);
     }
   }
 

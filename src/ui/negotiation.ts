@@ -133,7 +133,7 @@ export class NegotiationScreen implements GameScreen {
     }
 
     // 棚
-    drawText(ctx, `棚（最大3点まで渡せる）`, 8, 300, 8, THEME.dim);
+    drawText(ctx, `棚（最大3点まで渡せる／▪は重さ）`, 8, 300, 8, THEME.dim);
     const cells = this.shelf();
     for (const c of cells) {
       const selIdx = this.selected.indexOf(c.id);

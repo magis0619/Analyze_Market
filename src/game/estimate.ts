@@ -23,12 +23,18 @@ export function estimateTilt(adv: AdvSnapshot, equipment: string[]): number {
     }
   }
   let score = opened; // 0..15
+  const hasWeapon = equipment.some(id => id.startsWith('W'));
+  const hasArmor = equipment.some(id => id.startsWith('A'));
   if (isOverweight(equipment, adv.level)) score -= 2;
-  if (adv.personality === 'hasty' && !equipment.some(id => id.startsWith('W'))) score -= 2;
+  if (adv.personality === 'hasty' && !hasWeapon) score -= 2;
   if (adv.personality === 'timid' && equipment.includes('T4')) score += 1;
-  if (score <= 1) return -2;
-  if (score <= 3) return -1;
-  if (score <= 5) return 0;
-  if (score <= 7) return 1;
+  // 深い依頼ほど身を守る備えがないと不安が勝つ
+  if (adv.questDepth >= 7 && !hasArmor && !hasWeapon) score -= 2;
+  if (adv.questDepth >= 9 && !equipment.includes('T4') && !hasArmor) score -= 1;
+  if (equipment.includes(adv.favoredWeapon)) score += 1;
+  if (score <= 0) return -2;
+  if (score <= 2) return -1;
+  if (score <= 4) return 0;
+  if (score <= 6) return 1;
   return 2;
 }

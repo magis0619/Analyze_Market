@@ -1,9 +1,26 @@
 // ビットマップ調フォント描画。
-// システムフォントを一度小さなオフスクリーンに描き、アルファを2値化して
+// システムフォントを一度オフスクリーンに描き、アルファを2値化して
 // 完全なドット（アンチエイリアスなし）としてキャッシュする。
 // 画面上のフォントサイズは 8 / 12 の2種のみ（1画面3種以上は禁止）。
+// サイズ8は「12pxグリフを横8/12に圧縮した 8×12」。直接8pxで描くと
+// 漢字のストロークが欠落して判読不能になるため（批評ラウンド1 A-2）。
 
 export type FontSize = 8 | 12;
+
+/** 描画に使う下地フォントサイズ */
+function basePx(_size: FontSize): number {
+  return 12;
+}
+
+/** 横圧縮率（8×12 化） */
+function xScale(size: FontSize): number {
+  return size === 8 ? 8 / 12 : 1;
+}
+
+/** 行送り */
+export function lineHeight(size: FontSize): number {
+  return size === 8 ? 13 : 15;
+}
 
 interface Glyph {
   canvas: HTMLCanvasElement;
@@ -29,13 +46,18 @@ function scratchCtx(): CanvasRenderingContext2D {
 function buildGlyph(ch: string, size: FontSize, color: string): Glyph {
   const sctx = scratchCtx();
   sctx.clearRect(0, 0, 32, 32);
-  sctx.font = `${size}px 'MS Gothic', 'Hiragino Kaku Gothic ProN', 'Noto Sans CJK JP', monospace, sans-serif`;
+  const px = basePx(size);
+  const sx = xScale(size);
+  sctx.font = `${px}px 'MS Gothic', 'Hiragino Kaku Gothic ProN', 'Noto Sans CJK JP', monospace, sans-serif`;
   sctx.textBaseline = 'top';
   sctx.fillStyle = '#ffffff';
+  sctx.save();
+  sctx.scale(sx, 1);
   sctx.fillText(ch, 1, 1);
-  const measured = Math.ceil(sctx.measureText(ch).width);
+  sctx.restore();
+  const measured = Math.ceil(sctx.measureText(ch).width * sx);
   const w = Math.max(1, Math.min(30, measured));
-  const h = size + 3;
+  const h = px + 3;
   const img = sctx.getImageData(0, 0, w + 2, h);
   const out = document.createElement('canvas');
   out.width = w + 2;
@@ -108,28 +130,34 @@ export function drawTextRight(
   drawText(ctx, text, right - textWidth(text, size), y, size, color);
 }
 
-/** 最大幅で折り返して描画し、使用した行数を返す。 */
-export function drawTextWrapped(
-  ctx: CanvasRenderingContext2D, text: string, x: number, y: number,
-  maxWidth: number, size: FontSize, color: string, maxLines = 99
-): number {
+/** 行頭に置けない文字（禁則処理）。 */
+const KINSOKU = new Set([...'」』）〉】。、！？ーぁぃぅぇぉっゃゅょ・…ん']);
+
+/** 最大幅で折り返して行配列にする（行頭禁則つき）。 */
+export function wrapText(text: string, maxWidth: number, size: FontSize, maxLines = 99): string[] {
+  const lines: string[] = [];
   let line = '';
-  let lines = 0;
-  const lineH = size + 3;
   for (const ch of text) {
     const trial = line + ch;
-    if (textWidth(trial, size) > maxWidth && line.length > 0) {
-      drawText(ctx, line, x, y + lines * lineH, size, color);
-      lines++;
-      if (lines >= maxLines) return lines;
+    if (textWidth(trial, size) > maxWidth && line.length > 0 && !KINSOKU.has(ch)) {
+      lines.push(line);
+      if (lines.length >= maxLines) return lines;
       line = ch;
     } else {
       line = trial;
     }
   }
-  if (line.length > 0) {
-    drawText(ctx, line, x, y + lines * lineH, size, color);
-    lines++;
-  }
+  if (line.length > 0 && lines.length < maxLines) lines.push(line);
   return lines;
+}
+
+/** 最大幅で折り返して描画し、使用した行数を返す。 */
+export function drawTextWrapped(
+  ctx: CanvasRenderingContext2D, text: string, x: number, y: number,
+  maxWidth: number, size: FontSize, color: string, maxLines = 99
+): number {
+  const lineH = lineHeight(size);
+  const lines = wrapText(text, maxWidth, size, maxLines);
+  lines.forEach((ln, i) => drawText(ctx, ln, x, y + i * lineH, size, color));
+  return lines.length;
 }

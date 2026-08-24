@@ -107,7 +107,8 @@ const stats = await page.evaluate(() => {
   return g ? g.frameStats : null;
 });
 if (stats) {
-  const pct = stats.frames > 0 ? ((stats.over / stats.frames) * 100).toFixed(2) : '?';
-  console.log(`frames=${stats.frames} over16.7ms=${stats.over} (${pct}%) worst=${stats.worst.toFixed(1)}ms`);
+  const pct = stats.frames > 0 ? ((stats.over17_5 / stats.frames) * 100).toFixed(2) : '?';
+  const pct2 = stats.frames > 0 ? ((stats.over33_4 / stats.frames) * 100).toFixed(2) : '?';
+  console.log(`frames=${stats.frames} over17.5ms=${stats.over17_5} (${pct}%) over33.4ms=${stats.over33_4} (${pct2}%) worst=${stats.worst.toFixed(1)}ms`);
 }
 await browser.close();

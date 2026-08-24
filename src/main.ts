@@ -23,8 +23,10 @@ canvas.addEventListener('pointerdown', (e) => {
   app.screen.pointerDown?.(p.x, p.y);
 });
 
-// フレーム計測（C4 検査用に window へ公開）
-const frameStats = { frames: 0, over: 0, worst: 0 };
+// フレーム計測（C4 検査用に window へ公開）。
+// over17_5: フレーム落ちとみなす閾値（60fps の 16.7ms + vsync ジッタ余裕）
+// over33_4: 明確な2フレーム落ち
+const frameStats = { frames: 0, over17_5: 0, over33_4: 0, worst: 0 };
 interface DebugApi {
   app: App;
   frameStats: typeof frameStats;
@@ -37,10 +39,11 @@ function loop(now: number): void {
   last = now;
   if (dtMs > 0 && dtMs < 1000) {
     frameStats.frames++;
-    if (dtMs > 17.5) frameStats.over++;
+    if (dtMs > 17.5) frameStats.over17_5++;
+    if (dtMs > 33.4) frameStats.over33_4++;
     frameStats.worst = Math.max(frameStats.worst, dtMs);
   }
-  const dt = Math.min(0.1, dtMs / 1000);
+  const dt = Math.min(0.1, Math.max(0, dtMs / 1000));
   app.screen.update(dt);
   app.screen.draw(screen.ctx);
   screen.present();
