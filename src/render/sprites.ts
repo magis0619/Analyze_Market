@@ -164,6 +164,27 @@ const HERO_DEAD: Rows = [
   '................',
 ];
 
+// Startled reaction: both arms thrown straight up, legs spread — the
+// surprise reads from the posture alone (no "!" glyph).
+const HERO_REACT: Rows = [
+  '.ooo........ooo.',
+  '.ofoolggggGoofo.',
+  '.oroolggggGooro.',
+  '.oroogggGGGooro.',
+  '.orooGGGGGGooro.',
+  '.oro.oooooo.oro.',
+  '.orooBBBBbnooro.',
+  '.oooobbbbbnoooo.',
+  '....obbbbbno....',
+  '....obnnnnno....',
+  '....oooooooo....',
+  '....oCo..oCo....',
+  '...onno..onno...',
+  '...oooo..oooo...',
+  '................',
+  '................',
+];
+
 const PORTRAIT: Rows = [
   '....oooooooo....',
   '...olggggggGo...',
@@ -1043,67 +1064,258 @@ const WEIGHT_PIP: Rows = [
 ];
 
 // ---------------------------------------------------------------------------
-// Terrain tiles and shaft walls, generated per stratum from shared noise
-// templates so all four strata keep an identical grain. Tiles/walls carry
-// NO outlines by design.
-// Template chars: x = earth, z = earthDark, a = accent speckle.
+// Wall decor: transparent 16x16 props scattered inside the shaft to add
+// points of interest, outlined like characters.
+// ---------------------------------------------------------------------------
+
+// Cluster of two glowing-blue cave mushrooms.
+const DECO_MUSHROOM: Rows = [
+  '................',
+  '................',
+  '................',
+  '..ooooo.........',
+  '.occccco........',
+  '.ocwccco........',
+  '.occcwco........',
+  '.occccCo........',
+  '.ooooooo.ooo....',
+  '...ollo.occco...',
+  '...ollo.ocwCo...',
+  '...ollo.ooooo...',
+  '...ollo..olo....',
+  '...oooo..ooo....',
+  '................',
+  '................',
+];
+
+// Old bone half-buried in the shaft wall.
+const DECO_BONE: Rows = [
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '.oo........oo...',
+  'owwoooooooowwo..',
+  'owwwwwwwwwlllo..',
+  'owwoooooooowwo..',
+  '.oo........oo...',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+];
+
+// Small teal crystal pair sprouting from the rock.
+const DECO_CRYSTAL: Rows = [
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '.....oo.........',
+  '....ovvo........',
+  '....owvo........',
+  '...ovwvvo..oo...',
+  '...ovwvvo.ovvo..',
+  '...ovvvvo.ovco..',
+  '...ovvcvo.ovco..',
+  '...oooooo.oooo..',
+  '................',
+  '................',
+];
+
+// Roots dangling from the tunnel ceiling (touches the top edge).
+const DECO_ROOT: Rows = [
+  '...ono...ono....',
+  '...ono...ono....',
+  '...ono...onno...',
+  '...onno...ono...',
+  '....ono...ono...',
+  '....ono...ono...',
+  '....ono...ono...',
+  '....ono...ooo...',
+  '....ono.........',
+  '....ono.........',
+  '....obo.........',
+  '....ooo.........',
+  '................',
+  '................',
+  '................',
+  '................',
+];
+
+// Luminous moss patch with drifting spores.
+const DECO_GLOW: Rows = [
+  '................',
+  '................',
+  '................',
+  '................',
+  '....w...........',
+  '............w...',
+  '...oooooo.......',
+  '..ovvvvvvo......',
+  '.ovvwwvvvvo.....',
+  '.ovwwwvevvvo....',
+  '.ovvwvvvevvo....',
+  '..ovvvevvvo.....',
+  '..oEevvEeo......',
+  '...oooooo.......',
+  '................',
+  '................',
+];
+
+// ---------------------------------------------------------------------------
+// Terrain tiles: every 16x16 tile is ONE diggable block. Structure (matching
+// the strata-bench look): 1px dark mortar ring on all four edges (adjacent
+// tiles combine into a 2px seam), then a 1px bevel — highlight on top/left,
+// shadow on bottom/right — around a 12x12 core with 2-3 shades of grain.
+// Tiles/walls carry NO character outline by design.
+// Template chars: m = mortar (bgDark), h = bevel highlight (accent),
+// z = bevel shadow / dark grain (earthDark), x = core (earth),
+// a = accent fleck.
 // ---------------------------------------------------------------------------
 
 const TILE_TEMPLATE_A: Rows = [
-  'xxxxxxzzxxxxxxxx',
-  'xzzxxxxzxxxzzxxx',
-  'xxzxxxxxxxxzzxxx',
-  'xxxxxxaxxxxxxxzx',
-  'zxxxxxxxxzzxxxxz',
-  'zzxxxxxxxxzxxxxx',
-  'xxxxazxxxxxxxxxx',
-  'xxxzzxxxxxxazxxx',
-  'xxxxzxxxxxxzzxxx',
-  'xxxxxxxxxxxxxxxx',
-  'xzxxxxxzzxxxxxxx',
-  'zzxxxxxxzxxxxaxx',
-  'xxxxaxxxxxxxxzzx',
-  'xxxxxxxxxxxxxxzx',
-  'xxzzxxxxxzxxxxxx',
-  'xxxzxxxxxzzxxxxx',
+  'mmmmmmmmmmmmmmmm',
+  'mhhhhhhhhhhhhhzm',
+  'mhxxxxxxxxxxxxzm',
+  'mhxxzxxxxxaxxxzm',
+  'mhxxxxxxxxxxxxzm',
+  'mhxxxxxxzzxxxxzm',
+  'mhxaxxxxxzxxxxzm',
+  'mhxxxxxxxxxxzxzm',
+  'mhxxxxxxxxxxxxzm',
+  'mhxzzxxxxxxxxxzm',
+  'mhxxzxxxxaxxxxzm',
+  'mhxxxxxxxxxxxxzm',
+  'mhxxxxxzxxxxxxzm',
+  'mhxxxxxxxxxxxxzm',
+  'mhzzzzzzzzzzzzzm',
+  'mmmmmmmmmmmmmmmm',
 ];
 
 const TILE_TEMPLATE_B: Rows = [
-  'xxxzxxxxxxxxzzxx',
-  'xxzzxxxxazxxxzxx',
-  'xxxxxxxxxxxxxxxx',
-  'xzxxxxzzxxxxxxxx',
-  'xxxxxxxzzxxxazxx',
-  'xxaxxxxxxxxxxxxx',
-  'xxxxxxxxxxzxxxxx',
-  'xxxxxzxxxzzxxxxx',
-  'xzzxxxxxxxxxxzzx',
-  'xxzxxxxaxxxxxzxx',
-  'xxxxxxxxxxxxxxxx',
-  'xxxxzzxxxxxxxxxx',
-  'xaxxxzzxxxxzxxxx',
-  'xxxxxxxxxxxzzxxx',
-  'xxxxxxxxxxxxxxxx',
-  'xzxxxxxxxazxxxxx',
+  'mmmmmmmmmmmmmmmm',
+  'mhhhhhhhhhhhhhzm',
+  'mhxxxxxxzxxxxxzm',
+  'mhxxxxxxxxxxxxzm',
+  'mhxaxxxxxxzzxxzm',
+  'mhxxxxxxxxxzxxzm',
+  'mhxxxxxxxxxxxxzm',
+  'mhxxxzxxxxxxaxzm',
+  'mhxxzzxxxxxxxxzm',
+  'mhxxxxxxxxxxxxzm',
+  'mhxxxxxxzxxxxxzm',
+  'mhxaxxxzzxxxxxzm',
+  'mhxxxxxxxxxxxxzm',
+  'mhxxxxxxxxzxxxzm',
+  'mhzzzzzzzzzzzzzm',
+  'mmmmmmmmmmmmmmmm',
 ];
 
-// Template chars: d = bgDark, L = bgLight (subtle sediment dashes).
+// Per-stratum accent blocks (tile_s{s}_c): same block structure, plus a
+// point of interest — s0 moss+root, s1 iron glint, s2 amethyst grains,
+// s3 pale glow spots. These use palette chars directly.
+
+const TILE_S0_C: Rows = [
+  'NNNNNNNNNNNNNNNN',
+  'NBBBBBBBBBBBBBnN',
+  'NBeeebbbbeeebbnN',
+  'NBEeebbbbbEebbnN',
+  'NBbbbnbbbbbbbbnN',
+  'NBbbbnbbbbBbbbnN',
+  'NBbbbbnbbbbbbbnN',
+  'NBbbbbnbbbbbbbnN',
+  'NBbnbbnbbbbbbbnN',
+  'NBbbbbbnbbbbbbnN',
+  'NBbbbbbbbbnbbbnN',
+  'NBbbBbbbbbbbbbnN',
+  'NBbbbbbbbbbbbbnN',
+  'NBbbbbbbnbbbbbnN',
+  'NBnnnnnnnnnnnnnN',
+  'NNNNNNNNNNNNNNNN',
+];
+
+const TILE_S1_C: Rows = [
+  'SSSSSSSSSSSSSSSS',
+  'SgggggggggggggsS',
+  'SgGGGGGGGGGGGGsS',
+  'SgGGllGGGGGGGGsS',
+  'SgGGGlGGGGGwGGsS',
+  'SgGGGGGGGGwwwGsS',
+  'SgGGGGGGGGGwGGsS',
+  'SgGsGGGGGGGGGGsS',
+  'SgGGGGGllGGGGGsS',
+  'SgGGGGGGllGGGGsS',
+  'SgGGGGGGGGGGsGsS',
+  'SgGGGGGGGGGGGGsS',
+  'SglGGGGGGGGGGGsS',
+  'SgGGGGGGGGGGGGsS',
+  'SgssssssssssssSS',
+  'SSSSSSSSSSSSSSSS',
+];
+
+const TILE_S2_C: Rows = [
+  'QQQQQQQQQQQQQQQQ',
+  'QpppppppppppppqQ',
+  'QpPPPPPPPPPPPPqQ',
+  'QpPPppPPPPPPPPqQ',
+  'QpPPpwpPPPPPPPqQ',
+  'QpPPPpPPPPqPPPqQ',
+  'QpPPPPPPPPPPPPqQ',
+  'QpPPPPPPPppPPPqQ',
+  'QpPPPPPPPpwpPPqQ',
+  'QpPPPPPPPPpPPPqQ',
+  'QpPqPPPPPPPPPPqQ',
+  'QpPPPPPPPPPPPPqQ',
+  'QpPPPPppPPPPPPqQ',
+  'QpPPPPPPPPPPPPqQ',
+  'QpqqqqqqqqqqqqqQ',
+  'QQQQQQQQQQQQQQQQ',
+];
+
+const TILE_S3_C: Rows = [
+  'UUUUUUUUUUUUUUUU',
+  'UcccccccccccccuU',
+  'UcCCCCCCCCCCCCuU',
+  'UcCCvvCCCCCCCCuU',
+  'UcCvwwvCCCCCCCuU',
+  'UcCCvvCCCCCuCCuU',
+  'UcCCCCCCCCCCCCuU',
+  'UcCCCCCCCvCCCCuU',
+  'UcCCCCCCCCCCCCuU',
+  'UcCCCCCCCCvvCCuU',
+  'UcCCCCCCCvwvCCuU',
+  'UcCuCCCCCCvCCCuU',
+  'UcCCCCCCCCCCCCuU',
+  'UcCCCCCCCCCCCCuU',
+  'UcuuuuuuuuuuuuuU',
+  'UUUUUUUUUUUUUUUU',
+];
+
+// Shaft walls: bgDark base, faint sediment dashes (L = bgLight) and a few
+// near-black diagonal pick-scratch hatches ('o' passes through the remap)
+// so the shaft reads as hand-dug.
 const WALL_TEMPLATE: Rows = [
   'dddddddddddddddd',
   'dddddddddddddddd',
-  'dLLLddddddddLLdd',
+  'dLLddddddddddLLd',
+  'ddddddddddoddddd',
+  'dddddddddodddddd',
+  'ddddddddoddddddd',
+  'dddddddoddLLdddd',
+  'dddddddddddddddd',
+  'ddLLLddddddddddd',
+  'dddddodddddddddd',
+  'ddddoddddddLLddd',
+  'dddodddddddddddd',
   'dddddddddddddddd',
   'ddddddddLLLddddd',
   'dddddddddddddddd',
-  'dddddddddddddddd',
-  'dLLddddddddddLLL',
-  'dddddddddddddddd',
-  'ddddddLLLddddddd',
-  'dddddddddddddddd',
-  'dddddddddddddddd',
-  'dLLLdddddddLLddd',
-  'dddddddddddddddd',
-  'ddddddddLLdddddd',
   'dddddddddddddddd',
 ];
 
@@ -1239,6 +1451,106 @@ function buildLetter(): string[] {
   return grid.map((row) => row.join(''));
 }
 
+function buildWeb(): string[] {
+  // Corner spiderweb anchored top-left: radial spokes plus two arcs of pale
+  // silk, with dew glints at crossings. Silk strands are 1px pale lines
+  // (a full dark outline would double their width and clog the weave).
+  const size = 16;
+  const grid: string[][] = [];
+  for (let y = 0; y < size; y++) {
+    const row: string[] = [];
+    for (let x = 0; x < size; x++) row.push('.');
+    grid.push(row);
+  }
+  const put = (y: number, x: number, ch: string): void => {
+    const row = grid[y];
+    if (row && y >= 0 && y < size && x >= 0 && x < size) row[x] = ch;
+  };
+  for (let i = 0; i <= 11; i++) {
+    put(0, i, 'l'); // spoke along the ceiling
+    put(i, 0, 'l'); // spoke down the wall
+    if (i >= 1 && i <= 10) put(i, i, 'l'); // diagonal spoke
+  }
+  for (const r of [6, 11]) {
+    for (let deg = 0; deg <= 90; deg += 6) {
+      const rad = (deg * Math.PI) / 180;
+      put(Math.round(r * Math.sin(rad)), Math.round(r * Math.cos(rad)), 'l');
+    }
+  }
+  put(0, 6, 'w');
+  put(6, 6, 'w');
+  put(11, 0, 'w');
+  return grid.map((row) => row.join(''));
+}
+
+function buildLogo(): string[] {
+  // "OUTFITTER" logotype: a 5x11 letterform set composed with 1px gaps,
+  // integer-scaled x2 (106x22), two-tone gold shading, then auto-traced
+  // with a continuous 1px outline -> 108x24.
+  const F: Record<string, readonly string[]> = {
+    O: ['.yyy.', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', '.yyy.'],
+    U: ['y...y', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', '.yyy.'],
+    T: ['yyyyy', '..y..', '..y..', '..y..', '..y..', '..y..', '..y..', '..y..', '..y..', '..y..', '..y..'],
+    F: ['yyyyy', 'y....', 'y....', 'y....', 'yyyy.', 'y....', 'y....', 'y....', 'y....', 'y....', 'y....'],
+    I: ['yyyyy', '..y..', '..y..', '..y..', '..y..', '..y..', '..y..', '..y..', '..y..', '..y..', 'yyyyy'],
+    E: ['yyyyy', 'y....', 'y....', 'y....', 'yyyy.', 'y....', 'y....', 'y....', 'y....', 'y....', 'yyyyy'],
+    R: ['yyyy.', 'y...y', 'y...y', 'y...y', 'yyyy.', 'y.y..', 'y..y.', 'y..y.', 'y...y', 'y...y', 'y...y'],
+  };
+  const word = 'OUTFITTER';
+  const glyphW = 5;
+  const glyphH = 11;
+  const gap = 1;
+  const textW = word.length * glyphW + (word.length - 1) * gap;
+  const outW = textW * 2 + 2;
+  const outH = glyphH * 2 + 2;
+  const grid: string[][] = [];
+  for (let y = 0; y < outH; y++) {
+    const row: string[] = [];
+    for (let x = 0; x < outW; x++) row.push('.');
+    grid.push(row);
+  }
+  for (let li = 0; li < word.length; li++) {
+    const glyph = F[word[li] ?? ''];
+    if (!glyph) continue;
+    const ox = li * (glyphW + gap);
+    for (let gy = 0; gy < glyphH; gy++) {
+      const grow = glyph[gy];
+      if (!grow) continue;
+      for (let gx = 0; gx < glyphW; gx++) {
+        if (grow[gx] !== 'y') continue;
+        for (let sy = 0; sy < 2; sy++) {
+          for (let sx = 0; sx < 2; sx++) {
+            const y = 1 + gy * 2 + sy;
+            const x = 1 + (ox + gx) * 2 + sx;
+            const row = grid[y];
+            if (row) row[x] = gy * 2 + sy >= 12 ? 'Y' : 'y';
+          }
+        }
+      }
+    }
+  }
+  // trace a continuous 1px outline around every stroke (8-neighborhood)
+  for (let y = 0; y < outH; y++) {
+    const row = grid[y];
+    if (!row) continue;
+    for (let x = 0; x < outW; x++) {
+      if (row[x] !== '.') continue;
+      let touch = false;
+      for (let dy = -1; dy <= 1 && !touch; dy++) {
+        for (let dx = -1; dx <= 1 && !touch; dx++) {
+          const ny = y + dy;
+          const nx = x + dx;
+          const nrow = grid[ny];
+          const nch = nrow ? nrow[nx] : undefined;
+          if (nch === 'y' || nch === 'Y') touch = true;
+        }
+      }
+      if (touch) row[x] = 'o';
+    }
+  }
+  return grid.map((row) => row.join(''));
+}
+
 // ---------------------------------------------------------------------------
 // Sprite table (insertion order = debugSpriteNames() order).
 // ---------------------------------------------------------------------------
@@ -1252,6 +1564,7 @@ const SPRITES: Record<string, Rows> = {
   hero_mine_1: HERO_MINE_1,
   hero_hit: HERO_HIT,
   hero_dead: HERO_DEAD,
+  hero_react: HERO_REACT,
   portrait: PORTRAIT,
   ladder: LADDER,
   icon_W1: ICON_W1,
@@ -1297,22 +1610,32 @@ const SPRITES: Record<string, Rows> = {
   coin: COIN,
   heart: HEART,
   weight_pip: WEIGHT_PIP,
+  deco_mushroom: DECO_MUSHROOM,
+  deco_bone: DECO_BONE,
+  deco_crystal: DECO_CRYSTAL,
+  deco_root: DECO_ROOT,
+  deco_web: buildWeb(),
+  deco_glow: DECO_GLOW,
   frame: buildFrame(),
   button: buildButton(),
   balance: buildBalance(),
   letter: buildLetter(),
+  logo: buildLogo(),
 };
 
-// Generated terrain: tile_s{0..3}_{a,b} and wall_s{0..3}.
+// Generated terrain: tile_s{0..3}_{a,b,c} and wall_s{0..3}.
+const ACCENT_TILES: readonly Rows[] = [TILE_S0_C, TILE_S1_C, TILE_S2_C, TILE_S3_C];
 for (let s = 0; s < 4; s++) {
   const tileChars = STRATUM_TILE_CHARS[s];
   const wallChars = STRATUM_WALL_CHARS[s];
-  if (!tileChars || !wallChars) continue;
+  const accentTile = ACCENT_TILES[s];
+  if (!tileChars || !wallChars || !accentTile) continue;
   const [earth, earthDark, accent] = tileChars;
   const [bgDark, bgLight] = wallChars;
-  const tileMap = { x: earth, z: earthDark, a: accent };
+  const tileMap = { x: earth, z: earthDark, a: accent, h: accent, m: bgDark };
   SPRITES['tile_s' + String(s) + '_a'] = remap(TILE_TEMPLATE_A, tileMap);
   SPRITES['tile_s' + String(s) + '_b'] = remap(TILE_TEMPLATE_B, tileMap);
+  SPRITES['tile_s' + String(s) + '_c'] = accentTile;
   SPRITES['wall_s' + String(s)] = remap(WALL_TEMPLATE, { d: bgDark, L: bgLight });
 }
 
