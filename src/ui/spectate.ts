@@ -2,9 +2,9 @@ import type { App, GameScreen } from '../game/app';
 import { VW, VH } from '../render/screen';
 import { simulate, RUN_SECONDS } from '../sim/simulate';
 import type { OfferedOption, PendingChoice, SimEvent } from '../sim/types';
-import { STRATA } from '../render/palette';
+import { spr } from '../render/sprites';
 import { drawNineSlice, drawSpr, fillRect, strokeRect1 } from '../render/draw';
-import { drawText, drawTextCentered, drawTextRight, textWidth } from '../render/font';
+import { drawText, drawTextCentered, drawTextRight, textWidth, wrapText } from '../render/font';
 import { THEME } from './theme';
 import { Effects } from '../render/effects';
 import { sfx } from '../render/audio';
@@ -24,6 +24,23 @@ const LOG_W = VW - LOG_X;
 const PPD = 48;            // 1深度あたりのピクセル
 const HERO_SCREEN_Y = 250; // 冒険者の固定表示位置
 const CHOICE_SECONDS = 5;
+
+// アセット差分に依存するスプライトは存在確認してから使う
+function hasSpr(name: string): boolean {
+  try { spr(name); return true; } catch { return false; }
+}
+let extrasChecked = false;
+let hasReact = false;
+let hasDeco = false;
+const hasTileC: boolean[] = [false, false, false, false];
+const DECO_NAMES = ['deco_mushroom', 'deco_bone', 'deco_crystal', 'deco_root', 'deco_web', 'deco_glow'];
+function checkExtras(): void {
+  if (extrasChecked) return;
+  extrasChecked = true;
+  hasReact = hasSpr('hero_react');
+  hasDeco = DECO_NAMES.every(hasSpr);
+  for (let s = 0; s < 4; s++) hasTileC[s] = hasSpr(`tile_s${s}_c`);
+}
 
 interface LogEntry { text: string; color: string; }
 interface Marker { depth: number; icon: string; }
@@ -72,7 +89,10 @@ export class SpectateScreen implements GameScreen {
   private finishT = 0;
   private rareZoom = 0;
 
+  private panelDuration = CHOICE_SECONDS;
+
   constructor(private app: App) {
+    checkExtras();
     const run = app.run;
     if (!run) throw new Error('no active run');
     this.maxHp = run.adv.maxHp;
@@ -117,7 +137,7 @@ export class SpectateScreen implements GameScreen {
     if (this.panelOpen) {
       this.panelTimer -= dt;
       this.panelFlash += dt;
-      if (this.app.auto && this.panelTimer < CHOICE_SECONDS - 0.7) {
+      if (this.app.auto && this.panelTimer < this.panelDuration - 0.7) {
         this.autoPick();
         return;
       }
@@ -187,7 +207,10 @@ export class SpectateScreen implements GameScreen {
           this.pushLog(`${ev.eventName}に出くわした`, THEME.text);
         } else if (this.pending && ev.slot === this.pending.slot) {
           this.panelOpen = true;
-          this.panelTimer = CHOICE_SECONDS;
+          // 選べる選択肢が1つしかないパネルは5秒も待たせない
+          const enabled = this.pending.options.filter(o => !o.disabled).length;
+          this.panelDuration = enabled <= 1 ? 2 : CHOICE_SECONDS;
+          this.panelTimer = this.panelDuration;
           this.panelFlash = 0;
           const hasEquipOpt = this.pending.options.some(o => o.sourceEquip.length > 0);
           if (hasEquipOpt) sfx('unlock');
@@ -343,21 +366,29 @@ export class SpectateScreen implements GameScreen {
         continue;
       }
       const s = Math.min(3, Math.floor(r / 9));
-      const theme = STRATA[s];
       const c = shaftCenter(r);
       const notch = shaftNotch(r);
       for (let col = 0; col < Math.ceil(DUN_W / 16); col++) {
         const sx = DUN_X + col * 16;
         if ((col >= c - 1 && col <= c + 1) || col === notch) {
           drawSpr(ctx, `wall_s${s}`, sx, sy);
+          // 縦穴の内壁に点景（キノコ・骨・結晶など）を散らす
+          if (hasDeco && col !== c) {
+            const h = rowHash(r * 71 + col * 29);
+            if (h % 5 === 0) {
+              const name = DECO_NAMES[(h >> 4) % DECO_NAMES.length];
+              if (name) drawSpr(ctx, name, sx, sy);
+            }
+          }
         } else {
-          const variant = (rowHash(r * 31 + col) & 1) === 0 ? 'a' : 'b';
-          drawSpr(ctx, `tile_s${s}_${variant}`, sx, sy);
+          // 地層境界は前後の行でブロックを混在させ、遷移帯として読ませる
+          let ts = s;
+          if (r % 9 === 8 && s < 3 && rowHash(r * 97 + col * 13) % 3 === 0) ts = s + 1;
+          else if (r % 9 === 0 && s > 0 && rowHash(r * 89 + col * 17) % 3 === 0) ts = s - 1;
+          const h = rowHash(r * 31 + col);
+          const variant = h % 7 === 0 && hasTileC[ts] ? 'c' : (h & 1) === 0 ? 'a' : 'b';
+          drawSpr(ctx, `tile_s${ts}_${variant}`, sx, sy);
         }
-      }
-      // 地層の境界線
-      if (r % 9 === 0 && r > 0 && theme) {
-        fillRect(ctx, DUN_X, sy, DUN_W, 1, THEME.outline);
       }
       drawSpr(ctx, 'ladder', DUN_X + c * 16, sy);
     }
@@ -379,6 +410,8 @@ export class SpectateScreen implements GameScreen {
       drawSpr(ctx, 'hero_dead', hx, hy);
     } else if (this.hitBlink > 0 && Math.floor(this.hitBlink * 12) % 2 === 0) {
       drawSpr(ctx, 'hero_hit', hx, hy);
+    } else if (this.panelOpen && hasReact) {
+      drawSpr(ctx, 'hero_react', hx, hy);
     } else if (mining) {
       drawSpr(ctx, `hero_mine_${Math.floor(this.clock * 4) % 2}`, hx, hy);
     } else {
@@ -412,35 +445,18 @@ export class SpectateScreen implements GameScreen {
     drawText(ctx, '記録', LOG_X + 6, 6, 8, THEME.dim);
     fillRect(ctx, LOG_X + 4, 17, LOG_W - 8, 1, THEME.faint);
 
-    // 下から積む。1行11px、最大2行。
-    let y = VH - 14;
-    for (let i = this.log.length - 1; i >= 0 && y > 24; i--) {
+    // 下から積む。1行13px、最大2行（行頭禁則つき）。
+    let y = VH - 16;
+    for (let i = this.log.length - 1; i >= 0 && y > 26; i--) {
       const e = this.log[i];
       if (!e) continue;
-      const lines = this.wrapLog(e.text);
-      y -= lines.length * 11;
+      const lines = wrapText(e.text, LOG_W - 10, 8, 2);
+      y -= lines.length * 13;
       lines.forEach((ln, j) => {
-        drawText(ctx, ln, LOG_X + 5, y + j * 11, 8, e.color);
+        drawText(ctx, ln, LOG_X + 5, y + j * 13, 8, e.color);
       });
       y -= 3;
     }
-  }
-
-  private wrapLog(text: string): string[] {
-    const maxW = LOG_W - 10;
-    const lines: string[] = [];
-    let cur = '';
-    for (const ch of text) {
-      if (textWidth(cur + ch, 8) > maxW && cur.length > 0) {
-        lines.push(cur);
-        cur = ch;
-        if (lines.length === 2) break;
-      } else {
-        cur += ch;
-      }
-    }
-    if (lines.length < 2 && cur.length > 0) lines.push(cur);
-    return lines;
   }
 
   private drawHud(ctx: CanvasRenderingContext2D): void {
@@ -466,8 +482,8 @@ export class SpectateScreen implements GameScreen {
     drawNineSlice(ctx, 'frame', px, py, pw, ph);
     drawSpr(ctx, `ev_${pending.icon}`, px + 10, py + 8, 2);
     drawText(ctx, pending.eventName, px + 48, py + 14, 12, THEME.text);
-    // 5秒タイマー
-    const ratio = this.panelTimer / CHOICE_SECONDS;
+    // 選択タイマー（通常5秒、1択なら2秒）
+    const ratio = this.panelTimer / this.panelDuration;
     fillRect(ctx, px + 8, py + 40, pw - 16, 4, THEME.outline);
     fillRect(ctx, px + 9, py + 41, Math.round((pw - 18) * ratio), 2,
       ratio < 0.35 ? THEME.red : THEME.gold);
@@ -502,7 +518,8 @@ export class SpectateScreen implements GameScreen {
       ctx.fillRect(x, y, w, h);
       drawTextRight(ctx, `選べない（${o.disabledReason ?? ''}）`, x + w - 6, y + 4, 8, THEME.red);
     } else if (isSafe) {
-      drawText(ctx, '5秒で自動', x + 10, y + h - 11, 8, THEME.faint);
+      const tag = this.panelDuration <= 2 ? '……こうするしかない' : '5秒で自動';
+      drawText(ctx, tag, x + 10, y + h - 13, 8, THEME.faint);
     }
     if (fromEquip && !o.disabled) {
       drawText(ctx, `${o.sourceEquip.map(id => equipDef(id).name).join('と')}があるから選べる`,

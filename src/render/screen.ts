@@ -27,15 +27,24 @@ export class Screen {
   }
 
   resize(): void {
-    const k = Math.max(1, Math.min(
-      Math.floor(window.innerWidth / VW),
-      Math.floor(window.innerHeight / VH)
-    ));
+    // 非整数 devicePixelRatio の端末でも「デバイスピクセル基準」で整数倍を選ぶ。
+    // CSS px 基準で選ぶと DPR2.625 等の実機で非整数倍スケーリングになり、
+    // 中間色（にじみ）が発生する（仕様 §5.3 / C1）。
+    const dpr = window.devicePixelRatio || 1;
+    const availW = Math.floor(window.innerWidth * dpr);
+    const availH = Math.floor(window.innerHeight * dpr);
+    const k = Math.max(1, Math.min(Math.floor(availW / VW), Math.floor(availH / VH)));
     this.scale = k;
     this.display.width = VW * k;
     this.display.height = VH * k;
-    this.display.style.width = `${VW * k}px`;
-    this.display.style.height = `${VH * k}px`;
+    this.display.style.width = `${(VW * k) / dpr}px`;
+    this.display.style.height = `${(VH * k) / dpr}px`;
+    // transform 中央寄せは半画素配置を生むため、デバイスピクセルに丸めた
+    // left/top を明示する。
+    const left = Math.round((availW - VW * k) / 2) / dpr;
+    const top = Math.round((availH - VH * k) / 2) / dpr;
+    this.display.style.left = `${left}px`;
+    this.display.style.top = `${top}px`;
     this.displayCtx.imageSmoothingEnabled = false;
   }
 
@@ -47,12 +56,12 @@ export class Screen {
     );
   }
 
-  /** クライアント座標 → 内部座標 */
+  /** クライアント座標（CSS px）→ 内部座標 */
   toInternal(clientX: number, clientY: number): { x: number; y: number } {
     const rect = this.display.getBoundingClientRect();
     return {
-      x: Math.floor((clientX - rect.left) / this.scale),
-      y: Math.floor((clientY - rect.top) / this.scale)
+      x: Math.floor(((clientX - rect.left) * VW) / rect.width),
+      y: Math.floor(((clientY - rect.top) * VH) / rect.height)
     };
   }
 }
