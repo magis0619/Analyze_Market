@@ -3,7 +3,7 @@ import { baseDef } from '../data/bases';
 import { affixDef } from '../data/affixes';
 import { uniqueDef } from '../data/uniques';
 import { dominantElement, sellValue } from '../sim/items';
-import { drawNineSlice, drawSpr, drawSprOr, fillRect, fillScrim, hasSpr, strokeRect1 } from '../render/draw';
+import { drawNineSlice, drawSpr, drawSprOr, fillRect, hasSpr, strokeRect1 } from '../render/draw';
 import { drawText, drawTextRight, textWidth, wrapText } from '../render/font';
 import { THEME } from './theme';
 
@@ -108,14 +108,17 @@ export function drawItemRow(
 
   drawSprOr(ctx, itemIconName(item), 'icon_W1', x + 5, y + Math.floor((h - 16) / 2));
 
+  // 淡く見せたい行は、上からディザを被せるのではなく最初から沈んだ色で描く。
+  // 8pxビットマップの1px画線はディザで抜けると字形ごと消えてしまう
   const nameX = x + 25;
-  drawText(ctx, itemName(item), nameX, y + 5, 8, RARITY_COLOR[item.rarity]);
+  drawText(ctx, itemName(item), nameX, y + 5, 8,
+    opts.dim ? THEME.faint : RARITY_COLOR[item.rarity]);
 
   // 2段目：要点（武器＝威力と速度、防具＝防御）とアフィックス数
   const sub = item.slot === 'weapon'
     ? `秒間${Math.round(item.power * item.speed)}`
     : `防御${item.power}`;
-  drawText(ctx, sub, nameX, y + h - 13, 8, THEME.dim);
+  drawText(ctx, sub, nameX, y + h - 13, 8, opts.dim ? THEME.faint : THEME.dim);
 
   // アフィックス枠を点で示す（レアリティ＝枠数、§5.7）
   let px = nameX + textWidth(sub, 8) + 6;
@@ -127,8 +130,7 @@ export function drawItemRow(
 
   // 装備中との比較（§10 担当5の観点）
   if (opts.compareTo) {
-    const val = (i: Item): number => i.slot === 'weapon' ? Math.round(i.power * i.speed) : i.power;
-    const d = val(item) - val(opts.compareTo);
+    const d = itemScore(item) - itemScore(opts.compareTo);
     if (d !== 0) {
       drawTextRight(ctx, `${d > 0 ? '▲' : '▼'}${Math.abs(d)}`,
         x + w - (item.locked ? 22 : 6), y + 5, 8, d > 0 ? THEME.green : THEME.red);
@@ -139,9 +141,6 @@ export function drawItemRow(
 
   if (item.locked) {
     drawSprOr(ctx, 'icon_lock', 'icon_A3', x + w - 20, y + Math.floor((h - 16) / 2));
-  }
-  if (opts.dim) {
-    fillScrim(ctx, x, y, w, h, THEME.bg, 0.55);
   }
 }
 
@@ -211,6 +210,19 @@ export function drawItemDetail(
   return h;
 }
 
+/**
+ * 一覧に出す「強さ」の一本化された指標。
+ *
+ * `power` はベースタイプが違うと比較にならない（itemPower100 で両手剣は
+ * 86〜104、短剣は27〜33。どちらも秒間火力は59〜67）。
+ * 画面に出しているのは秒間火力なので、並び替えも同じ数字で行う。
+ * `power` で並べると「画面に出ていない数字で並んだ一覧」になり、
+ * 常に両手剣だけが上に押し上げられる。
+ */
+export function itemScore(item: Item): number {
+  return item.slot === 'weapon' ? Math.round(item.power * item.speed) : item.power;
+}
+
 /** ソート順（§10 担当5）。 */
 export type SortKey = 'power' | 'rarity' | 'slot' | 'recent';
 
@@ -218,9 +230,9 @@ export function sortItems(items: Item[], key: SortKey): Item[] {
   const rank = (r: Rarity): number => ['common', 'fine', 'rare', 'relic'].indexOf(r);
   const arr = [...items];
   switch (key) {
-    case 'power': arr.sort((a, b) => b.power - a.power); break;
-    case 'rarity': arr.sort((a, b) => rank(b.rarity) - rank(a.rarity) || b.power - a.power); break;
-    case 'slot': arr.sort((a, b) => a.slot.localeCompare(b.slot) || b.power - a.power); break;
+    case 'power': arr.sort((a, b) => itemScore(b) - itemScore(a)); break;
+    case 'rarity': arr.sort((a, b) => rank(b.rarity) - rank(a.rarity) || itemScore(b) - itemScore(a)); break;
+    case 'slot': arr.sort((a, b) => a.slot.localeCompare(b.slot) || itemScore(b) - itemScore(a)); break;
     case 'recent': arr.reverse(); break;
   }
   return arr;

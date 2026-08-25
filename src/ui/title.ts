@@ -42,7 +42,7 @@ export class TitleScreen implements GameScreen {
     // 3人の冒険者
     const jobs = ['job_swordsman', 'job_guardian', 'job_skirmisher'];
     jobs.forEach((j, i) => {
-      drawSprOr(ctx, j, 'portrait', VW / 2 - 72 + i * 48, 250, 2);
+      drawSprOr(ctx, j, 'portrait', VW / 2 - 72 + i * 48, 234, 2);
     });
 
     if (Math.floor(this.t * 2) % 2 === 0) {

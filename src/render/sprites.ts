@@ -64,20 +64,20 @@ const HERO_DEAD: Rows = [
 
 const PORTRAIT: Rows = [
   '....oooooooo....',
-  '...olggggggGo...',
-  '..olgggggggGGo..',
-  '..olgggggggGGo..',
-  '..oGGGGGGGGGGo..',
-  '..oooooooooooo..',
-  '..oFffffffffFo..',
-  '..offoffffoffo..',
-  '..offffffffffo..',
-  '..offffffffffo..',
-  '..oFffoooofffo..',
-  '..ooffffffffoo..',
-  '...oooffffooo...',
-  '..oorrrrrrrroo..',
-  '.orrrrrrrrrrrro.',
+  '...onnnnnnnno...',
+  '...obbbbbbbbo...',
+  '...obbbbbbbbo...',
+  '...oFFFFFFFFo...',
+  '...offffffffo...',
+  '...ofoffffofo...',
+  '...offffffffo...',
+  '...offFFFFffo...',
+  '...oFffffffFo...',
+  '....ooFFFFoo....',
+  '...oorrRRrroo...',
+  '.oorrrrRRrrrroo.',
+  'oRrrrrrrrrrrrrRo',
+  'oRRRRRRRRRRRRRRo',
   '.oooooooooooooo.',
 ];
 
@@ -350,17 +350,6 @@ const COIN: Rows = [
   '..oooo..',
 ];
 
-const HEART: Rows = [
-  '.oo..oo.',
-  'orroorro',
-  'orwrrrro',
-  'orrrrrRo',
-  '.orrrRo.',
-  '..orRo..',
-  '...oo...',
-  '........',
-];
-
 
 // ---------------------------------------------------------------------------
 // Wall decor: transparent 16x16 props scattered inside the shaft to add
@@ -497,7 +486,6 @@ const SPRITES: Record<string, Rows> = {
   skull: SKULL,
   star: STAR,
   coin: COIN,
-  heart: HEART,
   frame: buildFrame(),
   button: buildButton(),
 };
@@ -705,59 +693,83 @@ const BASE_HEAVY: Rows = [
 
 const JOB_SWORDSMAN: Rows = [
   '....oooooooo....',
-  '...onbbbbbbno...',
-  '..onbbbbbbbbno..',
-  '..orrrrrrrrrro..',
-  '..oooooooooooo..',
-  '..oFffffffffFo..',
-  '..offoffffoffo..',
-  '..offffffffffo..',
-  '..offffffffffo..',
-  '..oFffoooofffo..',
-  '..ooffffffffoo..',
-  '...oooffffooo...',
-  '..oolllllllloo..',
-  '.ollllllllllllo.',
-  '.olggggggggggGo.',
-  '.oooooooooooooo.',
+  '...onnnnnnnno...',
+  '...obbbbbbbbo...',
+  '...obbbbbbbbooo.',
+  '...orrrrrrrrolgo',
+  '...oFFFFFFFFolgo',
+  '...offffffffolgo',
+  '...ofoffffofolgo',
+  '...offffffffolgo',
+  '...offFFFFffolgo',
+  '...oFffffffFolgo',
+  '...oooFFFFooolgo',
+  '..olllllllllllgo',
+  '..oGGlGGGGsGGlgo',
+  '.onnolGGGGsGyyyo',
+  'onBBnlGGGGsGGnno',
+  'onlgnlGGGGsffnno',
+  'onggnnnyynnffoo.',
+  'onBBnGGooGGoo...',
+  '.onnoGGooGGo....',
+  '..oooGGooGGo....',
+  '...obbboobbbo...',
+  '...onnnoonnno...',
+  '....ooo..ooo....',
 ];
 
 const JOB_GUARDIAN: Rows = [
   '.......oo.......',
   '......orro......',
-  '...oooorroooo...',
-  '...olggggggGo...',
-  '..olgggggggGGo..',
-  '.ollgggggggGGGo.',
-  '.oloooooooooGGo.',
-  '.olosssssssoGGo.',
-  '.oloooooooooGGo.',
-  '.ollgggggggGGGo.',
-  '.ollgggooogGGGo.',
-  '.ollgggggggGGGo.',
-  '.oGGGGGGGGGGGGo.',
-  '..oooooooooooo..',
-  'oolllllllllllloo',
-  'oooooooooooooooo',
+  '.....oorrooo....',
+  '....olllllllo...',
+  '...olgggggggGo..',
+  '...olgggggggGo..',
+  '...olgggggggGo..',
+  '...olgsssssgGo..',
+  '...olgsssssgGo..',
+  '...olgggggggGo..',
+  '.ooolggsssggGo..',
+  'ossssoGGGGGGGoo.',
+  'osgGGolllllllggo',
+  'osgGGoGGGsGGGggo',
+  'osgyGoGGGsGGGggo',
+  'osyyyoGGGsGGGGo.',
+  'osgyGoyyyyyyyyo.',
+  'osgyGoGGGGGGGGo.',
+  'osgGGoGGGGGGGGo.',
+  'osgGGoGGGoGGGGo.',
+  'osgGGoGGGoGGGGo.',
+  'ooooooGGGoGGGGo.',
+  '.ooosssssossssso',
+  '....ooooo.ooooo.',
 ];
 
 const JOB_SKIRMISHER: Rows = [
-  '......oooo......',
-  '.....oeeeeo.....',
-  '....oeeeeeEo....',
-  '...oeeeeeeEEo...',
-  '..oeeeeeeeeEEo..',
-  '.oeeooooooooEEo.',
-  '.oeeoFffffFoEEo.',
-  '.oeeofoffofoEEo.',
-  '.oeeoffffffoEEo.',
-  '.oeeoFffffFoEEo.',
-  '.oeeooooooooEEo.',
-  '.oEeeeeeeeeeEEo.',
-  '..oEEeeeeeeEEo..',
-  '..oobbbbbbbboo..',
-  '.obbbbbbbbbbbno.',
-  '.oooooooooooooo.',
+  '....ooooooooo...',
+  '...oeeeeeeeeeo..',
+  '...oeeeeeeeeEo..',
+  '...oeeeeeeeeEo..',
+  '...oeeeeeeeeEo..',
+  '...oeeFFFFFeEoo.',
+  '...oeefffffeEEEo',
+  '...oeefofofeEEEo',
+  '...oeefffffeEEEo',
+  '...oeeFfffFeEEEo',
+  '...oEEEEEEEEEoo.',
+  '...obbBBBBBbbo..',
+  '...onnBbbbnnno..',
+  '...onnBbbbnnno..',
+  '...onnBbbbnnno..',
+  '..ooffnnnnnffo..',
+  '.oyyyfnnonnyyyo.',
+  '.ollgonnonnllgo.',
+  '.ollgonnonnllgo.',
+  '.ollgonnonnllgo.',
+  '.olloonnonnllo..',
+  '..olobbbobbblo..',
+  '...oobbbobbbo...',
+  '.....ooo.ooo....',
 ];
 
 // --- Element pips (8x8, one hue plus outline; meant to sit in a row).
@@ -1828,21 +1840,32 @@ function buildLodge(): string[] {
 // 40x24 hanging sign: board and ironwork only -- the guild name is drawn on
 // top of it with the bitmap font.
 function buildLodgeSign(): string[] {
-  const p = new Px(40, 24);
-  for (const hx of [7, 32]) {              // iron hooks
+  // 64x24. "DELVERS" measures 48px at the 8px font size (7 glyphs of 6px plus
+  // 1px tracking), so the face is 62px wide: 48 for the name and 7px of clear
+  // board either side. The old 40px board cut the D and pushed the S off the
+  // end.
+  const p = new Px(64, 24);
+  for (const hx of [16, 47]) {             // iron hooks
     p.vline(hx, 1, 5, 'l');
     p.set(hx + 1, 1, 'l');
     p.set(hx + 1, 2, 'g');
     p.set(hx, 5, 'g');
   }
-  p.rect(3, 6, 34, 16, 'b');               // board
-  p.hline(3, 6, 34, 'B');
-  p.hline(3, 7, 34, 'B');
-  p.hline(3, 20, 34, 'n');
-  p.hline(3, 21, 34, 'n');
-  for (let x = 5; x < 37; x += 8) p.vline(x, 8, 12, 'n');
-  for (const [cx, cy] of [[5, 8], [34, 8], [5, 19], [34, 19]]) {
-    p.set(cx ?? 0, cy ?? 0, 'y');          // rivets
+  p.rect(1, 6, 62, 16, 'b');               // board
+  p.hline(1, 6, 62, 'B');                  // lit top edge
+  p.hline(1, 7, 62, 'B');
+  p.hline(1, 8, 62, 'n');                  // groove above the lettering
+  p.hline(1, 19, 62, 'n');                 // groove below it
+  p.rect(1, 20, 62, 2, 'n');               // shadowed bottom edge
+  // Plank seams live in the top and bottom bands only. Rows 9-18 are left
+  // flat, because the guild name is drawn over them with the bitmap font and
+  // a seam running through the letters turned "DELVERS" into "ELYER".
+  for (let x = 11; x < 62; x += 10) {
+    p.vline(x, 6, 3, 'n');
+    p.vline(x, 19, 3, 'n');
+  }
+  for (const c of [[3, 7], [60, 7], [3, 20], [60, 20]]) {
+    p.set(c[0] ?? 0, c[1] ?? 0, 'y');      // rivets
   }
   p.outline();
   return p.rows();

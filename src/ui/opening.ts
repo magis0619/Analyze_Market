@@ -34,9 +34,11 @@ import {
 const LIST_X = 8;
 const LIST_W = VW - 16;
 const LIST_Y = 40;
-const ROW_H = 34;
+// 行は縦を使い切る高さにする。開封後の一覧はこのゲームの主役画面なのに、
+// 34px×10行では画面の3分の1が空白のまま残っていた。
+const ROW_H = 44;
 const ROW_GAP = 2;
-const SUMMARY_Y = 412;
+const SUMMARY_Y = 506;
 
 /** 本文の行送り（フォントは 8 / 12 の2段階のみ。§9.3） */
 const LH = lineHeight(12);
@@ -45,8 +47,8 @@ function rowY(i: number): number {
   return LIST_Y + i * (ROW_H + ROW_GAP);
 }
 
-const MAIN_BTN: Btn = { x: 80, y: 520, w: 200, h: 44, label: '一括開封', accent: true };
-const BACK_BTN: Btn = { x: 80, y: 520, w: 200, h: 44, label: '拠点へ戻る', accent: true };
+const MAIN_BTN: Btn = { x: 80, y: 570, w: 200, h: 44, label: '一括開封', accent: true };
+const BACK_BTN: Btn = { x: 80, y: 570, w: 200, h: 44, label: '拠点へ戻る', accent: true };
 const SKIP_BTN: Btn = { x: 244, y: 526, w: 100, h: 32, label: 'スキップ' };
 
 // ---------------------------------------------------------------- レアリティ配色
@@ -130,7 +132,10 @@ interface CutTiming {
 }
 
 const RARE_T: CutTiming = { dark: 0.10, charge: 0.52, hold: 0.64, present: 2.22, out: 2.42 };
-const RELIC_T: CutTiming = { dark: 0.26, charge: 1.05, hold: 1.25, present: 3.80, out: 4.10 };
+const RELIC_T: CutTiming = { dark: 0.26, charge: 1.05, hold: 1.25, present: 4.25, out: 4.55 };
+
+/** 破裂の中心。箱・札・閃光の芯をここに揃える。 */
+const BURST_CY = 300;
 
 /** 破裂で飛ばす紙片の数。強度差は色ではなく「量」で付ける（§9.4）。 */
 const BURST_SHARDS: Record<Rarity, number> = {
@@ -198,16 +203,24 @@ interface FieldMotion {
 }
 
 const FIELD_MOTION: Record<'rare' | 'relic', FieldMotion> = {
+  // しきい値は高め＝面積は小さめ、速度は遅め。背景が主役になってはいけない。
   rare: {
-    cuts: [0.50, 0.64, 0.84],
-    vel: [[5, -9], [-13, -20], [17, -31]]
+    cuts: [0.560, 0.660, 0.745],
+    vel: [[3, -5], [-7, -11], [9, -17]]
   },
   relic: {
-    // 遺物は地の面積を絞る。溜めの間は「ほぼ暗転」を保ちたいため（§7.4）
-    cuts: [0.60, 0.69, 0.82],
-    vel: [[-4, 7], [11, 17], [-19, 27]]
+    // 遺物は地の面積をさらに絞る。溜めの間は「ほぼ暗転」を保ちたいため（§7.4）
+    cuts: [0.600, 0.690, 0.770],
+    vel: [[-2, 4], [6, 9], [-10, 15]]
   }
 };
+
+/**
+ * 背景全体に敷く減光。塊の見た目そのままに、輝度だけ落とす。
+ * 混色を作らないよう rgba ではなく順序ディザで打つ（§9.3）。
+ * 紙片と札が主役で、背景はその下、という重み付けをここで決めている。
+ */
+const FIELD_DIM = 0.36;
 
 /** 暗→明の3層。手前ほど面積が小さい。 */
 function fieldColors(r: Rarity): [string, string, string] {
@@ -217,16 +230,25 @@ function fieldColors(r: Rarity): [string, string, string] {
 
 const fieldCache = new Map<string, HTMLCanvasElement[]>();
 
+/**
+ * 模様のもと。周期はすべて TILE の整数分の1なので継ぎ目なく並ぶ。
+ *
+ * 以前は長い周期が強すぎて、画面いっぱいの不定形な塊（カビのような模様）に
+ * 見えていた。もとの周期を短くして塊を細かく砕き、見た目の重さを紙片より
+ * 確実に軽くする。
+ */
 function fieldNoise(x: number, y: number): number {
   const k = (2 * Math.PI) / TILE;
+  // 倍数は互いに素なものを選ぶ。偶数倍ばかりだと格子が揃って
+  // 壁紙のような反復模様になる。
   const n =
-    Math.sin(k * x) * 1.15 +
-    Math.sin(k * 2 * y + 1.7) +
-    Math.sin(k * 3 * (x + y) + 0.4) * 0.8 +
-    Math.sin(k * 2 * (x - y) + 2.3) * 0.9 +
-    Math.sin(k * (x + 3 * y) + 1.1) * 0.7 +
-    Math.sin(k * 5 * (x - 2 * y) + 0.2) * 0.45 +
-    Math.sin(k * 7 * (2 * x + y) + 2.9) * 0.3;
+    Math.sin(k * 3 * x) * 1.15 +
+    Math.sin(k * 5 * y + 1.7) +
+    Math.sin(k * 7 * (x + y) + 0.4) * 0.8 +
+    Math.sin(k * 5 * (x - y) + 2.3) * 0.9 +
+    Math.sin(k * 2 * (x + 3 * y) + 1.1) * 0.7 +
+    Math.sin(k * 11 * (x - 2 * y) + 0.2) * 0.45 +
+    Math.sin(k * 17 * (2 * x + y) + 2.9) * 0.3;
   return (n / 5.3 + 1) / 2;
 }
 
@@ -281,8 +303,10 @@ function drawField(
   ctx: CanvasRenderingContext2D, rarity: Rarity, t: number, steps: number
 ): void {
   const kind: 'rare' | 'relic' = rarity === 'relic' ? 'relic' : 'rare';
-  // 遺物はより暗い地から始める（§7.4「画面暗転」）
-  fillRect(ctx, -8, -8, VW + 16, VH + 16, kind === 'relic' ? THEME.outline : THEME.bg);
+  // 地は最暗色で一定。模様との明度差をここで確保する（§7.4「画面暗転」）。
+  // 以前は稀少だけ THEME.bg を敷いていたが、いちばん面積の広い層と
+  // ほぼ同じ明るさで、模様が消えてしまっていた。
+  fillRect(ctx, -8, -8, VW + 16, VH + 16, THEME.outline);
   const colors = fieldColors(rarity);
   const tiles = fieldTiles(kind, colors);
   const motion = FIELD_MOTION[kind];
@@ -299,6 +323,9 @@ function drawField(
       }
     }
   }
+  // 最後に減光を1枚。ここから上（箱・紙片・札）は減光の外側に描かれるので、
+  // 背景だけが確実に一段沈む。
+  fillScrim(ctx, -8, -8, VW + 16, VH + 16, THEME.outline, FIELD_DIM);
 }
 
 // ---------------------------------------------------------------- 紙片
@@ -438,6 +465,9 @@ export class OpeningScreen implements GameScreen {
 
   /** 獲得の確定（openAll）を済ませたか。演出の経路に関わらず必ず一度だけ呼ぶ */
   private claimed = false;
+
+  /** 一覧の ▲▼ を出すための「今の装備」。1回だけ引いて使い回す */
+  private baseline: { weapon: Item | null; armor: Item | null } | null = null;
 
   constructor(nav: Nav, items: Item[]) {
     this.nav = nav;
@@ -601,7 +631,7 @@ export class OpeningScreen implements GameScreen {
   private burst(it: Item): void {
     const relic = it.rarity === 'relic';
     const cx = VW / 2;
-    const cy = 300;
+    const cy = BURST_CY;
     // 前作資産の「0.8秒ホールド＋パーティクル」を土台に使い、上に盛る（§1.1）。
     // ホールドは上の時刻表（charge → hold）が担い、パーティクルはこの紙片に置き換える。
     // 共有 Effects の粒は色が固定で、レアリティ帯の外に出てしまうため使わない。
@@ -798,14 +828,7 @@ export class OpeningScreen implements GameScreen {
     // 3) 箱・破裂・札
     if (cut) this.drawCut(ctx, cut);
 
-    if (this.flashT > 0) {
-      // 2段の階段状フラッシュ（グラデーションは使わない）。
-      // 白一色で塗り潰すと、せっかく飛んでいる紙片が2フレーム消えてしまう。
-      // 全面はレアリティ色だけで焼き、白は紙片の側に持たせる。
-      const k = this.flashT / this.flashMax;
-      const main = RARITY_COLOR[this.flashRarity];
-      fillRect(ctx, -8, -8, VW + 16, VH + 16, k > 0.5 ? main : shadeOf(main));
-    }
+    if (this.flashT > 0) this.drawFlash(ctx);
 
     // 閃光の上を紙片が飛ぶ。順序を逆にすると、一番見せたい数フレームが
     // 単色の矩形で塗り潰されてしまう。
@@ -825,6 +848,30 @@ export class OpeningScreen implements GameScreen {
     ctx.restore();
   }
 
+  /**
+   * 解放の閃光。
+   *
+   * 全面を単色で塗ると、この演出で一番見せたい2フレームが「ただの矩形」に
+   * なってしまう（白を紫に変えただけ、と同じ）。そこで、
+   *   ・塗りは fillScrim の順序ディザだけにして、どの画素にも背景を残す
+   *   ・中心から外へ濃さを落とす同心の階段にして、のっぺりした面を作らない
+   * の2点で「単色で画面が埋まる瞬間」を無くす。ベタ塗りは1pxも使わない。
+   */
+  private drawFlash(ctx: CanvasRenderingContext2D): void {
+    const k = this.flashT / this.flashMax;          // 1 → 0
+    const main = RARITY_COLOR[this.flashRarity];
+    const c = k > 0.5 ? main : shadeOf(main);
+    const cx = VW / 2;
+    const rings = 8;
+    // 外側（薄い）から内側（濃い）へ。Bayer のしきい値は入れ子なので、
+    // 重ねても濃さは単調に増えるだけで混色は起きない。
+    for (let i = rings - 1; i >= 0; i--) {
+      const r = 40 + i * 56;
+      const d = 0.78 * k * (1 - i / rings);
+      fillScrim(ctx, cx - r, BURST_CY - r, r * 2, r * 2, c, d);
+    }
+  }
+
   private shakeOffset(): { x: number; y: number } {
     if (this.shakeT <= 0) return { x: 0, y: 0 };
     const a = this.shakeAmp * (this.shakeT / 0.5);
@@ -835,12 +882,21 @@ export class OpeningScreen implements GameScreen {
     };
   }
 
+  /** 画面に出す進捗。ヘッダと名札の唯一の出所。 */
+  private progress(): number {
+    if (this.phase === 'intro') return 0;
+    if (this.phase === 'done') return this.items.length;
+    return Math.min(this.items.length, this.idx + 1);
+  }
+
   private drawHeader(ctx: CanvasRenderingContext2D): void {
     // カットイン中は背景が明るく流れるので、HUD の下だけ地を敷いて読めるようにする
     if (this.phase === 'cut') fillRect(ctx, -8, -8, VW + 16, 39, THEME.outline);
     drawText(ctx, '開封', LIST_X, 10, 12, THEME.gold);
     const total = this.items.length;
-    drawText(ctx, `${this.shown} / ${total}`, LIST_X + 44, 12, 8, THEME.dim);
+    // 「今めくっているのが何個目か」。名札（drawPlaque）と必ず同じ値を出す。
+    // shown（着地済みの数）を出すと、カットインの間だけ名札と1ズレる。
+    drawText(ctx, `${this.progress()} / ${total}`, LIST_X + 44, 12, 8, THEME.dim);
 
     // 収穫額。着地のたびに跳ねる（色の点滅＋2px の浮き）
     const pop = this.goldPop > 0;
@@ -848,6 +904,32 @@ export class OpeningScreen implements GameScreen {
     const col = pop ? THEME.text : THEME.goldDark;
     drawTextRight(ctx, `${Math.round(this.goldShown)}G`, VW - LIST_X, gy, 12, col);
     fillRect(ctx, LIST_X, 30, LIST_W, 1, THEME.panelLight);
+  }
+
+  /**
+   * その行を比べる相手＝今いちばん強い装備（スロット別）。
+   *
+   * 並のアイテムは数字が近く、そのままでは「何も起きなかった10行」に見える。
+   * 装備中との差を ▲▼ で出せば、10個のうちどれを見るべきかが1行で分かる。
+   */
+  private baselineFor(it: Item): Item | null {
+    if (!this.baseline) {
+      const st = this.nav.state;
+      const rank = (i: Item): number =>
+        i.slot === 'weapon' ? Math.round(i.power * i.speed) : i.power;
+      const best = (weapon: boolean): Item | null => {
+        let out: Item | null = null;
+        for (const eq of Object.values(st.data.equipped)) {
+          const cand = st.itemById(weapon ? eq.weapon : eq.armor);
+          if (!cand) continue;
+          if (!out || rank(cand) > rank(out)) out = cand;
+        }
+        return out;
+      };
+      this.baseline = { weapon: best(true), armor: best(false) };
+    }
+    const b = it.slot === 'weapon' ? this.baseline.weapon : this.baseline.armor;
+    return b && b.id !== it.id ? b : null;
   }
 
   private drawList(ctx: CanvasRenderingContext2D): void {
@@ -864,7 +946,7 @@ export class OpeningScreen implements GameScreen {
       // 右から整数ステップで滑り込む（幅は変えない。欠けて見えないように平行移動）
       const dx = landing ? Math.round(k * 20) : 0;
       if (dx !== 0) ctx.translate(dx, 0);
-      drawItemRow(ctx, it, LIST_X, y, LIST_W, ROW_H);
+      drawItemRow(ctx, it, LIST_X, y, LIST_W, ROW_H, { compareTo: this.baselineFor(it) });
       if (landing) {
         // 着地フラッシュ：レアリティ色の帯を2段で被せる
         const c = RARITY_COLOR[this.landRarity];
@@ -876,9 +958,13 @@ export class OpeningScreen implements GameScreen {
         }
       }
       if (dx !== 0) ctx.translate(-dx, 0);
-      // 遺物は一覧の中でも常に自己主張する
-      if (it.rarity === 'relic' && Math.floor(this.clock * 3) % 2 === 0) {
-        strokeRect1(ctx, LIST_X, y, LIST_W, ROW_H, RARITY_COLOR.relic);
+      // 稀少以上は一覧の中でも自己主張する。並の行と同じ重さで並べない。
+      // 内側に枠を重ねると2段目の文字を削るので、左端の旗で厚みを出す。
+      if (it.rarity === 'rare' || it.rarity === 'relic') {
+        const rc = RARITY_COLOR[it.rarity];
+        strokeRect1(ctx, LIST_X, y, LIST_W, ROW_H, rc);
+        const blink = it.rarity === 'relic' && Math.floor(this.clock * 3) % 2 === 0;
+        fillRect(ctx, LIST_X, y, 3, ROW_H, blink ? THEME.text : rc);
       }
     }
   }
@@ -887,8 +973,8 @@ export class OpeningScreen implements GameScreen {
     fillRect(ctx, LIST_X, y, LIST_W, ROW_H, THEME.panel);
     strokeRect1(ctx, LIST_X, y, LIST_W, ROW_H, THEME.outline);
     drawSprOr(ctx, 'ev_chest', 'icon_T1', LIST_X + 5, y + Math.floor((ROW_H - 16) / 2));
-    drawText(ctx, '未鑑定', LIST_X + 25, y + 11, 8, THEME.dim);
-    drawTextRight(ctx, '？', VW - LIST_X - 6, y + 10, 12, THEME.panelLight);
+    drawText(ctx, '未鑑定', LIST_X + 25, y + Math.floor((ROW_H - 12) / 2), 8, THEME.dim);
+    drawTextRight(ctx, '？', VW - LIST_X - 6, y + Math.floor((ROW_H - 16) / 2), 12, THEME.panelLight);
   }
 
   private drawSummary(ctx: CanvasRenderingContext2D): void {
@@ -903,12 +989,12 @@ export class OpeningScreen implements GameScreen {
     drawText(ctx, `稀少 ${rare}`, LIST_X, y, 12, rare > 0 ? RARITY_COLOR.rare : THEME.dim);
     drawText(ctx, `遺物 ${relic}`, LIST_X + 80, y, 12, relic > 0 ? RARITY_COLOR.relic : THEME.dim);
     drawTextRight(ctx, `売却 ${this.goldTarget}G`, VW - LIST_X, y, 12, THEME.goldDark);
-    drawText(ctx, 'タップで詳細', LIST_X, y + 22, 8, THEME.dim);
+    drawText(ctx, 'タップで詳細', LIST_X, y + 26, 8, THEME.dim);
   }
 
   private drawButtons(ctx: CanvasRenderingContext2D): void {
     if (this.phase === 'intro') {
-      drawTextCentered(ctx, `${this.items.length}個の未鑑定品を持ち帰った`, VW / 2, 486, 8, THEME.dim);
+      drawTextCentered(ctx, `${this.items.length}個の未鑑定品を持ち帰った`, VW / 2, 516, 8, THEME.dim);
       drawBtn(ctx, MAIN_BTN);
     } else if (this.phase === 'done') {
       drawBtn(ctx, BACK_BTN);
@@ -945,7 +1031,7 @@ export class OpeningScreen implements GameScreen {
     const T = relic ? RELIC_T : RARE_T;
     const t = this.t;
     const cx = VW / 2;
-    const cy = 300;
+    const cy = BURST_CY;
     const color = RARITY_COLOR[it.rarity];
     const shade = shadeOf(color);
 
@@ -997,7 +1083,7 @@ export class OpeningScreen implements GameScreen {
     fillRect(ctx, x, y, w, SKIP_BTN.h, THEME.outline);
     strokeRect1(ctx, x, y, w, SKIP_BTN.h, RARITY_COLOR[it.rarity]);
     drawText(ctx, RARITY_LABEL[it.rarity], x + 8, y + 10, 12, RARITY_COLOR[it.rarity]);
-    drawTextRight(ctx, `${this.idx + 1} / ${this.items.length}`, x + w - 8, y + 12, 8, THEME.dim);
+    drawTextRight(ctx, `${this.progress()} / ${this.items.length}`, x + w - 8, y + 12, 8, THEME.dim);
   }
 
   /** 稀少の溜め：中央の帯が整数ステップで開き、指示線が箱へ寄ってくる。 */
@@ -1066,13 +1152,16 @@ export class OpeningScreen implements GameScreen {
     const shade = shadeOf(color);
     const cardW = this.cutW;
 
-    // 中身の行数から高さを先に決める（打鍵中に札が伸び縮みしないように）
+    // 中身の行数から高さを先に決める（打鍵中に札が伸び縮みしないように）。
+    // 遺物も「ユニーク行 ＋ アフィックス枠」の両方を出す。§5.7 は遺物を
+    // 「固定2枠＋ランダム1枠、かつユニーク」と定義しており、最も強い演出で
+    // その枠が一度も見えないのは逆転（稀少の札のほうが情報が多くなる）。
     const u = relic && it.unique ? uniqueDef(it.unique) : null;
-    const bodyRows = u ? 1 + this.cutLines.length : it.affixes.length;
+    const bodyRows = (u ? 1 + this.cutLines.length : 0) + it.affixes.length;
     const iconScale = relic ? 4 : 3;
     const iconPx = 16 * iconScale;
     const cardH = 14 + iconPx + 12 + 18 + bodyRows * LH + 30;
-    const cardY = 300 - Math.floor(cardH / 2);
+    const cardY = BURST_CY - Math.floor(cardH / 2);
     const cardX = Math.round(cx - cardW / 2);
 
     // --- 見出し帯 ---
@@ -1119,6 +1208,8 @@ export class OpeningScreen implements GameScreen {
     }
 
     let ly = nameY + 22;
+    // アフィックスを出し始める時刻。遺物はユニーク行を打ち終えてから続ける。
+    let affixFrom = 0.54;
     if (u) {
       if (since >= 0.54) drawTextCentered(ctx, `《${u.name}》`, cx, ly, 12, color);
       ly += LH;
@@ -1148,16 +1239,18 @@ export class OpeningScreen implements GameScreen {
           ly + lastRow * LH + 1, 6, 12, color);
       }
       ly += Math.max(1, this.cutLines.length) * LH;
-    } else {
-      // アフィックスを1行ずつ、間を置いて出す
-      it.affixes.forEach((a, i) => {
-        if (since < 0.54 + i * 0.11) return;
-        drawText(ctx, affixLine(a), cardX + 16, ly + i * LH, 12, THEME.text);
-        drawTextRight(ctx, tierStars(a.tier), cardX + cardW - 16, ly + i * LH, 12,
-          a.tier >= 4 ? color : THEME.dim);
-      });
-      ly += it.affixes.length * LH;
+      affixFrom = 0.62 + total * 0.030 + 0.12;
+      // ユニーク行とアフィックス枠の境目
+      if (since >= affixFrom) fillRect(ctx, cardX + 16, ly - 8, cardW - 32, 1, THEME.panelLight);
     }
+    // アフィックスを1行ずつ、間を置いて出す（稀少も遺物も同じ枠を見せる）
+    it.affixes.forEach((a, i) => {
+      if (since < affixFrom + i * 0.11) return;
+      drawText(ctx, affixLine(a), cardX + 16, ly + i * LH, 12, THEME.text);
+      drawTextRight(ctx, tierStars(a.tier), cardX + cardW - 16, ly + i * LH, 12,
+        a.tier >= 4 ? color : THEME.dim);
+    });
+    ly += it.affixes.length * LH;
 
     // 増える売却額。数値が跳ねる瞬間を札の中にも置く
     if (since > 0.52) {

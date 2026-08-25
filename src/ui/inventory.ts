@@ -2,7 +2,7 @@ import type { GameScreen, Nav } from '../game/app';
 import type { Item, JobId, Slot } from '../sim/types';
 import { VW, VH } from '../render/screen';
 import { drawText, drawTextCentered, drawTextRight, textWidth } from '../render/font';
-import { drawSpr, fillRect, fillScrim, strokeRect1 } from '../render/draw';
+import { drawSpr, fillRect, strokeRect1 } from '../render/draw';
 import { sellValue } from '../sim/items';
 import { Prng } from '../sim/prng';
 import { jobDef } from '../data/jobs';
@@ -10,7 +10,7 @@ import { sfx } from '../render/audio';
 import { THEME } from './theme';
 import { type Btn, drawBtn, hitBtn, inRect } from './widgets';
 import {
-  RARITY_LABEL, drawItemDetail, drawItemRow, itemName, sortItems,
+  RARITY_LABEL, drawItemDetail, drawItemRow, itemName, itemScore, sortItems,
   type SortKey
 } from './itemview';
 
@@ -67,9 +67,8 @@ function fmtGold(n: number): string {
  * 比較に使う代表値。武器は威力だけではベースタイプ間で比べられないため、
  * itemview の詳細パネルと同じ「秒間火力＝威力×速度」を使う（画面間で指標を変えない）。
  */
-function scoreOf(item: Item): number {
-  return item.slot === 'weapon' ? Math.round(item.power * item.speed) : item.power;
-}
+/** 強さの指標は itemview.itemScore に一本化する（定義が2つあると必ずズレる）。 */
+const scoreOf = itemScore;
 
 /** drawItemDetail が使う高さと同じ式（レイアウト計算のために先読みする）。 */
 function detailHeight(item: Item): number {
@@ -455,7 +454,9 @@ export class InventoryScreen implements GameScreen {
     const item = this.selected();
     if (!item) return;
     const top = this.sheetTop;
-    fillScrim(ctx, 0, 0, VW, top, THEME.outline, 0.66);
+    // モーダルの背後はベタで隠す。ディザで半分抜くと、背後の文字が
+    // 市松のノイズになって「読めないが目に入る」最悪の状態になる
+    fillRect(ctx, 0, 0, VW, top, THEME.outline);
     fillRect(ctx, 0, top, VW, VH - top, THEME.panel);
     fillRect(ctx, 0, top, VW, 1, THEME.gold);
 
@@ -504,7 +505,7 @@ export class InventoryScreen implements GameScreen {
   private drawConfirm(ctx: CanvasRenderingContext2D): void {
     const c = this.confirm;
     if (!c) return;
-    fillScrim(ctx, 0, 0, VW, VH, THEME.outline, 0.72);
+    fillRect(ctx, 0, 0, VW, VH, THEME.outline);
     const x = 30, y = 246, w = 300, h = 140;
     fillRect(ctx, x, y, w, h, THEME.panel);
     strokeRect1(ctx, x, y, w, h, THEME.gold);

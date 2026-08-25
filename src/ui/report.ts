@@ -84,8 +84,12 @@ export class ReportScreen implements GameScreen {
     // 戦利品／損失の下に余った縦を「次にどうするか」で埋める。
     // §7.3 が求めるのは「なぜこうなったか」だが、分かっただけで手が打てないと
     // 結局は運ゲーに感じられる。答え合わせは次の一手まで含めて完結する
-    this.drawAdvice(ctx, r, stage, lx, bodyTop + used + 18,
+    const adviceH = this.drawAdvice(ctx, r, stage, lx, bodyTop + used + 18,
       VW - lx - PAD, bodyH + LABEL_H - used - 18);
+    // まだ縦が余っていたら、その回の実数を出す。
+    // 見どころは言葉での答え合わせなので、数字でも裏を取れるようにしておく
+    const statTop = bodyTop + used + 18 + adviceH + (adviceH > 0 ? 18 : 0);
+    this.drawStats(ctx, r, lx, statTop, VW - lx - PAD, bodyTop + bodyH + LABEL_H - statTop);
 
     // 添え情報
     const job = d ? jobDef(d.jobId).name : '';
@@ -184,8 +188,9 @@ export class ReportScreen implements GameScreen {
       }
     }
 
-    // 掘り抜いた縦穴（到達したところまで）
-    const shaftX = x + Math.floor(w / 2) - 7;
+    // 掘り抜いた縦穴は右端に寄せる。中央に置くと HP の折れ線に
+    // 39px（1px≒HP2.5%）しか残らず、地層のざらつきに紛れて読めなかった
+    const shaftX = x + w - 20;
     fillRect(ctx, shaftX, y, 14, reachedY, THEME.outline);
     for (let ly = 0; ly < reachedY; ly += 16) drawSprOr(ctx, 'ladder', 'icon_T1', shaftX - 1, y + ly);
 
@@ -211,8 +216,15 @@ export class ReportScreen implements GameScreen {
     const curve = r.hpCurve;
     const trackX = x + 3;
     const trackW = Math.max(4, shaftX - trackX - 3);
+    // 満タンの基準線（左端）と、撤退ラインの目盛り
     fillRect(ctx, trackX, y, 1, Math.max(1, reachedY), THEME.faint);
-    for (let i = 1; i < curve.length; i++) {
+    fillRect(ctx, trackX + trackW, y, 1, Math.max(1, reachedY), THEME.faint);
+    // 到達点より下（＝踏み込んでいない領域）には引かない。
+    // hpCurve は初期値1.0＋各遭遇＋終端で depth より要素が多いため、
+    // そのまま回すと倒れた冒険者の下へさらに1遭遇分だけ線が伸びて、
+    // 「死んだ後もHPが減り続けている」絵になっていた。
+    const lastPoint = Math.min(curve.length, r.depth + 1);
+    for (let i = 1; i < lastPoint; i++) {
       const v0 = curve[i - 1] ?? 1;
       const v1 = curve[i] ?? 1;
       const y0 = y + Math.round(((i - 1) / total) * h);
@@ -236,8 +248,9 @@ export class ReportScreen implements GameScreen {
     drawTextCentered(ctx, r.bossDefeated ? '踏破' : `${r.depth} / ${total}`,
       x + w / 2, y + h + 5, 8,
       r.bossDefeated ? THEME.green : r.outcome === 'death' ? THEME.red : THEME.text);
-    // 線が何なのかを一言だけ添える（凡例を別枠に出すほどの情報量ではない）
-    drawTextRight(ctx, 'HP', x + w, y - 13, 8, THEME.faint);
+    // 折れ線の意味は「左が満タン・右が0」。凡例は軸のある側に置く
+    drawText(ctx, '満', x, y - 13, 8, THEME.faint);
+    drawText(ctx, '0', x + Math.max(4, shaftX - x - 3) - 6, y - 13, 8, THEME.faint);
   }
 
   /**
@@ -278,10 +291,10 @@ export class ReportScreen implements GameScreen {
   private drawAdvice(
     ctx: CanvasRenderingContext2D, r: RunResult, stage: StageDef,
     x: number, y: number, w: number, h: number
-  ): void {
-    if (h < 46) return;
+  ): number {
+    if (h < 46) return 0;
     const lines = this.advice(r, stage);
-    if (lines.length === 0) return;
+    if (lines.length === 0) return 0;
     const wrapped = lines.map(l => wrapText(l, w - 26, 8, 3));
     let need = 14;
     const shown: string[][] = [];
@@ -290,7 +303,7 @@ export class ReportScreen implements GameScreen {
       shown.push(ls);
       need += ls.length * 13 + 4;
     }
-    if (shown.length === 0) return;
+    if (shown.length === 0) return 0;
     drawText(ctx, '次の一手', x, y - 13, 8, THEME.dim);
     drawNineSlice(ctx, 'frame', x, y, w, need);
     let ly = y + 7;
@@ -299,6 +312,31 @@ export class ReportScreen implements GameScreen {
       ls.forEach((ln, k) => drawText(ctx, ln, x + 18, ly + k * 13, 8, THEME.dim));
       ly += ls.length * 13 + 4;
     }
+    return need;
+  }
+
+  /** その回の実数。余白が無ければ何も描かない。 */
+  private drawStats(
+    ctx: CanvasRenderingContext2D, r: RunResult,
+    x: number, y: number, w: number, h: number
+  ): void {
+    const st = r.stats;
+    const rows: [string, string][] = [
+      ['与えた', `${st.dealt}`],
+      ['受けた', `${st.taken}`],
+      ['撃破', `${st.kills}体`],
+      ['会心', `${st.crits}/${st.hits}`],
+      ['最大の一撃', `${st.biggestHit}`]
+    ];
+    if (st.evaded > 0) rows.push(['回避', `${st.evaded}回`]);
+    const need = 14 + rows.length * 13;
+    if (h < need + 14) return;
+    drawText(ctx, 'この回の数字', x, y - 13, 8, THEME.dim);
+    drawNineSlice(ctx, 'frame', x, y, w, need);
+    rows.forEach(([k, v], i) => {
+      drawText(ctx, k, x + 8, y + 7 + i * 13, 8, THEME.dim);
+      drawTextRight(ctx, v, x + w - 8, y + 7 + i * 13, 8, THEME.text);
+    });
   }
 
   /** 戦利品、または失ったもの。使用した高さを返す。 */

@@ -390,47 +390,62 @@ console.log('回帰: 批評R1で検出した破綻');
 console.log('回帰: 批評R2で検出した破綻');
 {
   // ベースタイプに構造的な最下位が固定されていないか。
-  // 修正前は両手剣が全ステージで最下位だった（超過ダメージが死体に吸われるため）。
+  //
+  // 「全ステージで最下位」だけを見ると問題が横滑りするだけだった
+  // （両手剣を直したら、今度は片手剣が10ステージ中6で最下位になった）。
+  // また素のベースだけで測ってもいけない。プレイヤーが手にするのは
+  // アフィックスの乗った生成品なので、そちらで測る。
   const job = jobDef('swordsman');
   const rank: Record<string, number[]> = {};
-  for (const stageId of [1, 4, 7, 10]) {
+  const avg: Record<string, number> = {};
+  const probeStages = [1, 4, 7, 10];
+  for (const stageId of probeStages) {
     const p = itemPowerFor(stageId, 1);
     const stage = stageDef(stageId);
-    let armor: Item | null = null;
-    const rngA = new Prng(0x4100 + stageId);
-    for (let k = 0; k < 400 && !armor; k++) {
-      const it = generateItem(rngA, { itemPower: p, slot: 'armor', stageId, rarityBonus: 0, id: 'ra' });
-      if (it.slot === 'armor' && it.affixes.length === 0) armor = it;
-    }
-    if (!armor) continue;
     const scores: [string, number][] = [];
     for (const b of BASE_TYPES.filter(x => x.slot === 'weapon')) {
-      // アフィックスの当たり外れを消し、ベースの形だけを比べる
-      const w: Item = {
-        id: 'rw', slot: 'weapon', baseId: b.id, rarity: 'common',
-        power: Math.round(p * b.mul), speed: b.speed,
-        crit: (b.critMin + b.critMax) / 2,
-        element: { physical: 1 }, affixes: [], unique: null, locked: false, identified: true, fromStage: stageId
-      };
       let depth = 0;
-      const N = 60;
+      const N = 40;
       for (let i = 0; i < N; i++) {
+        const rng = new Prng(0x4100 + i * 7919 + stageId * 131);
+        let w: Item | null = null, a: Item | null = null;
+        for (let k = 0; k < 9000 && (!w || !a); k++) {
+          const it = generateItem(rng, {
+            itemPower: p, slot: k % 3 === 2 ? 'armor' : 'weapon',
+            stageId, rarityBonus: 1, id: `rb${k}`
+          });
+          if (it.slot === 'weapon' && !w && it.baseId === b.id) w = it;
+          if (it.slot === 'armor' && !a && canEquipArmor(job, baseDef(it.baseId).tags)) a = it;
+        }
+        if (!w || !a) continue;
         const r = simulateRun({
-          seed: (0x4200 + i * 104729) >>> 0, job, weapon: w, armor,
+          seed: (0x4200 + i * 104729) >>> 0, job, weapon: w, armor: a,
           rule: retreatRuleDef('standard'), stage, tier: 1
         });
         depth += r.depth / r.encountersTotal;
       }
       scores.push([b.id, depth / N]);
+      avg[b.id] = (avg[b.id] ?? 0) + depth / N;
     }
     scores.sort((x, y) => y[1] - x[1]);
     scores.forEach(([id], i) => { (rank[id] ??= []).push(i); });
   }
-  const alwaysLast = Object.entries(rank)
-    .filter(([, rs]) => rs.length > 0 && rs.every(r => r === 5))
-    .map(([id]) => id);
-  check(`どのベースも全ステージ最下位に固定されていない（該当: ${alwaysLast.join('/') || 'なし'}）`,
-    alwaysLast.length === 0);
+
+  const lastCount = Object.entries(rank)
+    .map(([id, rs]) => [id, rs.filter(r => r === 5).length] as const)
+    .sort((a, b) => b[1] - a[1]);
+  const worstBase = lastCount[0];
+  check(
+    `最下位が1つのベースに偏っていない（最多: ${worstBase?.[0]} ${worstBase?.[1]}/${probeStages.length}）`,
+    !!worstBase && worstBase[1] <= Math.ceil(probeStages.length * 0.5)
+  );
+
+  // C7 の判定式そのもの（1位が2位を20%以上引き離していないか）
+  const byAvg = Object.entries(avg).sort((a, b) => b[1] - a[1]);
+  const first = byAvg[0]?.[1] ?? 0;
+  const second = byAvg[1]?.[1] ?? 1;
+  const lead = ((first - second) / Math.max(0.0001, second)) * 100;
+  check(`首位が2位を20%以上引き離していない（${lead.toFixed(1)}%）`, lead < 20);
 
   // 派遣枠は踏破しただけでは増えず、金を払って初めて増える（§7.5）
   const seen = new Set(Object.keys(rank));

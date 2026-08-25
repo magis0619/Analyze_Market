@@ -7,6 +7,7 @@ import { affixDef } from '../data/affixes';
 import { bossName, difficultyMul, itemPowerFor } from '../data/stages';
 import { generateItem } from './items';
 import { enemiesForStage } from '../data/enemies';
+import { uniqueDef } from '../data/uniques';
 
 // 戦闘シミュレーション（仕様書 §6）。
 // 戦闘は内部ターン制で解決し、画面には一切描画しない。
@@ -38,6 +39,25 @@ const DT = 0.25;
 const ENCOUNTER_TIMEOUT = 180;
 /** 戦利品の上限（§7.3）。職・ユニークの加算を含めてこれを超えない。 */
 const MAX_LOOT = 10;
+/**
+ * 派遣の最短所要時間（ステージ全長に対する比）。
+ * 深度0で引き返しても、往路と復路の分は必ずかかる。
+ * これが無いと「8時間」と表示した派遣が1秒で帰ってくる。
+ */
+export const MIN_TRIP_RATIO = 0.25;
+/** heavy の薙ぎ払いで、次の敵へ流れる際の減衰率 */
+
+/** balanced が無視する敵防御の割合 */
+/**
+ * balanced が無視する敵防御の割合。
+ * 中量級に取り柄が無いと、一撃が敵HPの境目に乗る片手剣が構造的に最下位になる。
+ *
+ * この2つの値は実測で決めた。10ステージ×6ベース×120回で順位分布を取り、
+ *   ・どのベースも最下位に固定されない（最下位は弓3/片手剣3/両手剣3/杖1に分散）
+ *   ・首位と最下位の平均差 13.1%（C7 の不合格ラインは20%）
+ * になる組み合わせを選んでいる。片方だけ動かすと必ずどちらかが底に落ちる。
+ */
+const BALANCED_PIERCE = 0.35;
 
 // ---------------------------------------------------------------- 敵
 
@@ -208,6 +228,10 @@ interface Telemetry {
   totalTaken: number;
   takenByElement: Partial<Record<Element, number>>;
   resistSaved: number;
+  /** 防具ユニーク『背水の鎧』が肩代わりした被弾量 */
+  lastStandSaved: number;
+  /** 防具ユニーク『棘の外套』が返したダメージ量 */
+  thornsDealt: number;
   healed: number;
   crits: number;
   hits: number;
@@ -221,6 +245,7 @@ function newTelemetry(): Telemetry {
     damageByElement: {}, damageByAffix: {},
     resistedLoss: 0, weaknessGain: 0, totalDealt: 0,
     totalTaken: 0, takenByElement: {}, resistSaved: 0,
+    lastStandSaved: 0, thornsDealt: 0,
     healed: 0, crits: 0, hits: 0, kills: 0, biggestHit: 0, evaded: 0
   };
 }
@@ -248,13 +273,31 @@ export function simulateRun(input: SimulateInput): RunResult {
   let hp = maxHp;
   const hpCurve: number[] = [1];
 
-  // 大振りの武器は薙ぎ払う（下の攻撃処理を参照）
-  const cleaves = baseDef(weapon.baseId).tags.includes('heavy');
+  // ベースタグごとの取り柄（§5.1「単純な上位互換を作らない」）。
+  //
+  //   heavy    … 薙ぎ払い。倒しきって余った分が次の敵へ流れる
+  //   balanced … armorPierce。敵防御の一部を無視する
+  //   fast/crit… 高い会心率（bases.ts の数値で表現済み）
+  //
+  // heavy だけに取り柄を与えていた時期は、両手剣が10ステージ中8で1〜2位、
+  // 片手剣が6で最下位になった。前回「両手剣が全ステージ最下位」を直したつもりが
+  // 問題を横滑りさせただけだったので、中量級にも対称な取り柄を置く。
+  const wTags = baseDef(weapon.baseId).tags;
+  const cleaves = wTags.includes('heavy');
+  const armorPierce = wTags.includes('balanced') ? BALANCED_PIERCE : 0;
+
+  // 防具ユニーク（§5.5）。生成側でスロットを絞っているが、
+  // 読む側も「防具に載っているものだけを読む」ことをここで明示しておく
+  const wardStack = armor.unique === 'wardStack';
+  const lastStand = armor.unique === 'lastStand';
+  const thorns = armor.unique === 'thorns';
 
   const greedy = weapon.unique === 'greedyGlass' || armor.unique === 'greedyGlass';
   const takenMul = job.damageTakenMul * (greedy ? 1.25 : 1);
 
   let killStackBonus = 0;
+  // 防具ユニーク『積年の盾』。被弾するたびに防御が増える（そのステージ中のみ）
+  let wardBonus = 0;
   let outcome: RunResult['outcome'] = 'clear';
   let depth = 0;
   let bossDefeated = false;
@@ -319,7 +362,7 @@ export function simulateRun(input: SimulateInput): RunResult {
         }
 
         const uniqueMul = weapon.unique === 'slowTriple' ? 3 : 1;
-        let dmg = Math.max(1, raw * uniqueMul - target.defense);
+        let dmg = Math.max(1, raw * uniqueMul - target.defense * (1 - armorPierce));
 
         let isCrit = false;
         if (lo.critRate > 0 && rng.float() < lo.critRate) {
@@ -404,18 +447,30 @@ export function simulateRun(input: SimulateInput): RunResult {
           const elem: Element = stage.enemyElement === 'mixed'
             ? (['fire', 'ice', 'lightning', 'poison'] as const)[rng.int(4)] ?? 'fire'
             : stage.enemyElement;
-          const defTotal = lo.defense * (1 + lo.defensePct / 100);
+          const defTotal = (lo.defense + wardBonus) * (1 + lo.defensePct / 100);
           const defRate = Math.min(
             TUNING.defenseCap,
             defTotal / (defTotal + TUNING.defenseConst * enemyScale(stage, tier, encIdx))
           );
           const res = Math.min(0.75, lo.resist[elem] ?? 0);
           const beforeRes = e.attack * (1 - defRate) * takenMul;
-          const taken = beforeRes * (1 - res);
+          // 『背水の鎧』：HP25%以下で被ダメージ半減
+          const lastStandMul = lastStand && hp / maxHp <= 0.25 ? 0.5 : 1;
+          const taken = beforeRes * (1 - res) * lastStandMul;
           tm.resistSaved += beforeRes - taken;
+          if (lastStandMul < 1) tm.lastStandSaved += beforeRes * (1 - res) - taken;
           hp -= taken;
           tm.totalTaken += taken;
           tm.takenByElement[elem] = (tm.takenByElement[elem] ?? 0) + taken;
+          // 『積年の盾』：被弾するたび防御+2
+          if (wardStack) wardBonus += 2;
+          // 『棘の外套』：受けた分の40%を返す
+          if (thorns && taken > 0) {
+            const back = taken * 0.4;
+            e.hp -= back;
+            tm.thornsDealt += back;
+            if (e.hp <= 0) onKill();
+          }
           if (hp <= 0) {
             deathCause = e.name;
             break;
@@ -494,8 +549,15 @@ export function simulateRun(input: SimulateInput): RunResult {
     ? 0
     : Math.round(depth * (6 + stage.id * 3) * difficultyMul(tier));
 
-  const durationSec = Math.round(
-    (stage.minutes * 60) * job.timeMul * (depth / stage.encounters)
+  // 実時間は到達深度に比例する。ただし下限を置く。
+  //
+  // 比例だけにすると、装備が届いていない回は depth=0 → durationSec=1 になり、
+  // 「8時間」と表示して送り出した派遣が1秒で空手のまま帰ってくる。
+  // 実際には行って引き返すだけでも道中はある。全長の25%を最短とする。
+  const full = (stage.minutes * 60) * job.timeMul;
+  const durationSec = Math.max(
+    Math.round(full * MIN_TRIP_RATIO),
+    Math.round(full * (depth / stage.encounters))
   );
 
   return {
@@ -509,7 +571,16 @@ export function simulateRun(input: SimulateInput): RunResult {
     highlights: buildHighlights(tm, weapon, armor, outcome, splitMuls, deathCause,
       depth, stage.encounters),
     hpCurve,
-    durationSec: Math.max(1, durationSec)
+    durationSec: Math.max(1, durationSec),
+    stats: {
+      dealt: Math.round(tm.totalDealt),
+      taken: Math.round(tm.totalTaken),
+      kills: tm.kills,
+      hits: tm.hits,
+      crits: tm.crits,
+      biggestHit: Math.round(tm.biggestHit),
+      evaded: tm.evaded
+    }
   };
 }
 
@@ -569,12 +640,30 @@ function buildHighlights(
     const names = resisted.map(s => ELEM_NAME[s.e]).join('と');
     lines.push(`${names}は半減される相手だったが、配分が小さく実害は軽かった`);
   } else {
-    lines.push('属性は等倍。相性で得も損もしていない');
+    // ステージ1のように弱点も耐性も無い相手では、属性については何も言えない。
+    // ここで「相性で得も損もしていない」だけを返すと、金の点が付く
+    // 「最も効いた要因」の位置に、新規プレイヤーが何十回も回すステージで
+    // 毎回「あなたの選択は何も影響しなかった」が固定表示されることになる。
+    // 属性が語れないときは、その回の実数から語る。
+    const perHit = Math.round(dealt / Math.max(1, tm.hits));
+    lines.push(tm.hits > 0
+      ? `属性は等倍。1撃あたり${perHit}を${tm.hits}回通して${tm.kills}体を仕留めた`
+      : '属性は等倍。攻撃を1度も当てられないまま終わった');
   }
 
   // --- 2行目: 効いた装備（アフィックス／ユニーク）---
-  if (weapon.unique) {
-    lines.push(`遺物の効果が乗り、${tm.hits}回の攻撃を支えた`);
+  // 武器だけを見ていると、防具に載った遺物が一度も言及されない。
+  // 効果の実測値まで出さないと「効果が乗った」は何も言っていないのと同じ。
+  if (armor.unique === 'lastStand' && tm.lastStandSaved > taken * 0.05) {
+    lines.push(`《背水の鎧》が瀕死の間に被弾を${Math.round(tm.lastStandSaved)}肩代わりした`);
+  } else if (armor.unique === 'thorns' && tm.thornsDealt > dealt * 0.05) {
+    lines.push(`《棘の外套》が受けた分を${Math.round(tm.thornsDealt)}返し、総火力の${Math.round((tm.thornsDealt / dealt) * 100)}%を稼いだ`);
+  } else if (armor.unique === 'wardStack') {
+    lines.push('《積年の盾》が被弾のたび硬くなり、後半ほど削られにくくなった');
+  } else if (weapon.unique) {
+    lines.push(`遺物《${uniqueDef(weapon.unique).name}》の効果が乗り、${tm.hits}回の攻撃を支えた`);
+  } else if (armor.unique === 'greedyGlass' || weapon.unique === 'greedyGlass') {
+    lines.push('《強欲の器》がドロップを増やす代わりに、被弾を25%増やしていた');
   } else {
     const topAffix = topEntry(tm.damageByAffix);
     if (topAffix && topAffix[1] > dealt * 0.05) {

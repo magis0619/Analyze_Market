@@ -7,6 +7,7 @@ import { THEME } from './theme';
 import { drawBtn, hitBtn, inRect, type Btn } from './widgets';
 import { RETREAT_RULES, canEquipArmor, jobDef, retreatRuleDef } from '../data/jobs';
 import { STAGES, bossName, stageDef } from '../data/stages';
+import { simulateRun } from '../sim/combat';
 import { baseDef } from '../data/bases';
 import { dominantElement } from '../sim/items';
 import { sfx } from '../render/audio';
@@ -68,6 +69,9 @@ const RULE_COND: Record<RetreatRule, string> = {
 export class DispatchScreen implements GameScreen {
   private jobIdx = 0;
   private rule: RetreatRule = 'standard';
+  /** 所要時間の見積のキャッシュ（条件が変わるまで使い回す） */
+  private etaKey = '';
+  private etaCache: { min: number; max: number; hopeless: boolean } | null = null;
   private stageId = 1;
   private scroll = 0;
   private dragY: number | null = null;
@@ -152,7 +156,7 @@ export class DispatchScreen implements GameScreen {
     const armor = st.itemById(eq.armor);
 
     drawNineSlice(ctx, 'frame', 8, y, VW - 16, CARD_H);
-    drawSprOr(ctx, JOB_SPRITE[jobId], 'portrait', 14, y + 6, 2);
+    drawSprOr(ctx, JOB_SPRITE[jobId], 'portrait', 18, y + 6, 2);
     drawText(ctx, job.name, 50, y + 6, 12, THEME.text);
     drawText(ctx, `HP ${job.hp}`, 50, y + 24, 8, THEME.dim);
     if (st.isBusy(jobId)) drawText(ctx, '派遣中', 50, y + 38, 8, THEME.red);
@@ -306,8 +310,15 @@ export class DispatchScreen implements GameScreen {
     if (hasSpr(`stage_bg_${stage.id}`)) {
       drawSpr(ctx, `stage_bg_${stage.id}`, ax, y);
       strokeRect1(ctx, ax - 1, y - 1, artW + 2, artH + 2, THEME.outline);
-      // 未解放のステージは絵も伏せる（何が待っているかは踏み込んでから）
-      if (!unlocked) fillScrim(ctx, ax, y, artW, artH, THEME.outline, 0.75);
+      // 未解放でも絵は見せる。下の表で敵もボスも全部見せているのに
+      // 絵だけ黒く塗り潰しても、隠す意味が成立していなかった。
+      // 代わりに「未解放」の帯を斜めに掛けて、状態だけを示す
+      if (!unlocked) {
+        const by = y + artH - 16;
+        fillScrim(ctx, ax, y, artW, artH, THEME.outline, 0.35);
+        fillRect(ctx, ax, by, artW, 14, THEME.outline);
+        drawTextCentered(ctx, '未解放', ax + artW / 2, by + 1, 8, THEME.gold);
+      }
       y += artH + 8;
     } else {
       drawSprOr(ctx, `stage_${stage.id}`, 'icon_T1', PANEL_X + PANEL_W / 2 - 16, y, 2);
@@ -342,7 +353,9 @@ export class DispatchScreen implements GameScreen {
     row('ドロップ',
       stage.dropBias === 'weapon' ? '武器寄り' : stage.dropBias === 'armor' ? '防具寄り' : '均等',
       THEME.text);
-    row('所要時間', formatDuration(stage.minutes * 60), THEME.text);
+    // 実際の所要時間は到達深度に比例するので、ここは「満踏破したときの長さ」。
+    // 下の footer に出る見積（実測の幅）と食い違って見えないよう、そう明記する
+    row('満踏破で', formatDuration(stage.minutes * 60), THEME.text);
     row('遭遇', `${stage.encounters}回`, THEME.text);
 
     // 出てくる敵。属性表だけだと抽象的なので、名前で土地柄を裏書きする
@@ -373,6 +386,49 @@ export class DispatchScreen implements GameScreen {
     }
   }
 
+  /**
+   * 所要時間の見積。
+   *
+   * 以前はステージの全長をそのまま出していたが、実時間は到達深度に比例するので、
+   * 「約8時間」と表示した派遣が実際には2時間で——装備が届いていなければ最短で——
+   * 帰ってきていた。アプリを閉じてよいかを判断する唯一の数字が常に間違っている、
+   * という状態だった（§2 が設計の背骨に据えている判断そのもの）。
+   *
+   * 本物のシミュレーションを別 seed で数回回して、実際に起こりうる幅を出す。
+   * 結果そのもの（踏破するか死ぬか）は見せない。時間だけを見せる。
+   * 毎フレーム回すと重いので、条件が変わったときだけ計算する。
+   */
+  private estimate(): { min: number; max: number; hopeless: boolean } | null {
+    const st = this.nav.state;
+    const jobId = this.job();
+    const eq = st.data.equipped[jobId];
+    const weapon = st.itemById(eq.weapon);
+    const armor = st.itemById(eq.armor);
+    if (!weapon || !armor) return null;
+    const key = `${jobId}|${this.stageId}|${this.rule}|${weapon.id}|${armor.id}|${st.data.tier}`;
+    if (this.etaKey === key) return this.etaCache;
+
+    const stage = stageDef(this.stageId);
+    const job = jobDef(jobId);
+    const rule = retreatRuleDef(this.rule);
+    let min = Infinity, max = 0, zero = 0;
+    const N = 7;
+    for (let i = 0; i < N; i++) {
+      // 実際の派遣とは別系列の seed を使う。ここで引いた乱数が
+      // 本番の結果に影響しないようにするため
+      const r = simulateRun({
+        seed: (0xE7A0000 + i * 2654435761) >>> 0,
+        job, weapon, armor, rule, stage, tier: st.data.tier
+      });
+      min = Math.min(min, r.durationSec);
+      max = Math.max(max, r.durationSec);
+      if (r.depth === 0) zero++;
+    }
+    this.etaKey = key;
+    this.etaCache = { min, max, hopeless: zero > N / 2 };
+    return this.etaCache;
+  }
+
   private drawFooter(ctx: CanvasRenderingContext2D): void {
     const st = this.nav.state;
     const jobId = this.job();
@@ -381,12 +437,19 @@ export class DispatchScreen implements GameScreen {
     const ready = !!st.itemById(eq.weapon) && !!st.itemById(eq.armor);
     const unlocked = st.data.unlockedStages.includes(this.stageId);
     const stage = stageDef(this.stageId);
-    const job = jobDef(jobId);
-    const eta = stage.minutes * 60 * job.timeMul;
 
     fillRect(ctx, 0, VH - 64, VW, 64, THEME.bg);
-    drawText(ctx, `${stage.name}／${retreatRuleDef(this.rule).name}／約${formatDuration(eta)}`,
+    const est = this.estimate();
+    const etaText = est === null ? '所要時間は装備を選ぶと出る'
+      : est.min === est.max ? `約${formatDuration(est.min)}`
+      : `${formatDuration(est.min)}〜${formatDuration(est.max)}`;
+    drawText(ctx, `${stage.name}／${retreatRuleDef(this.rule).name}／${etaText}`,
       12, VH - 60, 8, THEME.dim);
+    // 深度0で引き返す見込みなら、派遣する前に言う。
+    // 何時間も待たせてから空手で帰すのが一番いけない
+    if (est?.hopeless && unlocked && !busy) {
+      drawTextRight(ctx, '⚠ 装備が届いていない', VW - 12, VH - 60, 8, THEME.red);
+    }
     this.goBtn.disabled = busy || !ready || !unlocked;
     this.goBtn.label = busy ? 'この職は派遣中'
       : !ready ? '武器と防具を選ぶ'
@@ -414,7 +477,8 @@ export class DispatchScreen implements GameScreen {
     const jobId = this.job();
     const eq = st.data.equipped[jobId];
     const current = st.itemById(this.picking === 'weapon' ? eq.weapon : eq.armor);
-    fillScrim(ctx, 0, 0, VW, VH, THEME.outline, 0.88);
+    // 背後はベタで隠す（ディザだと下の文字がノイズとして残る）
+    fillRect(ctx, 0, 0, VW, VH, THEME.outline);
     drawNineSlice(ctx, 'frame', 6, 36, VW - 12, VH - 92);
     drawTextCentered(ctx, this.picking === 'weapon' ? '武器を選択' : '防具を選択',
       VW / 2, 46, 12, THEME.gold);

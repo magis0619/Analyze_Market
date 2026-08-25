@@ -4,7 +4,7 @@ import type {
 } from './types';
 import { BASE_TYPES, baseDef } from '../data/bases';
 import { affixPoolFor } from '../data/affixes';
-import { UNIQUES } from '../data/uniques';
+import { uniquesForSlot } from '../data/uniques';
 
 // 装備生成（仕様書 §5）。このゲームの中核。
 //
@@ -198,7 +198,12 @@ export function generateItem(rng: Prng, opts: GenerateOptions): Item {
   const affixes = rollAffixes(rng, pool, count);
 
   // --- L4 ユニーク ---
-  const unique: UniqueKind | null = rule.hasUnique ? rng.pick(UNIQUES).kind : null;
+  // スロットに合うものだけを引く。ここでプールを絞らないと、
+  // 戦闘側が武器としてしか読まない効果が防具に載り、
+  // カットインで見せた1行が守られない品ができる。
+  const unique: UniqueKind | null = rule.hasUnique
+    ? rng.pick(uniquesForSlot(opts.slot)).kind
+    : null;
 
   return {
     id: opts.id,

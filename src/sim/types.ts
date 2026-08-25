@@ -71,9 +71,15 @@ export interface Affix {
 }
 
 export type UniqueKind =
+  // --- 武器専用 ---
   | 'noCritFlatPower'   // 会心が発生しない。代わりに全攻撃の威力が常時上昇
   | 'slowTriple'        // 攻撃速度が半減し、1撃が3倍かつ範囲攻撃
   | 'killStack'         // 敵を倒すたびに攻撃力+1（そのステージ中のみ）
+  // --- 防具専用 ---
+  | 'wardStack'         // 被弾するたび防御+2（そのステージ中のみ）
+  | 'lastStand'         // HP25%以下で被ダメージ半減
+  | 'thorns'            // 被弾時、受けた分の一部を相手に返す
+  // --- 両方に付く ---
   | 'greedyGlass';      // ドロップ率+50%、被ダメージ+25%
 
 export interface UniqueDef {
@@ -81,6 +87,15 @@ export interface UniqueDef {
   name: string;
   /** ルールを書き換える1行（§5.2 L4） */
   text: string;
+  /**
+   * 付けてよいスロット。
+   *
+   * ここが無かったせいで、生成側がスロットを見ずに全プールから引いており、
+   * 「重き一撃の重鎧」（攻撃速度が半減。1撃が3倍）のような、
+   * 戦闘側が一度も読まない品が遺物の37%を占めていた。
+   * 4秒のカットインで見せた1行が嘘になるので、構造で防ぐ。
+   */
+  slot: Slot | 'both';
 }
 
 export interface Item {
@@ -178,6 +193,16 @@ export interface RunResult {
   hpCurve: number[];
   /** 実時間（秒） */
   durationSec: number;
+  /** レポートに出す実数（見どころの根拠を数字でも裏付けるため） */
+  stats: {
+    dealt: number;
+    taken: number;
+    kills: number;
+    hits: number;
+    crits: number;
+    biggestHit: number;
+    evaded: number;
+  };
 }
 
 // ---------------------------------------------------------------- 派遣

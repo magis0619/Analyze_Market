@@ -26,13 +26,19 @@ export function drawBtn(
   if (b.accent && !b.disabled) {
     fillRect(ctx, b.x + 2, b.y + 2, b.w - 4, 2, THEME.gold);
   }
+  // 無効表示の暗幕は**ラベルより先**に打つ。
+  //
+  // 以前は文字を描いた上からディザを被せていた。4x4 の市松は8pxビットマップの
+  // 1px画線を1画素おきに抜くので、字形そのものが消えて読めなくなる。
+  // 「このステージは未解放」——押せない理由を伝える唯一の文字列——が
+  // ノイズになっていた。地だけを暗くして、文字はその上に無傷で載せる。
+  if (b.disabled) {
+    fillScrim(ctx, b.x + 1, b.y + 1, b.w - 2, b.h - 2, THEME.bg, 0.55);
+  }
   // faint(#6e6660) は button 地色 G(#5f6472) とのコントラスト比が約1.05:1で
   // ほぼ不可視になるため使わない。
   const color = b.disabled ? THEME.dim : THEME.text;
   drawTextCentered(ctx, b.label, b.x + Math.floor(b.w / 2), b.y + Math.floor((b.h - size) / 2), size, color);
-  if (b.disabled) {
-    fillScrim(ctx, b.x, b.y, b.w, b.h, THEME.bg, 0.45);
-  }
 }
 
 /** 残り時間バー（右から減る）。 */

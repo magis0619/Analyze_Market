@@ -35,8 +35,11 @@ if (Number.isFinite(devItems) && devItems > 0) {
   const n = Math.min(2000, devItems);
   for (let i = 0; i < n; i++) {
     const stageId = 1 + (i % 10);
-    state.data.inventory.push(...debugLoot(seed ^ (i * 7919), stageId, 1)
-      .map(it => ({ ...it, id: `dev-${i}`, identified: true })));
+    // debugLoot は `i % 2` でスロットを振るので、count=1 だと **武器しか作らない**。
+    // 以前これで「200個所持」の検証をしていたが、実際は武器201・防具1で、
+    // 防具のフィルタもピッカーも空のまま撮っていた。2個ずつ作って両方入れる。
+    state.data.inventory.push(...debugLoot(seed ^ (i * 7919), stageId, 2)
+      .map((it, k) => ({ ...it, id: `dev-${i}-${k}`, identified: true })));
   }
   state.data.gold += 50000;
   state.save();
@@ -62,12 +65,17 @@ canvas.addEventListener('pointerdown', (e) => {
 });
 canvas.addEventListener('pointermove', (e) => {
   if (!dragging) return;
+  // 画面が切り替わった直後の move も、押した覚えのない操作になるので捨てる
+  if (app.pendingSwallow()) return;
   const p = screen.toInternal(e.clientX, e.clientY);
   app.screen.pointerMove?.(p.x, p.y);
 });
 const endDrag = (e: PointerEvent): void => {
   if (!dragging) return;
   dragging = false;
+  // pointerDown で画面が切り替わっていたら、この up は前の画面のもの。
+  // 新しい画面に渡すと押した覚えのない操作が1回入る
+  if (app.consumeSwallowedUp()) return;
   const p = screen.toInternal(e.clientX, e.clientY);
   app.screen.pointerUp?.(p.x, p.y);
 };

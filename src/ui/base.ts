@@ -200,9 +200,10 @@ export class BaseScreen implements GameScreen {
     const groundY = SCENE_Y + SCENE_H - 34;
 
     // 遠景の木立。小屋より先に描いて奥行きを作る
+    // 木立は不揃いに散らす。等間隔に並べると書き割りに見える
     if (hasSpr('tree_pine')) {
-      for (const tx of [4, 150, 300, 336]) {
-        drawSpr(ctx, 'tree_pine', tx, groundY - 34);
+      for (const [tx, dy] of [[2, 0], [148, 4], [268, 6], [296, -2], [326, 3], [344, 8]] as const) {
+        drawSpr(ctx, 'tree_pine', tx, groundY - 34 + dy);
       }
     }
 
@@ -233,18 +234,22 @@ export class BaseScreen implements GameScreen {
     }
 
     // 看板。板はスプライト、文字はフォントで重ねる
-    const sx0 = hx + 100;
+    // 看板は 64×24。板面の内寸は62pxで、'DELVERS'（8px字形で48px）が
+    // 左右7pxの余白つきで収まる
+    const sx0 = hx + 98;
     if (hasSpr('lodge_sign')) {
-      drawSpr(ctx, 'lodge_sign', sx0, groundY - 34);
-      drawTextCentered(ctx, 'DELVERS', sx0 + 20, groundY - 27, 8, THEME.gold);
+      drawSpr(ctx, 'lodge_sign', sx0, groundY - 36);
+      drawTextCentered(ctx, 'DELVERS', sx0 + 32, groundY - 27, 8, THEME.gold);
     } else {
-      fillRect(ctx, sx0, groundY - 34, 40, 16, COLORS.panel2);
-      drawTextCentered(ctx, 'DELVERS', sx0 + 20, groundY - 31, 8, THEME.gold);
+      fillRect(ctx, sx0, groundY - 36, 64, 24, COLORS.panel2);
+      drawTextCentered(ctx, 'DELVERS', sx0 + 32, groundY - 30, 8, THEME.gold);
     }
 
     // 小物
     if (hasSpr('barrel')) drawSpr(ctx, 'barrel', hx + 88, groundY + 2);
     if (hasSpr('crate')) drawSpr(ctx, 'crate', hx + 102, groundY + 4);
+    if (hasSpr('crate')) drawSpr(ctx, 'crate', 300, groundY + 4);
+    if (hasSpr('barrel')) drawSpr(ctx, 'barrel', 318, groundY + 2);
 
     // 焚き火（2コマ）
     if (hasSpr('campfire_0')) {
@@ -252,12 +257,15 @@ export class BaseScreen implements GameScreen {
     }
 
     // 待機中の冒険者だけを小屋の前に立たせる
-    let sx = 208;
+    let sx = 216;
     for (const jobId of this.jobs()) {
       if (this.nav.state.isBusy(jobId)) continue;
       const bob = Math.floor(this.t * 2 + sx) % 2;
-      drawSprOr(ctx, JOB_SPRITE[jobId], 'portrait', sx, groundY - 2 - bob, 2);
-      sx += 44;
+      // 等倍で描く。2倍にするとスプライトの1pxアウトラインが2pxになり、
+      // 同じ情景の中に1pxの柵や小屋と2pxの人物が混在してしまう（批評 A-c）
+      // 柵より手前（下）に立たせる。柵の高さに重ねると腰から下が隠れる
+      drawSprOr(ctx, JOB_SPRITE[jobId], 'portrait', sx, groundY + 2 - bob);
+      sx += 22;
     }
     ctx.restore();
     fillRect(ctx, 0, SCENE_Y + SCENE_H - 1, VW, 1, THEME.outline);
@@ -271,7 +279,7 @@ export class BaseScreen implements GameScreen {
     fillRect(ctx, x, y, w, SLOT_H, THEME.panel);
     strokeRect1(ctx, x, y, w, SLOT_H, running ? THEME.gold : THEME.outline);
 
-    drawSprOr(ctx, JOB_SPRITE[jobId], 'portrait', x + 5, y + 12);
+    drawSprOr(ctx, JOB_SPRITE[jobId], 'portrait', x + 5, y + 8);
     drawText(ctx, job.name, x + 24, y + 4, 8, THEME.text);
 
     const eq = st.data.equipped[jobId];
@@ -303,6 +311,8 @@ export class BaseScreen implements GameScreen {
     const w = VW - 16;
     const enabled = m.action !== 'open' || m.badge > 0;
     drawNineSlice(ctx, 'button', x, y, w, MENU_H);
+    // 暗幕はラベルより先。文字の上からディザを被せると字形が抜けて読めなくなる
+    if (!enabled) fillScrim(ctx, x + 1, y + 1, w - 2, MENU_H - 2, THEME.bg, 0.5);
     if (m.accent && m.badge > 0) fillRect(ctx, x + 2, y + 2, w - 4, 2, THEME.gold);
     // 1文字マーカー
     const my = y + Math.floor((MENU_H - 20) / 2);
@@ -319,9 +329,6 @@ export class BaseScreen implements GameScreen {
       fillRect(ctx, bx, by, 18, 16, THEME.red);
       strokeRect1(ctx, bx, by, 18, 16, THEME.outline);
       drawTextCentered(ctx, String(Math.min(99, m.badge)), bx + 9, by + 2, 8, THEME.text);
-    }
-    if (!enabled) {
-      fillScrim(ctx, x, y, w, MENU_H, THEME.bg, 0.5);
     }
   }
 
