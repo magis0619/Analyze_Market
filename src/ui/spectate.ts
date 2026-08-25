@@ -24,6 +24,10 @@ const LOG_W = VW - LOG_X;
 const PPD = 48;            // 1深度あたりのピクセル
 const HERO_SCREEN_Y = 250; // 冒険者の固定表示位置
 const CHOICE_SECONDS = 5;
+// 選択肢1行の高さ・行間。drawPanel と pointerDown の両方が参照するため
+// 定数化する（別々に手書きしていて、行高変更時にヒット判定がズレる
+// 不具合があった）。
+const OPT_ROW_H = 44, OPT_ROW_GAP = 4;
 
 // アセット差分に依存するスプライトは存在確認してから使う
 function hasSpr(name: string): boolean {
@@ -478,7 +482,10 @@ export class SpectateScreen implements GameScreen {
   private drawPanel(ctx: CanvasRenderingContext2D, pending: PendingChoice): void {
     const px = 4, pw = VW - 8;
     const rows = pending.options.length;
-    const ph = 58 + rows * 40;
+    // 選択肢1行は「12pxラベル＋8px補足行」の2段構成。THEME.faint（ほぼ不可視）
+    // を dim/gold に置き換えて可読化した結果、旧・行高36pxでは両者が
+    // 4px重なることが判明した（批評ラウンド3 A-4）。44pxに拡げて分離する。
+    const ph = 58 + rows * (OPT_ROW_H + OPT_ROW_GAP);
     const py = VH - ph - 4;
     drawNineSlice(ctx, 'frame', px, py, pw, ph);
     drawSpr(ctx, `ev_${pending.icon}`, px + 10, py + 8, 2);
@@ -490,8 +497,8 @@ export class SpectateScreen implements GameScreen {
       ratio < 0.35 ? THEME.red : THEME.gold);
 
     pending.options.forEach((o, i) => {
-      const oy = py + 50 + i * 40;
-      this.drawOption(ctx, o, px + 8, oy, pw - 16, 36, i === pending.safeIndex);
+      const oy = py + 50 + i * (OPT_ROW_H + OPT_ROW_GAP);
+      this.drawOption(ctx, o, px + 8, oy, pw - 16, OPT_ROW_H, i === pending.safeIndex);
     });
   }
 
@@ -502,8 +509,11 @@ export class SpectateScreen implements GameScreen {
     drawNineSlice(ctx, 'button', x, y, w, h);
     const fromEquip = o.sourceEquip.length > 0;
     if (fromEquip && !o.disabled) strokeRect1(ctx, x, y, w, h, THEME.gold);
-    const color = o.disabled ? THEME.faint : fromEquip ? THEME.gold : THEME.text;
-    drawText(ctx, o.def.label, x + 10, y + Math.floor((h - 12) / 2), 12, color);
+    // faint は button 地色とのコントラストが約1.05:1でほぼ不可視になるため
+    // 使わない（widgets.drawBtn と同じ失敗を避ける）。
+    const color = o.disabled ? THEME.dim : fromEquip ? THEME.gold : THEME.text;
+    // 2段構成（ラベル＋補足行）のため、行全体で中央寄せせず上詰めにする。
+    drawText(ctx, o.def.label, x + 10, y + 8, 12, color);
     // 根拠となる装備アイコン（因果の表示）。開いた瞬間は1回光る。
     const blink = this.panelFlash < 0.75 && Math.floor(this.panelFlash * 10) % 2 === 0;
     o.sourceEquip.forEach((id, j) => {
@@ -520,11 +530,13 @@ export class SpectateScreen implements GameScreen {
       drawTextRight(ctx, `選べない（${o.disabledReason ?? ''}）`, x + w - 6, y + 4, 8, THEME.red);
     } else if (isSafe) {
       const tag = this.panelDuration <= 2 ? '……こうするしかない' : '5秒で自動';
-      drawText(ctx, tag, x + 10, y + h - 13, 8, THEME.faint);
+      drawText(ctx, tag, x + 10, y + h - 13, 8, THEME.dim);
     }
     if (fromEquip && !o.disabled) {
+      // goldDark はボタン地色(#5f6472)とのコントラスト比が約1.6:1しかなく
+      // 判読困難だった（批評ラウンド2 A-2）。gold（約3.6:1）に変更。
       drawText(ctx, `${o.sourceEquip.map(id => equipDef(id).name).join('と')}があるから選べる`,
-        x + 10, y + h - 11, 8, THEME.goldDark);
+        x + 10, y + h - 11, 8, THEME.gold);
     }
   }
 
@@ -532,11 +544,11 @@ export class SpectateScreen implements GameScreen {
     if (!this.panelOpen || !this.pending) return;
     const px = 4, pw = VW - 8;
     const rows = this.pending.options.length;
-    const ph = 58 + rows * 40;
+    const ph = 58 + rows * (OPT_ROW_H + OPT_ROW_GAP);
     const py = VH - ph - 4;
     for (let i = 0; i < rows; i++) {
-      const oy = py + 50 + i * 40;
-      if (inRect(x, y, px + 8, oy, pw - 16, 36)) {
+      const oy = py + 50 + i * (OPT_ROW_H + OPT_ROW_GAP);
+      if (inRect(x, y, px + 8, oy, pw - 16, OPT_ROW_H)) {
         this.select(i);
         return;
       }

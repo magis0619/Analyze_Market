@@ -30,7 +30,7 @@ export function questDepthFor(runIndex: number): number {
 }
 
 export function maxHpFor(level: number): number {
-  return 8 + level * 2;
+  return 7 + level * 2;
 }
 
 /** 世代番号と店シードから常連を決定論的に生成する。 */

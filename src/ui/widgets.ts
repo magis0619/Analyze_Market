@@ -26,7 +26,9 @@ export function drawBtn(
   if (b.accent && !b.disabled) {
     fillRect(ctx, b.x + 2, b.y + 2, b.w - 4, 2, THEME.gold);
   }
-  const color = b.disabled ? THEME.faint : THEME.text;
+  // faint(#6e6660) は button 地色 G(#5f6472) とのコントラスト比が約1.05:1で
+  // ほぼ不可視になるため使わない（negotiation の重さラベルと同種の失敗）。
+  const color = b.disabled ? THEME.dim : THEME.text;
   drawTextCentered(ctx, b.label, b.x + Math.floor(b.w / 2), b.y + Math.floor((b.h - size) / 2), size, color);
   if (b.disabled) {
     ctx.fillStyle = 'rgba(26,20,32,0.45)';
