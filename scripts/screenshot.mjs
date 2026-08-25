@@ -84,9 +84,12 @@ await tap(180, 388);              // メニュー: インベントリ
 await shot('13-inventory');
 await tap(180, 300);
 await shot('14-inventory-detail');
-await tap(36, 14);                // 戻る
-await tap(180, 432);              // メニュー: 図鑑
+// 図鑑はデバッグAPIで直接開く（詳細シートの開閉でタップ位置が変わるため）
+await page.evaluate(() => window.__delvers.app.goCompendium());
+await page.waitForTimeout(300);
 await shot('15-compendium');
+await tap(60, 100);
+await shot('16-compendium-pick');
 
 console.log(`final: ${await screenName()}`);
 const stats = await page.evaluate(() => window.__delvers?.frameStats ?? null);
