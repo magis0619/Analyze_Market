@@ -1693,13 +1693,13 @@ const BASE_GREATSWORD: Rows = [
   '.......oo.......',
   '......olgo......',
   '.....olggGo.....',
-  '.....olggGo.....',
-  '.....olggGo.....',
-  '.....olggGo.....',
-  '.....olggGo.....',
-  '.....olggGo.....',
-  '.....olggGo.....',
-  '.....olggGo.....',
+  '....olggggGo....',
+  '....olggggGo....',
+  '....olggggGo....',
+  '....olggggGo....',
+  '....olggggGo....',
+  '....olggggGo....',
+  '....olggggGo....',
   '.oooooooooooooo.',
   '.oyyYyyyyyyYYyo.',
   '.oooooonnoooooo.',
@@ -1728,22 +1728,22 @@ const BASE_SPEAR: Rows = [
 ];
 
 const BASE_BOW: Rows = [
-  '.......ooooo....',
-  '.......oBbol....',
-  '......oBbo.l....',
-  '.....oBbo..l....',
-  '....oBbo...l....',
-  '...oBbo....l....',
-  '..oBbo.....l....',
-  '..oBbo.....l....',
-  '..oBbo.....l....',
-  '..oBbo.....l....',
-  '...oBbo....l....',
-  '....oBbo...l....',
-  '.....oBbo..l....',
-  '......oBbo.l....',
-  '.......oBbol....',
-  '.......ooooo....',
+  '........ooooo...',
+  '........oBbol...',
+  '.......oBbo.l...',
+  '......oBbo..l...',
+  '.....oBbo...l...',
+  '....oBbo....l...',
+  '...oBbo.....l...',
+  '...oBbo.....l...',
+  '...oBbo.....l...',
+  '...oBbo.....l...',
+  '....oBbo....l...',
+  '.....oBbo...l...',
+  '......oBbo..l...',
+  '.......oBbo.l...',
+  '........oBbol...',
+  '........ooooo...',
 ];
 
 const BASE_STAFF: Rows = [
@@ -1808,10 +1808,10 @@ const BASE_MEDIUM: Rows = [
 
 const BASE_HEAVY: Rows = [
   '................',
-  '.oooo......oooo.',
-  '.olgo......olGo.',
-  '.olggoooooogGGo.',
-  '.olgggoooogggGo.',
+  'oooo........oooo',
+  'olgo........olGo',
+  'olggoooooooogGGo',
+  'olgggoooooogggGo',
   '.olgggglgggggGo.',
   '.olgggglgggggGo.',
   '.olgggglgggggGo.',
@@ -1847,17 +1847,17 @@ const JOB_SWORDSMAN: Rows = [
 ];
 
 const JOB_GUARDIAN: Rows = [
-  '...oooooooooo...',
-  '..olggggggggGo..',
-  '.ollgggggggggGo.',
-  '.ollgggggggggGo.',
-  '.ollgggggggggGo.',
+  '.......oo.......',
+  '......orro......',
+  '...oooorroooo...',
+  '..olgggrrgggGo..',
+  '.ollggggggggGGo.',
+  '.ollggggggggGGo.',
   '.olooooooooooGo.',
   '.olosssssssoGGo.',
   '.oloooooooooGGo.',
-  '.ollgggggggggGo.',
+  '.ollggggggggGGo.',
   '.ollgggoooggGGo.',
-  '.ollgggggggGGGo.',
   '.oGGGGGGGGGGGGo.',
   '..oooooooooooo..',
   '.oolllllllllloo.',
@@ -2048,14 +2048,14 @@ const STAGE_1: Rows = [
   '.oooooooooooooo.',
   '.oBbbbbbbbbbbno.',
   '.oooooooooooooo.',
-  '.oBboSSSSSSoBbo.',
+  '.oBbossssssoBbo.',
   '.oBbollllllobbo.',
-  '.oBboggbbGgoBbo.',
-  '.oBboSSbbSSoBbo.',
-  '.oBboSSbbSSoBbo.',
-  '.oBboSSbbSSoBbo.',
-  '.oBboSSbbSSoBbo.',
-  '.oBboSSSSSSoBbo.',
+  '.oBbogsBBsgoBbo.',
+  '.oBbossBBssoBbo.',
+  '.oBbossBBssoBbo.',
+  '.oBbossBBssoBbo.',
+  '.oBbossBBssoBbo.',
+  '.oBbossssssoBbo.',
   '.oooooooooooooo.',
   '.oBbbbbbbbbbbno.',
   '.oooooooooooooo.',
@@ -2085,15 +2085,15 @@ const STAGE_3: Rows = [
   '................',
   '................',
   '...oooooooooo...',
-  '..oossssssssoo..',
-  '..osssttssssSo..',
-  '..ossstysssSSo..',
-  '..ossssttssSSo..',
-  '..ossssstysSSo..',
-  '..ossssttsSSSo..',
-  '..osstytssSSSo..',
-  '..osttssssSSSo..',
-  '..oossssSSSSoo..',
+  '..ooGGGGGGGGoo..',
+  '..oGGGttGGGGso..',
+  '..oGGGtyGGGsso..',
+  '..oGGGGttGGsso..',
+  '..oGGGGGtyGsso..',
+  '..oGGGGttGssso..',
+  '..oGGtytGGssso..',
+  '..oGttGGGGssso..',
+  '..ooGGGGssssoo..',
   '...oooooooooo...',
   '................',
   '................',
@@ -2122,17 +2122,17 @@ const STAGE_4: Rows = [
 const STAGE_5: Rows = [
   '................',
   '.....oooooo.....',
-  '...oosSSSSsoo...',
-  '..oosSSSSSSsoo..',
-  '.oosSSSSSSSSsoo.',
-  '.osSSSSSyySSSso.',
-  '.osSSSSyySSSSso.',
-  '.osSSSyySSSSSso.',
-  '.osSyyyYYYSSSso.',
-  '.osSSSSyYSSSSso.',
-  '.osSSSyYSSSSSso.',
-  '.osSSYYSSSSSSso.',
-  '.osSSSSSSSSSSso.',
+  '...ooGssssGoo...',
+  '..ooGssssssGoo..',
+  '.ooGssssssssGoo.',
+  '.oGsssssyysssGo.',
+  '.oGssssyyssssGo.',
+  '.oGsssyysssssGo.',
+  '.oGsyyyYYYsssGo.',
+  '.oGssssyYssssGo.',
+  '.oGsssyYsssssGo.',
+  '.oGssYYssssssGo.',
+  '.oGssssssssssGo.',
   '.oooooooooooooo.',
   '................',
   '................',
@@ -2187,11 +2187,11 @@ const STAGE_8: Rows = [
   '..owwwwwwwwwlo..',
   '..owlwlwlwlwlo..',
   '...oooooooooo...',
-  '.oooo.oooo.oooo.',
-  '.owwo.owwo.owwo.',
-  '.owlo.owlo.owlo.',
-  '.oooo.oooo.oooo.',
-  '................',
+  '..oo........oo..',
+  '.owwoooooooowwo.',
+  '.owwwwwwwwwwwwo.',
+  '.owwoooooooowwo.',
+  '..oo........oo..',
   '................',
 ];
 
@@ -2252,12 +2252,14 @@ function rep(ch: string, n: number): string {
 function buildRarityCommon(): string[] {
   const rows: string[] = [];
   rows.push(rep('o', 24));
-  rows.push('o' + rep('G', 22) + 'o');
-  rows.push('oG' + rep('o', 20) + 'Go');
-  const fill = 'oGo' + rep('S', 18) + 'oGo';
-  for (let i = 0; i < 18; i++) rows.push(fill);
-  rows.push('oG' + rep('o', 20) + 'Go');
-  rows.push('o' + rep('G', 22) + 'o');
+  rows.push('o' + rep('g', 22) + 'o');
+  rows.push('og' + rep('G', 20) + 'go');
+  rows.push('ogG' + rep('o', 18) + 'Ggo');
+  const fill = 'ogGo' + rep('S', 16) + 'oGgo';
+  for (let i = 0; i < 16; i++) rows.push(fill);
+  rows.push('ogG' + rep('o', 18) + 'Ggo');
+  rows.push('og' + rep('G', 20) + 'go');
+  rows.push('o' + rep('g', 22) + 'o');
   rows.push(rep('o', 24));
   return rows;
 }
@@ -2288,7 +2290,7 @@ function buildRarityRare(): string[] {
   rows.push('oyY' + rep('o', 18) + 'Yyo');
   rows.push(stud, studLo);
   for (let i = 0; i < 12; i++) rows.push(fill);
-  rows.push(studLo, stud);
+  rows.push(stud, studLo);
   rows.push('oyY' + rep('o', 18) + 'Yyo');
   rows.push('oy' + rep('Y', 20) + 'yo');
   rows.push('o' + rep('y', 22) + 'o');
@@ -2298,21 +2300,20 @@ function buildRarityRare(): string[] {
 
 function buildRarityRelic(): string[] {
   const rows: string[] = [];
-  const gem = 'opPqo' + 'yy' + rep('Q', 10) + 'yy' + 'oqPpo';
-  const gemLo = 'opPqo' + 'yY' + rep('Q', 10) + 'Yy' + 'oqPpo';
+  const gemHi = 'opPqo' + 'wv' + rep('Q', 10) + 'wv' + 'oqPpo';
+  const gemLo = 'opPqo' + 'vc' + rep('Q', 10) + 'vc' + 'oqPpo';
   const fill = 'opPqo' + rep('Q', 14) + 'oqPpo';
+  const brow = 'o' + rep('y', 6) + rep('p', 10) + rep('y', 6) + 'o';
+  const brow2 = 'oy' + rep('Y', 4) + rep('P', 12) + rep('Y', 4) + 'yo';
+  const brow3 = 'opY' + rep('q', 18) + 'Ypo';
   rows.push(rep('o', 24));
-  rows.push('o' + rep('y', 4) + rep('p', 14) + rep('y', 4) + 'o');
-  rows.push('oy' + rep('Y', 2) + rep('P', 16) + rep('Y', 2) + 'yo');
-  rows.push('opY' + rep('q', 18) + 'Ypo');
+  rows.push(brow, brow2, brow3);
   rows.push('opPq' + rep('o', 16) + 'qPpo');
-  rows.push(gem, gemLo);
+  rows.push(gemHi, gemLo);
   for (let i = 0; i < 10; i++) rows.push(fill);
-  rows.push(gemLo, gem);
+  rows.push(gemHi, gemLo);
   rows.push('opPq' + rep('o', 16) + 'qPpo');
-  rows.push('opY' + rep('q', 18) + 'Ypo');
-  rows.push('oy' + rep('Y', 2) + rep('P', 16) + rep('Y', 2) + 'yo');
-  rows.push('o' + rep('y', 4) + rep('p', 14) + rep('y', 4) + 'o');
+  rows.push(brow3, brow2, brow);
   rows.push(rep('o', 24));
   return rows;
 }

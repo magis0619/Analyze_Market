@@ -4,7 +4,7 @@ import { affixDef } from '../data/affixes';
 import { uniqueDef } from '../data/uniques';
 import { dominantElement, sellValue } from '../sim/items';
 import { drawNineSlice, drawSpr, drawSprOr, fillRect, hasSpr, strokeRect1 } from '../render/draw';
-import { drawText, drawTextRight, textWidth } from '../render/font';
+import { drawText, drawTextRight, textWidth, wrapText } from '../render/font';
 import { THEME } from './theme';
 
 // 全画面で共有するアイテム表示。装備は画面のどこに出ても同じ見え方であること。
@@ -144,13 +144,26 @@ export function drawItemRow(
   }
 }
 
+/**
+ * 詳細パネルの高さを、実際に描く行数から求める。
+ * 描画前に高さが要る（枠を先に描くため／呼び出し側がレイアウトを組むため）ので、
+ * 描画と同じ規則でここに一本化する。以前は概算で出しており、ユニーク効果が
+ * 枠からはみ出して下の行と重なっていた。
+ */
+export function itemDetailHeight(item: Item, w: number): number {
+  const statLines = item.slot === 'weapon' ? 2 : 1;
+  const uniqueLines = item.unique
+    ? 1 + wrapText(uniqueDef(item.unique).text, w - 16, 8).length
+    : 0;
+  return 40 + (statLines + item.affixes.length + uniqueLines) * 12 + 8;
+}
+
 /** 詳細パネル。使用した高さを返す。 */
 export function drawItemDetail(
   ctx: CanvasRenderingContext2D, item: Item,
   x: number, y: number, w: number
 ): number {
-  const lines = item.affixes.length + (item.unique ? 2 : 0);
-  const h = 62 + lines * 12;
+  const h = itemDetailHeight(item, w);
   drawRarityFrame(ctx, item.rarity, x, y, w, h);
   drawSprOr(ctx, itemIconName(item), 'icon_W1', x + 6, y + 6, 2);
   drawText(ctx, itemName(item), x + 44, y + 8, 12, RARITY_COLOR[item.rarity]);
@@ -188,8 +201,11 @@ export function drawItemDetail(
     const u = uniqueDef(item.unique);
     drawText(ctx, `《${u.name}》`, x + 8, ly, 8, THEME.red);
     ly += 12;
-    drawText(ctx, u.text, x + 8, ly, 8, THEME.gold);
-    ly += 12;
+    // ユニーク効果は1行に収まらないことがあるので必ず折り返す
+    for (const ln of wrapText(u.text, w - 16, 8)) {
+      drawText(ctx, ln, x + 8, ly, 8, THEME.gold);
+      ly += 12;
+    }
   }
   return h;
 }
