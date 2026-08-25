@@ -27,7 +27,7 @@ export function drawBtn(
     fillRect(ctx, b.x + 2, b.y + 2, b.w - 4, 2, THEME.gold);
   }
   // faint(#6e6660) は button 地色 G(#5f6472) とのコントラスト比が約1.05:1で
-  // ほぼ不可視になるため使わない（negotiation の重さラベルと同種の失敗）。
+  // ほぼ不可視になるため使わない。
   const color = b.disabled ? THEME.dim : THEME.text;
   drawTextCentered(ctx, b.label, b.x + Math.floor(b.w / 2), b.y + Math.floor((b.h - size) / 2), size, color);
   if (b.disabled) {

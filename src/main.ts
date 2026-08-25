@@ -1,8 +1,9 @@
 import { Screen } from './render/screen';
 import { initSprites } from './render/sprites';
 import { App } from './game/app';
+import { TitleScreen } from './ui/title';
 
-// ブート。描画は 360×640 の内部解像度 → 整数倍スケール表示。
+// ブート。描画は 360×640 の内部解像度 → 整数倍スケール。
 
 const params = new URLSearchParams(location.search);
 const seedParam = params.get('seed');
@@ -13,25 +14,16 @@ initSprites();
 const canvas = document.getElementById('game') as HTMLCanvasElement | null;
 if (!canvas) throw new Error('canvas not found');
 const screen = new Screen(canvas);
-const app = new App(seed);
-app.auto = params.get('auto') === '1';
-app.speed = Math.max(0.25, Math.min(8, parseFloat(params.get('fast') ?? '1') || 1));
-if (app.auto) app.gotoNegotiation();
+const app = new App(seed, new TitleScreen());
 
 canvas.addEventListener('pointerdown', (e) => {
   const p = screen.toInternal(e.clientX, e.clientY);
   app.screen.pointerDown?.(p.x, p.y);
 });
 
-// フレーム計測（C4 検査用に window へ公開）。
-// over17_5: フレーム落ちとみなす閾値（60fps の 16.7ms + vsync ジッタ余裕）
-// over33_4: 明確な2フレーム落ち
+// フレーム計測（C軸のfps検査用に window へ公開）
 const frameStats = { frames: 0, over17_5: 0, over33_4: 0, worst: 0 };
-interface DebugApi {
-  app: App;
-  frameStats: typeof frameStats;
-}
-(window as unknown as { __outfitter: DebugApi }).__outfitter = { app, frameStats };
+(window as unknown as { __delvers: unknown }).__delvers = { app, frameStats };
 
 let last = performance.now();
 function loop(now: number): void {
