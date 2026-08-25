@@ -69,6 +69,26 @@ export class App implements Nav {
    * 「次の up を1回だけ捨てる」ことを App の責務として持つ。
    */
   private swallowUp = false;
+  /** 今まさに指が触れている最中か。画面外から呼ばれた遷移と区別する */
+  private pointerActive = false;
+
+  /**
+   * 入力層から pointerdown のたびに呼ぶ。
+   *
+   * これが無いと、指が触れていないところで呼ばれた遷移（update() の中や
+   * デバッグ用の外部呼び出し）がフラグを立てっぱなしにして、
+   * **次の無関係なタップが1回丸ごと消える**。実際、派遣画面を外から開いたあと
+   * 装備一覧の最初のタップが反応しなかった。
+   */
+  notePointerDown(): void {
+    this.swallowUp = false;
+    this.pointerActive = true;
+  }
+
+  /** 入力層から pointerup / cancel のたびに呼ぶ。 */
+  notePointerUp(): void {
+    this.pointerActive = false;
+  }
 
   /** 遷移直後かどうか（pointerMove の判定用。フラグは消費しない）。 */
   pendingSwallow(): boolean { return this.swallowUp; }
@@ -82,7 +102,8 @@ export class App implements Nav {
 
   private go(next: GameScreen): void {
     this.screen = next;
-    this.swallowUp = true;
+    // 指が触れている最中の遷移だけが、その指の pointerUp を捨てる必要がある
+    this.swallowUp = this.pointerActive;
   }
 
   goBase(): void { this.go(this.factories.base(this)); }

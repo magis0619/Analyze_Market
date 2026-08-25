@@ -11,7 +11,10 @@ import { simulateRun } from '../sim/combat';
 import { baseDef } from '../data/bases';
 import { dominantElement } from '../sim/items';
 import { sfx } from '../render/audio';
-import { drawItemRow, elementLabel, itemIconName, itemName, sortItems } from './itemview';
+import { drawItemRow, elementLabel, itemIconName, itemName, itemScore, sortItems } from './itemview';
+import { compareHeight, drawCompare } from './equipcard';
+import { Feedback, drawButton, hitButton, type Button } from './components';
+import { ROLE, SPACE, TEXT } from './tokens';
 import { textWidth } from '../render/font';
 import { enemiesForStage } from '../data/enemies';
 import { formatDuration } from './base';
@@ -89,6 +92,12 @@ export class DispatchScreen implements GameScreen {
   private pickScroll = 0;
   private pickCache: Item[] = [];
   private readonly pickRowH = 40;
+  /** 比較中の候補（§11「装備するべきか」を決める段）。null なら一覧のまま */
+  private pickCandidate: Item | null = null;
+  private equipBtn: Button = { x: 0, y: 0, w: 0, h: 0, label: '装備する', accent: true };
+  private cancelBtn: Button = { x: 0, y: 0, w: 0, h: 0, label: '戻る' };
+  /** 取得・装備のフィードバック（§8） */
+  private fb = new Feedback();
 
   private backBtn: Btn = { x: 8, y: 4, w: 64, h: 20, label: '戻る' };
   private goBtn: Btn = { x: 12, y: VH - 44, w: VW - 24, h: 36, label: '派遣する', accent: true };
@@ -108,8 +117,16 @@ export class DispatchScreen implements GameScreen {
   private jobs(): JobId[] { return this.nav.state.availableJobs(); }
   private job(): JobId { return this.jobs()[this.jobIdx] ?? 'swordsman'; }
 
-  update(): void {
+  update(dt: number): void {
     this.nav.state.tick(this.nav.now());
+    this.fb.update(dt);
+  }
+
+  /** 今装備している品の強さ（比較の前後で差を出すため）。 */
+  private equippedNow(): number | null {
+    const eq = this.nav.state.data.equipped[this.job()];
+    const it = this.nav.state.itemById(this.picking === 'weapon' ? eq.weapon : eq.armor);
+    return it ? itemScore(it) : null;
   }
 
   // -------------------------------------------------------------- 描画
@@ -130,6 +147,7 @@ export class DispatchScreen implements GameScreen {
     this.drawFooter(ctx);
 
     if (this.picking) this.drawPicker(ctx);
+    this.fb.draw(ctx, VW);
   }
 
   private drawJobTabs(ctx: CanvasRenderingContext2D, y: number): void {
@@ -470,7 +488,27 @@ export class DispatchScreen implements GameScreen {
     ), 'power');
   }
 
-  private pickerViewH(): number { return VH - PICK_TOP - 68; }
+  private pickerViewH(): number { return this.pickListRect().h; }
+
+  /**
+   * 装備一覧が使える矩形。
+   * 比較中は上に比較シートが載るので、一覧はその下に縮む——**閉じはしない**。
+   * 一覧を隠してしまうと、別の候補に乗り換えるのに毎回「戻る」が要る。
+   * 見比べながら次々に当ててみられるほうが、判断は速い（§18）。
+   */
+  private pickListRect(): { top: number; h: number } {
+    if (!this.pickCandidate) return { top: PICK_TOP, h: VH - PICK_TOP - 68 };
+    const w = VW - 24;
+    const sheetH = compareHeight(this.compareBase(), this.pickCandidate, w) + SPACE.md + 34;
+    const top = PICK_TOP + sheetH + SPACE.lg;
+    return { top, h: Math.max(0, VH - top - 68) };
+  }
+
+  /** 比較の左側に置く「装備中」の品。 */
+  private compareBase(): Item | null {
+    const eq = this.nav.state.data.equipped[this.job()];
+    return this.nav.state.itemById(this.picking === 'weapon' ? eq.weapon : eq.armor);
+  }
 
   private drawPicker(ctx: CanvasRenderingContext2D): void {
     const st = this.nav.state;
@@ -490,7 +528,7 @@ export class DispatchScreen implements GameScreen {
     }
 
     const list = this.pickCache;
-    const top = PICK_TOP, viewH = this.pickerViewH();
+    const { top, h: viewH } = this.pickListRect();
     ctx.save();
     ctx.beginPath();
     ctx.rect(10, top, VW - 20, viewH);
@@ -510,7 +548,41 @@ export class DispatchScreen implements GameScreen {
     if (list.length === 0) {
       drawTextCentered(ctx, '装備できる品がない', VW / 2, top + 40, 12, THEME.dim);
     }
-    drawTextCentered(ctx, 'タップで装備／枠の外で閉じる', VW / 2, VH - 54, 8, THEME.dim);
+    drawTextCentered(ctx,
+      this.pickCandidate ? '別の行を叩けば比べ直せる' : 'タップで比較／枠の外で閉じる',
+      VW / 2, VH - 54, 8, THEME.dim);
+
+    if (this.pickCandidate) this.drawCompareSheet(ctx, current, this.pickCandidate);
+  }
+
+  /**
+   * 比較シート（設計書 §11・Phase 5「Loot → Compare → Equip」）。
+   *
+   * 以前は一覧の行を叩いた瞬間に装備が入れ替わっていた。装備選択は
+   * このゲームがプレイヤーに委ねる3つの判断のうちの1つ（§4.1）なのに、
+   * 「装備中と比べてどうか」を確かめる段が無く、押し間違いも取り消せなかった。
+   * 一段挟んで、装備中と候補を並べてから決めさせる。
+   */
+  private drawCompareSheet(
+    ctx: CanvasRenderingContext2D, current: Item | null, next: Item
+  ): void {
+    const w = VW - 24;
+    const h = compareHeight(current, next, w);
+    // 見出しのすぐ下に置く。視線が最初に来る位置に2枚を並べ、
+    // 一覧はその下に残して乗り換えられるようにする
+    const top = PICK_TOP;
+    fillRect(ctx, 6, top - SPACE.md, VW - 12, h + SPACE.md * 2 + 34, ROLE.edge);
+    drawCompare(ctx, current, next, 12, top, w);
+
+    const by = top + h + SPACE.md;
+    this.cancelBtn = { x: 12, y: by, w: 96, h: 34, label: '戻る' };
+    this.equipBtn = {
+      x: 116, y: by, w: VW - 128, h: 34,
+      label: current?.id === next.id ? '装備中' : '装備する',
+      accent: true, disabled: current?.id === next.id
+    };
+    drawButton(ctx, this.cancelBtn, TEXT.body);
+    drawButton(ctx, this.equipBtn, TEXT.title);
   }
 
   // -------------------------------------------------------------- 入力
@@ -533,6 +605,7 @@ export class DispatchScreen implements GameScreen {
         this.picking = i === 0 ? 'weapon' : 'armor';
         this.pickCache = this.pickerItems();
         this.pickScroll = 0;
+        this.pickCandidate = null;
         this.pickerJustOpened = true;
         sfx('tap');
         return;
@@ -581,18 +654,42 @@ export class DispatchScreen implements GameScreen {
         this.pickerJustOpened = false;
         return;
       }
-      const top = PICK_TOP, viewH = this.pickerViewH();
+      // 比較中は、シートのボタンだけを受け付ける
+      if (this.pickCandidate) {
+        if (hitButton(this.equipBtn, px, py)) {
+          const eq = this.nav.state.data.equipped[this.job()];
+          const before = this.equippedNow();
+          if (this.picking === 'weapon') eq.weapon = this.pickCandidate.id;
+          else eq.armor = this.pickCandidate.id;
+          this.nav.state.save();
+          sfx('confirm');
+          // §8 数値変化をイベントとして見せる
+          const after = this.equippedNow();
+          if (before !== null && after !== null) this.fb.float(VW / 2 - 12, 150, after - before);
+          this.pickCandidate = null;
+          this.picking = null;
+          return;
+        }
+        if (hitButton(this.cancelBtn, px, py)) {
+          sfx('tap');
+          this.pickCandidate = null;
+          return;
+        }
+        // ボタン以外は下の一覧の判定へ落とす（別の候補に乗り換えられる）
+      }
+      const { top, h: viewH } = this.pickListRect();
       if (py >= top && py < top + viewH && px >= 12 && px < VW - 12) {
         const idx = Math.floor((py - top + this.pickScroll) / this.pickRowH);
         const it = this.pickCache[idx];
         if (it) {
-          const eq = this.nav.state.data.equipped[this.job()];
-          if (this.picking === 'weapon') eq.weapon = it.id; else eq.armor = it.id;
-          this.nav.state.save();
-          sfx('confirm');
+          // 一覧のタップは「比較する」まで。装備はシートで確定させる
+          this.pickCandidate = it;
+          sfx('tap');
+          return;
         }
       }
       this.picking = null;
+      this.pickCandidate = null;
       return;
     }
 
