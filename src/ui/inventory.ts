@@ -2,13 +2,16 @@ import type { GameScreen, Nav } from '../game/app';
 import type { Item, JobId, Slot } from '../sim/types';
 import { VW, VH } from '../render/screen';
 import { drawText, drawTextCentered, drawTextRight, textWidth } from '../render/font';
-import { drawSpr, drawSprOr, fillRect, strokeRect1 } from '../render/draw';
+import { drawSprOr, fillRect, strokeRect1 } from '../render/draw';
 import { sellValue } from '../sim/items';
 import { Prng } from '../sim/prng';
 import { jobDef } from '../data/jobs';
 import { sfx } from '../render/audio';
 import { THEME } from './theme';
-import { type Btn, drawBtn, hitBtn, inRect } from './widgets';
+import {
+  Feedback, drawButton, drawHeader, hitButton, inRect, type Button
+} from './components';
+import { ROLE } from './tokens';
 import {
   RARITY_LABEL, drawItemDetail, drawItemRow, itemName, itemScore, sortItems,
   type SortKey
@@ -38,7 +41,6 @@ const SLOT_LABELS: readonly string[] = ['全部', '武器', '防具'];
 const RARITY_FILTERS: readonly RarityFilter[] = ['all', 'commonOnly', 'fineUp'];
 const RARITY_FILTER_LABELS: readonly string[] = ['全レア', '並のみ', '上質以上'];
 
-const HEADER_H = 24;
 const ROW_H = 34;
 const STRIDE = 36;
 const LIST_X = 7;
@@ -112,8 +114,6 @@ export class InventoryScreen implements GameScreen {
   private bulkRare = 0;
   private bulkRelic = 0;
   private headerCount = '';
-  private goldShown = -1;
-  private goldStr = '0';
   private emptyHint = '';
   private emptyHint2 = '';
 
@@ -132,22 +132,22 @@ export class InventoryScreen implements GameScreen {
   private lastMoveT = 0;
 
   private confirm: { count: number; gold: number; warn: string; single: boolean } | null = null;
-  private toast = '';
-  private toastT = 0;
+  /** 通知と飛ぶ数字（§8）。全画面で同じ見た目にするため共通部品を使う */
+  private fb = new Feedback();
 
   // ------------------------------------------------------------ ボタン
-  private sortBtns: Btn[] = [];
-  private slotBtns: Btn[] = [];
-  private rarBtns: Btn[] = [];
-  private jobBtns: Btn[] = [];
-  private backBtn: Btn = { x: 7, y: 604, w: 96, h: 30, label: '拠点へ' };
-  private bulkBtn: Btn = { x: 109, y: 604, w: 244, h: 30, label: '' };
-  private lockBtn: Btn = { x: 7, y: 604, w: 78, h: 30, label: 'ロック' };
-  private reidBtn: Btn = { x: 89, y: 604, w: 112, h: 30, label: '再鑑定' };
-  private sellBtn: Btn = { x: 205, y: 604, w: 82, h: 30, label: '売却' };
-  private closeBtn: Btn = { x: 291, y: 604, w: 62, h: 30, label: '閉じる' };
-  private yesBtn: Btn = { x: 40, y: 346, w: 130, h: 30, label: '売る', accent: true };
-  private noBtn: Btn = { x: 190, y: 346, w: 130, h: 30, label: 'やめる' };
+  private sortBtns: Button[] = [];
+  private slotBtns: Button[] = [];
+  private rarBtns: Button[] = [];
+  private jobBtns: Button[] = [];
+  private backBtn: Button = { x: 7, y: 604, w: 96, h: 30, label: '拠点へ' };
+  private bulkBtn: Button = { x: 109, y: 604, w: 244, h: 30, label: '' };
+  private lockBtn: Button = { x: 7, y: 604, w: 78, h: 30, label: 'ロック' };
+  private reidBtn: Button = { x: 89, y: 604, w: 112, h: 30, label: '再鑑定' };
+  private sellBtn: Button = { x: 205, y: 604, w: 82, h: 30, label: '売却' };
+  private closeBtn: Button = { x: 291, y: 604, w: 62, h: 30, label: '閉じる' };
+  private yesBtn: Button = { x: 40, y: 346, w: 130, h: 30, label: '売る', accent: true };
+  private noBtn: Button = { x: 190, y: 346, w: 130, h: 30, label: 'やめる' };
 
   constructor(nav: Nav) {
     this.nav = nav;
@@ -315,13 +315,8 @@ export class InventoryScreen implements GameScreen {
   update(dt: number): void {
     if (this.dirty || this.nav.state.data.inventory.length !== this.lastInvLen) this.rebuild();
 
-    const gold = this.nav.state.data.gold;
-    if (gold !== this.goldShown) {
-      this.goldShown = gold;
-      this.goldStr = fmtGold(gold);
-    }
 
-    if (this.toastT > 0) this.toastT = Math.max(0, this.toastT - dt);
+    this.fb.update(dt);
 
     // 慣性スクロール（指を離した後の惰性）
     if (this.dragMode === 'none' && this.vel !== 0) {
@@ -343,22 +338,16 @@ export class InventoryScreen implements GameScreen {
     this.drawBottom(ctx);
     if (this.selectedId) this.drawSheet(ctx);
     if (this.confirm) this.drawConfirm(ctx);
-    if (this.toastT > 0) {
-      const w = textWidth(this.toast, 8) + 16;
-      const x = Math.floor((VW - w) / 2);
-      fillRect(ctx, x, 566, w, 20, THEME.outline);
-      strokeRect1(ctx, x, 566, w, 20, THEME.gold);
-      drawTextCentered(ctx, this.toast, Math.floor(VW / 2), 572, 8, THEME.text);
-    }
+    // §6 の深さ: 通知と飛ぶ数字は必ず最前面
+    this.fb.draw(ctx, VW, VH);
   }
 
   private drawHeader(ctx: CanvasRenderingContext2D): void {
-    fillRect(ctx, 0, 0, VW, HEADER_H, THEME.panel);
-    fillRect(ctx, 0, HEADER_H - 1, VW, 1, THEME.outline);
-    drawText(ctx, '所持品', 7, 5, 12, THEME.text);
-    drawText(ctx, this.headerCount, 62, 8, 8, THEME.dim);
-    drawSpr(ctx, 'coin', VW - 8 - textWidth(this.goldStr, 12) - 11, 7);
-    drawTextRight(ctx, this.goldStr, VW - 8, 6, 12, THEME.gold);
+    drawHeader(ctx, VW, {
+      title: '所持品',
+      gold: this.nav.state.data.gold,
+      meta: this.headerCount
+    });
   }
 
   private drawControls(ctx: CanvasRenderingContext2D): void {
@@ -366,15 +355,15 @@ export class InventoryScreen implements GameScreen {
       const b = this.sortBtns[i];
       if (!b) continue;
       b.accent = SORT_KEYS[i] === this.sort;
-      drawBtn(ctx, b, 8);
+      drawButton(ctx, b, 8);
       // 選択中の並び順にだけ印を出す。文字だけだとどれが効いているか分かりにくい
       if (b.accent) drawSprOr(ctx, 'icon_sort', 'icon_check', b.x + 3, b.y + 1);
     }
     for (let i = 0; i < 3; i++) {
       const sb = this.slotBtns[i];
-      if (sb) { sb.accent = SLOT_FILTERS[i] === this.slotF; drawBtn(ctx, sb, 8); }
+      if (sb) { sb.accent = SLOT_FILTERS[i] === this.slotF; drawButton(ctx, sb, 8); }
       const rb = this.rarBtns[i];
-      if (rb) { rb.accent = RARITY_FILTERS[i] === this.rarF; drawBtn(ctx, rb, 8); }
+      if (rb) { rb.accent = RARITY_FILTERS[i] === this.rarF; drawButton(ctx, rb, 8); }
     }
     // 2グループの境目（種別｜レアリティ）
     fillRect(ctx, 172, 50, 1, 14, THEME.panelLight);
@@ -449,8 +438,8 @@ export class InventoryScreen implements GameScreen {
     if (this.selectedId) return; // 詳細パネル側のボタンに差し替わる
     fillRect(ctx, 0, LIST_BOTTOM, VW, VH - LIST_BOTTOM, THEME.panel);
     fillRect(ctx, 0, LIST_BOTTOM, VW, 1, THEME.outline);
-    drawBtn(ctx, this.backBtn, 8);
-    drawBtn(ctx, this.bulkBtn, 8);
+    drawButton(ctx, this.backBtn, 8);
+    drawButton(ctx, this.bulkBtn, 8);
   }
 
   private drawSheet(ctx: CanvasRenderingContext2D): void {
@@ -464,7 +453,7 @@ export class InventoryScreen implements GameScreen {
     fillRect(ctx, 0, top, VW, 1, THEME.gold);
 
     drawText(ctx, '比較する冒険者', 7, top + 9, 8, THEME.dim);
-    for (const b of this.jobBtns) drawBtn(ctx, b, 8);
+    for (const b of this.jobBtns) drawButton(ctx, b, 8);
 
     let y = top + 28;
     const h1 = drawItemDetail(ctx, item, 6, y, 348);
@@ -499,13 +488,13 @@ export class InventoryScreen implements GameScreen {
 
     fillRect(ctx, 0, LIST_BOTTOM, VW, VH - LIST_BOTTOM, THEME.panel);
     fillRect(ctx, 0, LIST_BOTTOM, VW, 1, THEME.outline);
-    drawBtn(ctx, this.lockBtn, 8);
-    drawBtn(ctx, this.reidBtn, 8);
-    drawBtn(ctx, this.sellBtn, 8);
+    drawButton(ctx, this.lockBtn, 8);
+    drawButton(ctx, this.reidBtn, 8);
+    drawButton(ctx, this.sellBtn, 8);
     if (!this.sellBtn.disabled) {
       drawSprOr(ctx, 'icon_sell', 'coin', this.sellBtn.x + 3, this.sellBtn.y + 7);
     }
-    drawBtn(ctx, this.closeBtn, 8);
+    drawButton(ctx, this.closeBtn, 8);
   }
 
   private drawConfirm(ctx: CanvasRenderingContext2D): void {
@@ -519,8 +508,8 @@ export class InventoryScreen implements GameScreen {
     drawTextCentered(ctx, `${c.count}個を売却して ${fmtGold(c.gold)}G`, VW / 2, y + 34, 12, THEME.gold);
     drawTextCentered(ctx, 'ロック品と装備中の品は除外済み', VW / 2, y + 54, 8, THEME.dim);
     if (c.warn) drawTextCentered(ctx, c.warn, VW / 2, y + 70, 8, THEME.red);
-    drawBtn(ctx, this.yesBtn, 12);
-    drawBtn(ctx, this.noBtn, 12);
+    drawButton(ctx, this.yesBtn, 12);
+    drawButton(ctx, this.noBtn, 12);
   }
 
   // ================================================================ 入力
@@ -528,8 +517,8 @@ export class InventoryScreen implements GameScreen {
   pointerDown(x: number, y: number): void {
     this.vel = 0;
     if (this.confirm) {
-      if (hitBtn(this.yesBtn, x, y)) this.doSell();
-      else if (hitBtn(this.noBtn, x, y)) { this.confirm = null; sfx('tap'); }
+      if (hitButton(this.yesBtn, x, y)) this.doSell();
+      else if (hitButton(this.noBtn, x, y)) { this.confirm = null; sfx('tap'); }
       return;
     }
     if (this.selectedId) {
@@ -540,17 +529,17 @@ export class InventoryScreen implements GameScreen {
     for (let i = 0; i < this.sortBtns.length; i++) {
       const b = this.sortBtns[i];
       const k = SORT_KEYS[i];
-      if (b && k && hitBtn(b, x, y)) { this.setSort(k); return; }
+      if (b && k && hitButton(b, x, y)) { this.setSort(k); return; }
     }
     for (let i = 0; i < 3; i++) {
       const sb = this.slotBtns[i];
       const sf = SLOT_FILTERS[i];
-      if (sb && sf && hitBtn(sb, x, y)) { this.setSlotFilter(sf); return; }
+      if (sb && sf && hitButton(sb, x, y)) { this.setSlotFilter(sf); return; }
       const rb = this.rarBtns[i];
       const rf = RARITY_FILTERS[i];
-      if (rb && rf && hitBtn(rb, x, y)) { this.setRarityFilter(rf); return; }
+      if (rb && rf && hitButton(rb, x, y)) { this.setRarityFilter(rf); return; }
     }
-    if (hitBtn(this.backBtn, x, y)) { sfx('tap'); this.nav.goBase(); return; }
+    if (hitButton(this.backBtn, x, y)) { sfx('tap'); this.nav.goBase(); return; }
     if (inRect(x, y, this.bulkBtn.x, this.bulkBtn.y, this.bulkBtn.w, this.bulkBtn.h)) {
       this.askBulkSell();
       return;
@@ -619,19 +608,19 @@ export class InventoryScreen implements GameScreen {
     for (let i = 0; i < this.jobBtns.length; i++) {
       const b = this.jobBtns[i];
       const j = JOB_ORDER[i];
-      if (b && j && hitBtn(b, x, y)) {
+      if (b && j && hitButton(b, x, y)) {
         this.compareJob = j;
         this.refreshSelection();
         sfx('tap');
         return;
       }
     }
-    if (hitBtn(this.closeBtn, x, y)) { this.selectedId = null; sfx('tap'); return; }
-    if (hitBtn(this.lockBtn, x, y)) {
+    if (hitButton(this.closeBtn, x, y)) { this.selectedId = null; sfx('tap'); return; }
+    if (hitButton(this.lockBtn, x, y)) {
       item.locked = !item.locked;
       this.nav.state.save();
       this.dirty = true;
-      this.showToast(item.locked ? `${itemName(item)} をロックした` : 'ロックを外した');
+      this.fb.notify(item.locked ? `${itemName(item)} をロックした` : 'ロックを外した', THEME.dim);
       sfx('tap');
       return;
     }
@@ -639,17 +628,18 @@ export class InventoryScreen implements GameScreen {
       const cost = this.nav.state.reidentifyCost(item);
       if (item.affixes.length === 0) {
         sfx('deny');
-        this.showToast('振り直せるアフィックスがない');
+        this.fb.notify('振り直せるアフィックスがない', ROLE.negative);
         return;
       }
       if (this.nav.state.data.gold < cost) {
         sfx('deny');
-        this.showToast(`金が足りない（あと ${fmtGold(cost - this.nav.state.data.gold)}G）`);
+        this.fb.notify(`金が足りない（あと ${fmtGold(cost - this.nav.state.data.gold)}G）`, ROLE.negative);
         return;
       }
       const seed = (this.nav.state.data.seed ^ Math.floor(this.nav.now())) >>> 0;
       if (this.nav.state.reidentify(item.id, new Prng(seed))) {
-        this.showToast(`アフィックスを振り直した -${fmtGold(cost)}G`);
+        this.fb.float(VW - 92, 30, -cost, 'G');
+        this.fb.notify('アフィックスを振り直した', ROLE.gold);
         this.dirty = true;
         sfx('rare');
       } else {
@@ -660,12 +650,12 @@ export class InventoryScreen implements GameScreen {
     if (inRect(x, y, this.sellBtn.x, this.sellBtn.y, this.sellBtn.w, this.sellBtn.h)) {
       if (this.equippedIds.has(item.id)) {
         sfx('deny');
-        this.showToast('装備中の品は売れない');
+        this.fb.notify('装備中の品は売れない', ROLE.negative);
         return;
       }
       if (item.locked) {
         sfx('deny');
-        this.showToast('ロック中の品は売れない（先に解除する）');
+        this.fb.notify('ロック中の品は売れない（先に解除する）', ROLE.negative);
         return;
       }
       this.confirm = {
@@ -709,7 +699,7 @@ export class InventoryScreen implements GameScreen {
   private askBulkSell(): void {
     if (this.bulkIds.length === 0) {
       sfx('deny');
-      this.showToast('表示中はロック品と装備中だけ');
+      this.fb.notify('表示中はロック品と装備中だけ', THEME.dim);
       return;
     }
     let warn = '';
@@ -733,12 +723,9 @@ export class InventoryScreen implements GameScreen {
     this.confirm = null;
     if (c.single) this.selectedId = null;
     this.dirty = true;
-    this.showToast(`${c.count}個を売却 +${fmtGold(gained)}G`);
+    // §8 数値変化をイベントとして扱う。増えた金は所持金の位置に浮かせる
+    this.fb.float(VW - 92, 30, gained, 'G');
+    this.fb.notify(`${c.count}個を売却`, ROLE.gold);
     sfx('loot');
-  }
-
-  private showToast(text: string): void {
-    this.toast = text;
-    this.toastT = 1.8;
   }
 }

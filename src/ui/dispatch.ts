@@ -4,7 +4,7 @@ import { VW, VH } from '../render/screen';
 import { drawNineSlice, drawSpr, drawSprOr, fillRect, fillScrim, hasSpr, strokeRect1 } from '../render/draw';
 import { drawText, drawTextCentered, drawTextRight, drawTextWrapped } from '../render/font';
 import { THEME } from './theme';
-import { drawBtn, hitBtn, inRect, type Btn } from './widgets';
+import { inRect } from './components';
 import { RETREAT_RULES, canEquipArmor, jobDef, retreatRuleDef } from '../data/jobs';
 import { STAGES, bossName, stageDef } from '../data/stages';
 import { simulateRun } from '../sim/combat';
@@ -13,7 +13,9 @@ import { dominantElement } from '../sim/items';
 import { sfx } from '../render/audio';
 import { drawItemRow, elementLabel, itemIconName, itemName, itemScore, sortItems } from './itemview';
 import { compareHeight, drawCompare } from './equipcard';
-import { Feedback, drawButton, hitButton, type Button } from './components';
+import {
+  Feedback, drawButton, drawHeader, hitButton, hitHeaderBack, type Button
+} from './components';
 import { ROLE, SPACE, TEXT } from './tokens';
 import { textWidth } from '../render/font';
 import { enemiesForStage } from '../data/enemies';
@@ -99,8 +101,7 @@ export class DispatchScreen implements GameScreen {
   /** 取得・装備のフィードバック（§8） */
   private fb = new Feedback();
 
-  private backBtn: Btn = { x: 8, y: 4, w: 64, h: 20, label: '戻る' };
-  private goBtn: Btn = { x: 12, y: VH - 44, w: VW - 24, h: 36, label: '派遣する', accent: true };
+  private goBtn: Button = { x: 12, y: VH - 44, w: VW - 24, h: 36, label: '派遣する', accent: true };
 
   constructor(private nav: Nav) {
     const jobs = this.jobs();
@@ -134,10 +135,10 @@ export class DispatchScreen implements GameScreen {
   draw(ctx: CanvasRenderingContext2D): void {
     const st = this.nav.state;
     fillRect(ctx, 0, 0, VW, VH, THEME.bg);
-    fillRect(ctx, 0, 0, VW, 26, THEME.panel);
-    drawBtn(ctx, this.backBtn, 8);
-    drawTextCentered(ctx, '派遣準備', VW / 2, 5, 12, THEME.text);
-    drawTextRight(ctx, `${st.data.gold}G`, VW - 8, 5, 12, THEME.gold);
+    drawHeader(ctx, VW, {
+      title: '派遣準備', back: true,
+      gold: st.data.gold, tier: st.data.tier, running: st.data.dispatches.length
+    });
 
     this.drawJobTabs(ctx, 30);
     this.drawAdventurerCard(ctx, CARD_Y);
@@ -147,7 +148,7 @@ export class DispatchScreen implements GameScreen {
     this.drawFooter(ctx);
 
     if (this.picking) this.drawPicker(ctx);
-    this.fb.draw(ctx, VW);
+    this.fb.draw(ctx, VW, VH);
   }
 
   private drawJobTabs(ctx: CanvasRenderingContext2D, y: number): void {
@@ -473,7 +474,7 @@ export class DispatchScreen implements GameScreen {
       : !ready ? '武器と防具を選ぶ'
       : !unlocked ? 'このステージは未解放'
       : '派遣する';
-    drawBtn(ctx, this.goBtn, 12);
+    drawButton(ctx, this.goBtn, 12);
   }
 
   // -------------------------------------------------------------- 装備選択
@@ -592,7 +593,7 @@ export class DispatchScreen implements GameScreen {
     this.dragged = false;
     if (this.picking) return;
 
-    if (hitBtn(this.backBtn, px, py)) { sfx('tap'); this.nav.goBase(); return; }
+    if (hitHeaderBack(px, py)) { sfx('tap'); this.nav.goBase(); return; }
 
     const jobs = this.jobs();
     const tw = Math.floor((VW - 16) / Math.max(1, jobs.length));
@@ -621,7 +622,7 @@ export class DispatchScreen implements GameScreen {
       }
     }
 
-    if (hitBtn(this.goBtn, px, py)) {
+    if (hitButton(this.goBtn, px, py)) {
       const ok = this.nav.state.dispatch(this.job(), this.stageId, this.rule, this.nav.now());
       if (ok) { sfx('depart'); this.nav.goBase(); }
       else sfx('deny');

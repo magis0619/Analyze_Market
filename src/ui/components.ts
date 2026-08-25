@@ -1,4 +1,4 @@
-import { drawNineSlice, fillRect, fillScrim, strokeRect1 } from '../render/draw';
+import { drawNineSlice, drawSprOr, fillRect, fillScrim, strokeRect1 } from '../render/draw';
 import { drawText, drawTextCentered, drawTextRight, textWidth, type FontSize } from '../render/font';
 import { THEME } from './theme';
 import { BORDER, DUR, ROLE, SHADOW, SPACE, TEXT, type UiState } from './tokens';
@@ -9,6 +9,77 @@ import { BORDER, DUR, ROLE, SHADOW, SPACE, TEXT, type UiState } from './tokens';
 // Modal / Tab / Notification を、canvas 描画として1箇所に集める。
 // 調査時点では同じ意味のパネルが画面ごとに違う余白・枠幅・色で描かれていた
 // （生の矩形描画170回 対 共通部品56回）。以後、画面側は原則ここだけを呼ぶ。
+
+// ---------------------------------------------------------------- Header（§1 Layer 1）
+//
+// 設計書 §1 は「プレイヤーがゲーム中に頻繁に確認するものは画面上で常に見える
+// 場所に固定する」と定めている。調査時点では、所持金は拠点・派遣・インベントリ
+// にはあり図鑑とレポートには無い、見出しの座標も高さも画面ごとに違う、
+// 戻るボタンがある画面と無い画面がある、という状態だった。
+// 全画面で同じ帯を使い、常時確認する情報は必ずここに載せる。
+
+export const HEADER_H = 26;
+
+export interface HeaderOptions {
+  title: string;
+  /** 戻るボタンを出すか。出す場合は hitHeaderBack で判定する */
+  back?: boolean;
+  /** 常時表示する所持金 */
+  gold?: number;
+  /** 右端に出す補足（ステージ名・件数など）。gold と併用する場合は左に並ぶ */
+  meta?: string;
+  /** 難易度ティア。1 なら出さない */
+  tier?: number;
+  /** 派遣中の人数。0 なら出さない */
+  running?: number;
+}
+
+const BACK_BTN: Button = { x: 6, y: 4, w: 56, h: 18, label: '戻る' };
+
+export function headerBackButton(): Button {
+  return { ...BACK_BTN };
+}
+
+export function hitHeaderBack(px: number, py: number): boolean {
+  return hitButton(BACK_BTN, px, py);
+}
+
+/** 全画面共通の帯。使用した高さを返す。 */
+export function drawHeader(
+  ctx: CanvasRenderingContext2D, w: number, opts: HeaderOptions
+): number {
+  fillRect(ctx, 0, 0, w, HEADER_H, ROLE.surface);
+  fillRect(ctx, 0, HEADER_H - 1, w, BORDER.thin, ROLE.edge);
+
+  const titleX = opts.back ? BACK_BTN.x + BACK_BTN.w + SPACE.md : SPACE.md;
+  if (opts.back) drawButton(ctx, BACK_BTN, TEXT.body);
+  drawText(ctx, opts.title, titleX, 5, TEXT.title, THEME.text);
+
+  // 右から順に積む。所持金は最も右（どの画面でも同じ位置にある約束）
+  let rx = w - SPACE.md;
+  if (opts.gold !== undefined) {
+    const txt = `${opts.gold}`;
+    drawTextRight(ctx, txt, rx, 5, TEXT.title, ROLE.gold);
+    rx -= textWidth(txt, TEXT.title) + SPACE.sm;
+    drawSprOr(ctx, 'coin', 'star', rx - 12, 6);
+    rx -= 12 + SPACE.md;
+  }
+  if (opts.running !== undefined && opts.running > 0) {
+    const txt = `潜行${opts.running}`;
+    const bw = textWidth(txt, TEXT.body) + SPACE.md;
+    drawBadge(ctx, rx - bw, 6, txt, ROLE.progress);
+    rx -= bw + SPACE.md;
+  }
+  if (opts.tier !== undefined && opts.tier > 1) {
+    const txt = `難易度+${opts.tier - 1}`;
+    drawTextRight(ctx, txt, rx, 8, TEXT.body, ROLE.negative);
+    rx -= textWidth(txt, TEXT.body) + SPACE.md;
+  }
+  if (opts.meta) {
+    drawTextRight(ctx, opts.meta, rx, 8, TEXT.body, THEME.dim);
+  }
+  return HEADER_H;
+}
 
 // ---------------------------------------------------------------- Panel（§2）
 
@@ -256,7 +327,12 @@ export class Feedback {
     return this.floats.length > 0 || this.toasts.length > 0;
   }
 
-  draw(ctx: CanvasRenderingContext2D, screenW: number): void {
+  /**
+   * screenH を渡すと通知を下端から積む。
+   * 上端に出すと、画面のいちばん重要な1行（レポートの結果行など）に
+   * かぶさってしまう。通知は補助情報なので、主役を隠さない場所に置く（§10）。
+   */
+  draw(ctx: CanvasRenderingContext2D, screenW: number, screenH = 640): void {
     for (const f of this.floats) {
       const t = 1 - f.life / DUR.float;
       const dy = Math.round(t * 14);
@@ -266,7 +342,7 @@ export class Feedback {
       drawText(ctx, f.text, Math.round(f.x), Math.round(f.y) - dy - 1, TEXT.body, f.color);
     }
     this.toasts.forEach((t, i) => {
-      const y = 30 + i * 18;
+      const y = screenH - 96 - i * 18;
       const w = textWidth(t.text, TEXT.body) + SPACE.lg * 2;
       const x = Math.floor((screenW - w) / 2);
       fillRect(ctx, x, y, w, 16, ROLE.edge);

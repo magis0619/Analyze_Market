@@ -5,7 +5,8 @@ import { drawNineSlice, drawSprOr, fillRect, fillScrim, strokeRect1 } from '../r
 import { drawText, drawTextCentered, drawTextRight, wrapText } from '../render/font';
 import { THEME } from './theme';
 import { COLORS } from '../render/palette';
-import { drawBtn, hitBtn, type Btn } from './widgets';
+import { Feedback, drawButton, drawHeader, hitButton, type Button } from './components';
+import { ROLE } from './tokens';
 import { jobDef, retreatRuleDef } from '../data/jobs';
 import { stageDef } from '../data/stages';
 import { sfx } from '../render/audio';
@@ -32,8 +33,11 @@ export class ReportScreen implements GameScreen {
   private result: RunResult | null;
   private effects = new Effects();
   private t = 0;
-  private nextBtn: Btn = { x: 12, y: VH - 46, w: VW - 24, h: 38, label: '', accent: true };
+  private nextBtn: Button = { x: 12, y: VH - 46, w: VW - 24, h: 38, label: '', accent: true };
   private died: boolean;
+  private fb = new Feedback();
+  /** 稼ぎの演出を出したか（1回だけ） */
+  private announced = false;
 
   constructor(private nav: Nav, private dispatchId: string) {
     this.result = nav.state.data.results[dispatchId] ?? null;
@@ -49,6 +53,21 @@ export class ReportScreen implements GameScreen {
   update(dt: number): void {
     this.t += dt;
     this.effects.update(dt);
+    this.fb.update(dt);
+
+    // §8「数値変化をイベントとして扱う」。
+    // 帰還して初めてレポートを開いた1回だけ、稼ぎを数字で立てる。
+    // 毎フレーム動かすものではないので、一度出したら二度と出さない。
+    if (!this.announced && this.t > 0.35) {
+      this.announced = true;
+      const r = this.result;
+      if (r && r.outcome !== 'death') {
+        if (r.gold > 0) this.fb.float(VW - 96, 44, r.gold, 'G');
+        if (r.loot.length > 0) this.fb.notify(`未鑑定品 ${r.loot.length}個`, ROLE.gold);
+      } else if (r) {
+        this.fb.notify('装備2点を失った', ROLE.negative);
+      }
+    }
   }
 
   draw(ctx: CanvasRenderingContext2D): void {
@@ -57,17 +76,18 @@ export class ReportScreen implements GameScreen {
     if (!r) {
       drawTextCentered(ctx, 'レポートがない', VW / 2, 200, 12, THEME.dim);
       this.nextBtn.label = '拠点へ';
-      drawBtn(ctx, this.nextBtn, 12);
+      drawButton(ctx, this.nextBtn, 12);
       return;
     }
 
     const d = this.nav.state.dispatchInfo(this.dispatchId);
     const stage = stageDef(d?.stageId ?? 1);
 
-    // ヘッダ
-    fillRect(ctx, 0, 0, VW, 26, THEME.panel);
-    drawText(ctx, '帰還レポート', PAD, 8, 12, THEME.text);
-    drawTextRight(ctx, stage.name, VW - PAD, 8, 12, THEME.dim);
+    drawHeader(ctx, VW, {
+      title: '帰還レポート',
+      gold: this.nav.state.data.gold,
+      meta: stage.name
+    });
 
     let y = 30;
     y = this.drawOutcome(ctx, r, y);
@@ -99,10 +119,12 @@ export class ReportScreen implements GameScreen {
 
     this.nextBtn.label = r.outcome === 'death' ? '拠点へ戻る'
       : r.loot.length > 0 ? `未鑑定品 ${r.loot.length}個を開封する` : '拠点へ戻る';
-    drawBtn(ctx, this.nextBtn, 12);
+    drawButton(ctx, this.nextBtn, 12);
 
     this.effects.applyDesaturate(ctx, 0, 26, VW, VH - 26);
     this.effects.drawParticles(ctx);
+    // §6 の深さ: 通知と飛ぶ数字は必ず最前面
+    this.fb.draw(ctx, VW, VH);
   }
 
   /** 結果1行。戦死のときだけ帯を敷いて、他の回と取り違えようがなくする。 */
@@ -420,7 +442,7 @@ export class ReportScreen implements GameScreen {
   }
 
   pointerDown(px: number, py: number): void {
-    if (!hitBtn(this.nextBtn, px, py)) return;
+    if (!hitButton(this.nextBtn, px, py)) return;
     const st = this.nav.state;
     st.data.inbox = st.data.inbox.filter(id => id !== this.dispatchId);
     st.save();

@@ -5,12 +5,16 @@ import { drawNineSlice, drawSpr, drawSprOr, fillRect, fillScrim, hasSpr, strokeR
 import { drawText, drawTextCentered, drawTextRight } from '../render/font';
 import { THEME } from './theme';
 import { COLORS } from '../render/palette';
-import { inRect } from './widgets';
+
 import { jobDef } from '../data/jobs';
 import { stageDef } from '../data/stages';
 import { sfx } from '../render/audio';
 import { itemIconName } from './itemview';
-import { drawBtn, hitBtn, type Btn } from './widgets';
+import {
+  Feedback, drawBadge, drawButton, drawHeader, drawPanel, drawProgress,
+  hitButton, inRect, type Button
+} from './components';
+import { ROLE, SPACE, TEXT } from './tokens';
 import { STAGES } from '../data/stages';
 
 // 拠点（§4.1）。プレイヤーが操作する唯一の場所。
@@ -56,14 +60,31 @@ const MENU_GAP = 4;
 export class BaseScreen implements GameScreen {
   private t = 0;
   /** 派遣枠を買うボタン。位置は毎フレーム描画時に決まる */
-  private slotBtn: Btn = { x: 0, y: 0, w: 0, h: 0, label: '', accent: true };
+  private slotBtn: Button = { x: 0, y: 0, w: 0, h: 0, label: '', accent: true };
   private slotBtnVisible = false;
+  /** 取得・購入のフィードバック（§8） */
+  private fb = new Feedback();
+  /** 直前フレームの所持金。増減を検知して数字を浮かせる */
+  private lastGold = -1;
 
   constructor(private nav: Nav) {}
 
   update(dt: number): void {
     this.t += dt;
-    this.nav.state.tick(this.nav.now());
+    const st = this.nav.state;
+    const inboxBefore = st.data.inbox.length;
+    st.tick(this.nav.now());
+    this.fb.update(dt);
+
+    // §8「数値変化をイベントとして扱う」。
+    // 帰還は画面を見ていない間にも起こるので、拠点に居る間に起きた分だけ知らせる。
+    if (this.lastGold >= 0 && st.data.gold !== this.lastGold) {
+      this.fb.float(VW - 96, 44, st.data.gold - this.lastGold, 'G');
+    }
+    this.lastGold = st.data.gold;
+    if (st.data.inbox.length > inboxBefore) {
+      this.fb.notify('冒険者が帰還した', ROLE.progress);
+    }
   }
 
   private jobs(): JobId[] {
@@ -92,14 +113,13 @@ export class BaseScreen implements GameScreen {
     const st = this.nav.state;
     fillRect(ctx, 0, 0, VW, VH, THEME.bg);
 
-    // ヘッダ
-    fillRect(ctx, 0, 0, VW, 26, THEME.panel);
-    drawText(ctx, '拠点', 8, 5, 12, THEME.text);
-    drawSprOr(ctx, 'coin', 'star', VW - 92, 8);
-    drawTextRight(ctx, `${st.data.gold}`, VW - 8, 5, 12, THEME.gold);
-    if (st.data.tier > 1) {
-      drawTextCentered(ctx, `難易度+${st.data.tier - 1}`, VW / 2, 7, 8, THEME.red);
-    }
+    // Layer 1（§1）: 常時確認する情報。全画面で同じ帯・同じ位置
+    drawHeader(ctx, VW, {
+      title: '拠点',
+      gold: st.data.gold,
+      tier: st.data.tier,
+      running: st.data.dispatches.length
+    });
 
     this.drawScene(ctx);
 
@@ -121,6 +141,8 @@ export class BaseScreen implements GameScreen {
     this.drawProgress(ctx, restTop, VH - 20 - restTop);
 
     drawTextRight(ctx, `所持 ${st.data.inventory.length}点`, VW - 8, VH - 14, 8, THEME.dim);
+    // §6 の深さ: 通知と飛ぶ数字は必ず最前面
+    this.fb.draw(ctx, VW, VH);
     if (this.nav.timeScale !== 1) {
       drawText(ctx, `時間×${this.nav.timeScale}`, 8, VH - 14, 8, THEME.red);
     }
@@ -140,7 +162,7 @@ export class BaseScreen implements GameScreen {
     const next = st.nextSlot();
     if (next && h >= 108) {
       const ph = 52;
-      drawNineSlice(ctx, 'frame', 8, y, w, ph);
+      drawPanel(ctx, 8, y, w, ph);
       drawText(ctx, `${next.index + 1}人目の冒険者`, 16, y + 6, 8, THEME.text);
       if (!next.stageDone) {
         drawText(ctx, `ステージ${next.needStage}を踏破すると雇えるようになる`,
@@ -156,7 +178,7 @@ export class BaseScreen implements GameScreen {
           label: '雇う', accent: true, disabled: !next.affordable
         };
         this.slotBtnVisible = true;
-        drawBtn(ctx, this.slotBtn, 8);
+        drawButton(ctx, this.slotBtn, TEXT.body);
       }
       y += ph + 6;
       h -= ph + 6;
@@ -164,7 +186,7 @@ export class BaseScreen implements GameScreen {
 
     // --- 進捗 ---
     if (h < 44) return;
-    drawNineSlice(ctx, 'frame', 8, y, w, 40);
+    drawPanel(ctx, 8, y, w, 40);
     const cleared = st.data.clearedStages.length;
     const found = Object.keys(st.data.compendium).length;
     const cols: [string, string, string][] = [
@@ -275,16 +297,23 @@ export class BaseScreen implements GameScreen {
     fillRect(ctx, 0, SCENE_Y + SCENE_H - 1, VW, 1, THEME.outline);
   }
 
+  /**
+   * 派遣スロット＝設計書 §9 の「中央のイベント領域」。
+   *
+   * この作品は戦闘を見せない設計（§2）なので、プレイヤーが「ゲームが今
+   * 何をしているのか」を知る手がかりはここしかない。誰が・どこへ・あと何分か、
+   * の3つを必ず1行で読めるようにする。待機中なら「今すぐ出せる」ことを、
+   * 装備が欠けているなら「何が足りないか」を、同じ位置に出す。
+   */
   private drawSlot(ctx: CanvasRenderingContext2D, jobId: JobId, x: number, y: number): void {
     const st = this.nav.state;
     const w = VW - 16;
     const job = jobDef(jobId);
     const running = st.data.dispatches.find(d => d.jobId === jobId);
-    fillRect(ctx, x, y, w, SLOT_H, THEME.panel);
-    strokeRect1(ctx, x, y, w, SLOT_H, running ? THEME.gold : THEME.outline);
 
-    drawSprOr(ctx, JOB_SPRITE[jobId], 'portrait', x + 5, y + 8);
-    drawText(ctx, job.name, x + 24, y + 4, 8, THEME.text);
+    drawPanel(ctx, x, y, w, SLOT_H, { accent: running ? ROLE.progress : undefined });
+    drawSprOr(ctx, JOB_SPRITE[jobId], 'portrait', x + SPACE.sm, y + 8);
+    drawText(ctx, job.name, x + 24, y + SPACE.sm, TEXT.body, THEME.text);
 
     const eq = st.data.equipped[jobId];
     const weapon = st.itemById(eq.weapon);
@@ -293,21 +322,23 @@ export class BaseScreen implements GameScreen {
     if (running) {
       const p = st.progressOf(running);
       const stage = stageDef(running.stageId);
-      drawText(ctx, `${stage.name}へ潜行中`, x + 24, y + 20, 8, THEME.gold);
-      drawSprOr(ctx, 'icon_hourglass', 'icon_T1', x + w - 106, y + 3);
-      drawTextRight(ctx, `残り ${formatDuration(p.remainingSec)}`, x + w - 6, y + 5, 8, THEME.text);
-      fillRect(ctx, x + w - 104, y + 24, 98, 8, THEME.outline);
-      fillRect(ctx, x + w - 103, y + 25, Math.round(96 * p.ratio), 6, THEME.gold);
+      drawText(ctx, `${stage.name}へ潜行中`, x + 24, y + 20, TEXT.body, ROLE.progress);
+      drawSprOr(ctx, 'icon_hourglass', 'icon_T1', x + w - 108, y + 3);
+      drawTextRight(ctx, `残り ${formatDuration(p.remainingSec)}`, x + w - SPACE.md, y + 5,
+        TEXT.body, THEME.text);
+      drawProgress(ctx, x + w - 106, y + 24, 98, 8, p.ratio, ROLE.progress);
     } else if (weapon && armor) {
-      drawText(ctx, '待機中', x + 24, y + 20, 8, THEME.dim);
+      drawText(ctx, '待機中', x + 24, y + 20, TEXT.body, THEME.dim);
+      // 装備中の2点は常時確認する情報（§1 Layer 1）。ここに必ず出す
       let ix = x + w - 44;
       for (const it of [armor, weapon]) {
-        fillRect(ctx, ix, y + 11, 20, 20, THEME.outline);
+        fillRect(ctx, ix, y + 11, 20, 20, ROLE.edge);
         drawSprOr(ctx, itemIconName(it), 'icon_W1', ix + 2, y + 13);
         ix -= 24;
       }
     } else {
-      drawText(ctx, '装備が足りない', x + 24, y + 20, 8, THEME.red);
+      drawText(ctx, weapon ? '防具が無い' : armor ? '武器が無い' : '装備が足りない',
+        x + 24, y + 20, TEXT.body, ROLE.negative);
     }
   }
 
@@ -330,19 +361,23 @@ export class BaseScreen implements GameScreen {
     drawText(ctx, m.label, x + 36, y + Math.floor((MENU_H - 16) / 2) + 2, 12,
       enabled ? THEME.text : THEME.dim);
     if (m.badge > 0) {
-      // 未処理があることを赤丸で示す（モックアップの ! バッジに相当）
-      const bx = x + w - 26;
-      const by = y + Math.floor(MENU_H / 2) - 8;
-      fillRect(ctx, bx, by, 18, 16, THEME.red);
-      strokeRect1(ctx, bx, by, 18, 16, THEME.outline);
-      drawTextCentered(ctx, String(Math.min(99, m.badge)), bx + 9, by + 2, 8, THEME.text);
+      // 未処理の件数。全画面で同じ見た目のバッジを使う
+      const txt = String(Math.min(99, m.badge));
+      drawBadge(ctx, x + w - 28, y + Math.floor(MENU_H / 2) - 7, txt, ROLE.negative);
     }
   }
 
   pointerDown(px: number, py: number): void {
     const st = this.nav.state;
-    if (this.slotBtnVisible && hitBtn(this.slotBtn, px, py)) {
-      if (st.unlockSlot()) sfx('confirm'); else sfx('deny');
+    if (this.slotBtnVisible && hitButton(this.slotBtn, px, py)) {
+      const cost = st.nextSlot()?.cost ?? 0;
+      if (st.unlockSlot()) {
+        sfx('confirm');
+        this.fb.float(this.slotBtn.x, this.slotBtn.y - 4, -cost, 'G');
+        this.fb.notify('冒険者を雇った', ROLE.positive);
+      } else {
+        sfx('deny');
+      }
       return;
     }
     const top = this.menuTop();
