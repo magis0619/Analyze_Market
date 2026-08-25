@@ -1,7 +1,17 @@
-// OUTFITTER — pixel-art sprite sheet, decoded at boot into offscreen canvases.
+// DELVERS — pixel-art sprite sheet, decoded at boot into offscreen canvases.
 // Every glyph char references PALETTE in ./palette.ts ('.' = transparent).
-// Style: cross-section strata look, bold 1px dark outlines, chunky comical
-// proportions. All art here is original.
+// Style: bold 1px dark outlines, chunky comical proportions, 2-3 shades per
+// material, light from the upper left. All art here is original.
+//
+// Every object sprite carries a 1px 'o' outline all the way round (§9.2), so
+// it never sinks into the panel it is drawn on. The only sprites without one
+// are the ones where an outline would be wrong: the terrain tiles (which butt
+// up against each other), the 'ladder' rope (which tiles vertically), the
+// 'fence' rails (which tile horizontally) and 'burst' (additive light, not an
+// object). Nothing here may use the palette chars that resolve to the UI's own
+// colours -- S/Q (panel), q (panel2), N/U (bg) -- as visible paint, because
+// those are literally the background it would be drawn on; they survive only
+// inside the 9-slice chrome and the terrain tiles, where that is the point.
 
 import { PALETTE } from './palette';
 
@@ -31,119 +41,6 @@ const HERO_WALK_0: Rows = [
   '........oooo....',
 ];
 
-const HERO_WALK_1: Rows = [
-  '.....oooooo.....',
-  '....olggggGo....',
-  '....olggggGo....',
-  '....ogggGGGo....',
-  '....oGGGGGGo....',
-  '.....oooooo.....',
-  '....oBBBbno.....',
-  'ooooobbbbnooooo.',
-  'ofrrobbbbnorrfo.',
-  'ooooobbbbnooooo.',
-  '....obnnnno.....',
-  '....ooooooo.....',
-  '....oCo.oCo.....',
-  '....oCo.oCo.....',
-  '...onno.onno....',
-  '...oooo.oooo....',
-];
-
-const HERO_WALK_2: Rows = [
-  '.....oooooo.....',
-  '....olggggGo....',
-  '....olggggGo....',
-  '....ogggGGGo....',
-  '....oGGGGGGo....',
-  '.....oooooooooo.',
-  '....oBBBbnorrfo.',
-  '....obbbbnooooo.',
-  '....obbbbno.....',
-  'ooooobbbbno.....',
-  'ofrrobnnnno.....',
-  'ooooooooooo.....',
-  '....oCo.oCo.....',
-  '....oCo.onno....',
-  '...onno.oooo....',
-  '...oooo.........',
-];
-
-const HERO_WALK_3: Rows = [
-  '................',
-  '.....oooooo.....',
-  '....olggggGo....',
-  '....olggggGo....',
-  '....ogggGGGo....',
-  '....oGGGGGGo....',
-  '.....oooooo.....',
-  '....oBBBbno.....',
-  'ooooobbbbnooooo.',
-  'ofrrobbbbnorrfo.',
-  'ooooobbbbnooooo.',
-  '....obnnnno.....',
-  '....ooooooo.....',
-  '....oCo.oCo.....',
-  '...onno.onno....',
-  '...oooo.oooo....',
-];
-
-const HERO_MINE_0: Rows = [
-  '......ooooooo...',
-  '.....olggggGo...',
-  '.....oooonooo...',
-  '........ono.....',
-  '..ooooooono.....',
-  '.olggggGofo.....',
-  '.ogGGffoono.....',
-  '..obbrroono.....',
-  '..obbrroooo.....',
-  '..obbrro........',
-  '..obnnro........',
-  '..onnrRo........',
-  '..oCooCo........',
-  '..onoonno.......',
-  '..ooooooo.......',
-  '................',
-];
-
-const HERO_MINE_1: Rows = [
-  '................',
-  '................',
-  '................',
-  '................',
-  '..oooooo........',
-  '.olggggGo.......',
-  '.ogGGffoooooogo.',
-  '..obbrrffnnnogo.',
-  '..obbrroooooogo.',
-  '..obbrro....oGo.',
-  '..obnnro....oGo.',
-  '..onnrRo....ooo.',
-  '..oCooCo........',
-  '..onoonno.......',
-  '..ooooooo.......',
-  '................',
-];
-
-const HERO_HIT: Rows = [
-  '................',
-  '......oooooo....',
-  '.....olggggGo...',
-  '.....olggggGo...',
-  '.....ogggGGGo...',
-  '.....oGGGGGGo...',
-  '......oooooo....',
-  'ooooooBBBbnooooo',
-  'offrrobbbbnorrfo',
-  'ooooooobbbnooooo',
-  '.....obnnnno....',
-  '.....ooooooo....',
-  '....oCo...oCo...',
-  '...onno..onno...',
-  '...oooo..oooo...',
-  '................',
-];
 
 const HERO_DEAD: Rows = [
   '................',
@@ -164,26 +61,6 @@ const HERO_DEAD: Rows = [
   '................',
 ];
 
-// Startled reaction: both arms thrown straight up, legs spread — the
-// surprise reads from the posture alone (no "!" glyph).
-const HERO_REACT: Rows = [
-  '.ooo........ooo.',
-  '.ofoolggggGoofo.',
-  '.oroolggggGooro.',
-  '.oroogggGGGooro.',
-  '.orooGGGGGGooro.',
-  '.oro.oooooo.oro.',
-  '.orooBBBBbnooro.',
-  '.oooobbbbbnoooo.',
-  '....obbbbbno....',
-  '....obnnnnno....',
-  '....oooooooo....',
-  '....oCo..oCo....',
-  '...onno..onno...',
-  '...oooo..oooo...',
-  '................',
-  '................',
-];
 
 const PORTRAIT: Rows = [
   '....oooooooo....',
@@ -201,7 +78,7 @@ const PORTRAIT: Rows = [
   '...oooffffooo...',
   '..oorrrrrrrroo..',
   '.orrrrrrrrrrrro.',
-  '.oRRrrrrrrrrRRo.',
+  '.oooooooooooooo.',
 ];
 
 // ---------------------------------------------------------------------------
@@ -229,7 +106,8 @@ const LADDER: Rows = [
 ];
 
 // ---------------------------------------------------------------------------
-// Equipment icons (shop shelf items, 16x16, 1px outline).
+// Generic equipment icons (16x16, 1px outline). itemIconName() prefers the
+// per-base art further down and falls back to these.
 // ---------------------------------------------------------------------------
 
 // W1 iron sword: medium straight blade, gold cross guard.
@@ -372,25 +250,6 @@ const ICON_A3: Rows = [
   '................',
 ];
 
-// A4 cloak: hanging red cape, gold clasp, notched hem.
-const ICON_A4: Rows = [
-  '......oooo......',
-  '......oyyo......',
-  '....oooooooo....',
-  '...orrrrrrrro...',
-  '...orrrrrrrRo...',
-  '..orrrrrrrrrRo..',
-  '..orrrrrrrrrRo..',
-  '..orrrrrrrrrRo..',
-  '.orrrrrrrrrrRRo.',
-  '.orrrrrrrrrrRRo.',
-  '.orrRrrRrrRrRRo.',
-  '.oRRRoRRRoRRRRo.',
-  '.oooooooooooooo.',
-  '................',
-  '................',
-  '................',
-];
 
 // T1 lantern: brass caps, glowing glass with flame.
 const ICON_T1: Rows = [
@@ -412,229 +271,11 @@ const ICON_T1: Rows = [
   '................',
 ];
 
-// T2 pickaxe: wide thin head, long straight handle.
-const ICON_T2: Rows = [
-  '..ooooooooooo...',
-  '.olggggggggggo..',
-  '..oooooonoooo...',
-  '.......ono......',
-  '.......ono......',
-  '.......ono......',
-  '.......ono......',
-  '.......ono......',
-  '.......ono......',
-  '.......ono......',
-  '.......ono......',
-  '.......ono......',
-  '.......ono......',
-  '.......ooo......',
-  '................',
-  '................',
-];
-
-// T3 rope ladder coil: tied bundle of rope wraps with a loose end.
-const ICON_T3: Rows = [
-  '................',
-  '................',
-  '................',
-  '..oooooooooooo..',
-  '..obnbBbbbnbbo..',
-  '..oooooooooooo..',
-  '..obnbBbbbnbbo..',
-  '..oooooooooooo..',
-  '..obnbBbbbnbbo..',
-  '..oooooooooooo..',
-  '..obnbBbbbnbbo..',
-  '..oooooooooooo..',
-  '..........obo...',
-  '..........obo...',
-  '..........ooo...',
-  '................',
-];
-
-// T4 potion vial: corked bottle of red salve.
-const ICON_T4: Rows = [
-  '......oooo......',
-  '......onno......',
-  '......ollo......',
-  '.....ollllo.....',
-  '....olwllllo....',
-  '....owrrrRlo....',
-  '....olrrrRlo....',
-  '....olrrrRlo....',
-  '....olrRRRlo....',
-  '....olRRRRlo....',
-  '.....oooooo.....',
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-];
 
 // ---------------------------------------------------------------------------
 // Event icons (16x16 emblems, 1px outline).
 // ---------------------------------------------------------------------------
 
-// Dark side tunnel: dirt arch around a black opening.
-const EV_CAVE: Rows = [
-  '................',
-  '................',
-  '....oooooooo....',
-  '..oobbbbbbbboo..',
-  '.obbbooooooobbo.',
-  '.obboSSSSSSobbo.',
-  '.obboSSSSSSobbo.',
-  '.obboSSSSSSobbo.',
-  '.obboSSSSSSobbo.',
-  '.obboSSSSSSobbo.',
-  '.obboSSSSSSobbo.',
-  '.oooooooooooooo.',
-  '................',
-  '................',
-  '................',
-  '................',
-];
-
-// Goblin face: green, pointy ears, yellow eyes, fanged grin.
-const EV_GOBLIN: Rows = [
-  '................',
-  '................',
-  '.oo..oooooo..oo.',
-  '.oeooeeeeeeooeo.',
-  '..oeeeeeeeeeeo..',
-  '..oeeeeeeeeeeo..',
-  '..oeyyeeeeyyeo..',
-  '..oeyoeeeeoyeo..',
-  '..oeeeeeeeeeeo..',
-  '..oeoRRRRRRoeo..',
-  '..oeoRwRRwRoeo..',
-  '..oEeooooooeEo..',
-  '...oEEeeeeEEo...',
-  '....oooooooo....',
-  '................',
-  '................',
-];
-
-// Broken bridge: two plank stubs, a falling piece in the gap.
-const EV_BRIDGE: Rows = [
-  '................',
-  '................',
-  '................',
-  '................',
-  '.ono.........ono',
-  '.ono.........ono',
-  'oooooo.....ooooo',
-  'oBbBbo.....oBbBo',
-  'oBbbbBo...obBbBo',
-  'ooooooo...oooooo',
-  '......oooo......',
-  '......obbo......',
-  '......oooo......',
-  '................',
-  '................',
-  '................',
-];
-
-// Glinting ore vein: gray rock crossed by a gold seam, sparkle above.
-const EV_VEIN: Rows = [
-  '...........w....',
-  '..........w.w...',
-  '...........w....',
-  '................',
-  '....oooooooo....',
-  '..ooggggggggoo..',
-  '.ogggyyggggggGo.',
-  '.ogggggyyggggGo.',
-  '.oggggggyyGggGo.',
-  '.ogGgggggyyggGo.',
-  '.oGgggggggyyGGo.',
-  '..oGGgggggGGoo..',
-  '...oooooooooo...',
-  '................',
-  '................',
-  '................',
-];
-
-// Fallen merchant pack: tipped backpack, spilled coin.
-const EV_CORPSE: Rows = [
-  '................',
-  '................',
-  '................',
-  '................',
-  '...oooo.........',
-  '..obBbo.........',
-  '..obBBBbno......',
-  '..obBBBbbno.....',
-  '.obbBBbbbno.....',
-  '.obbbbbbnno.oo..',
-  '.onbbbnnnnooyyo.',
-  '.oooooooooooooo.',
-  '................',
-  '................',
-  '................',
-  '................',
-];
-
-// Vertical pit: dark ellipse hole in the ground.
-const EV_PIT: Rows = [
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-  '....oooooooo....',
-  '..oosSSSSSSsoo..',
-  '.oosSooooooSsoo.',
-  '.osSooooooooSso.',
-  '..oossoooossoo..',
-  '....oooooooo....',
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-];
-
-// Stone gatekeeper face: square golem head, glowing eyes, mouth slit.
-const EV_GOLEM: Rows = [
-  '................',
-  '................',
-  '..oooooooooooo..',
-  '.ogggggggggggGo.',
-  '.ogGGGGGGGGGGGo.',
-  '.oGovoGGGGovoGo.',
-  '.oGoooGGGGoooGo.',
-  '.ogggGggggGgggo.',
-  '.ogggggggggggGo.',
-  '.oGosssssssoGGo.',
-  '.oGGooooooooGGo.',
-  '.oGGGGGGGGGGGGo.',
-  '..oooooooooooo..',
-  '................',
-  '................',
-  '................',
-];
-
-// Poison swamp: green pool, rising bubble rings.
-const EV_SWAMP: Rows = [
-  '..........o.....',
-  '.........o.o....',
-  '..........o.....',
-  '....o...........',
-  '...o.o..........',
-  '....o...........',
-  '..oooooooooooo..',
-  '.oeeEeeeeeEeeeo.',
-  '.oeeoeeeeoeeeEo.',
-  '.oEeeeEeeeeEeeo.',
-  '.oeeEeeeeEeeEeo.',
-  '..oEEeeEEeeEEo..',
-  '...oooooooooo...',
-  '................',
-  '................',
-  '................',
-];
 
 // Trapped chest: lifted lid, toothy dark gap, gold lock.
 const EV_CHEST: Rows = [
@@ -656,354 +297,18 @@ const EV_CHEST: Rows = [
   '................',
 ];
 
-// Underground stream: banded blue water with white caps.
-const EV_WATER: Rows = [
-  '................',
-  '................',
-  '................',
-  '................',
-  '..oooooooooooo..',
-  '.ocwcccwccwccco.',
-  '.oCcccCcccCccCo.',
-  '.oCCcCCcCCcCCCo.',
-  '.oCCCuCCCuCCCCo.',
-  '.ouCuuCuuCuuCuo.',
-  '.ouuuuuuuuuuuuo.',
-  '..oooooooooooo..',
-  '................',
-  '................',
-  '................',
-  '................',
-];
-
-// Armored knight: great helm with plume and visor slit.
-const EV_KNIGHT: Rows = [
-  '.......oro......',
-  '......orro......',
-  '...oooooooooo...',
-  '..olllllllllGo..',
-  '..ollllllllgGo..',
-  '..olllllllllGo..',
-  '..oloooooooogo..',
-  '..ollllllllgGo..',
-  '..ollllllllgGo..',
-  '..olloloollgGo..',
-  '..oGlllllllGGo..',
-  '...oGGGGGGGGo...',
-  '....oooooooo....',
-  '................',
-  '................',
-  '................',
-];
-
-// Collapse: falling rock chunks with motion dashes.
-const EV_COLLAPSE: Rows = [
-  '................',
-  '..oooo..........',
-  '.oggGGo.........',
-  '.ogGGGo..oooo...',
-  '..oooo..ogggGo..',
-  '....o...ogGGGo..',
-  '....o....oooo...',
-  '......o.......o.',
-  '....ooooo.....o.',
-  '...ogggGGo......',
-  '...oGgGGGo......',
-  '....ooooo.......',
-  '..o.......o.....',
-  '..o.......o.....',
-  '................',
-  '................',
-];
-
-// Sleeping dragon: closed eye, snout, nostril, drifting z.
-const EV_DRAGON: Rows = [
-  '...........www..',
-  '.............w..',
-  '..ooooooo..www..',
-  '.orrrrrrroo.....',
-  '.orrrrrrrrrroo..',
-  '.orrooorrrrrrro.',
-  '.orrrRRrrrrrrRo.',
-  '.orrrrrrrrrroRo.',
-  '.oRRrrrrrrrrrRo.',
-  '..oRRrrrrrrrRo..',
-  '...ooooooooooo..',
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-];
-
-// Large rare crystal: teal spire with side shards.
-const EV_DEEPVEIN: Rows = [
-  '................',
-  '.......oo.......',
-  '......ovvo......',
-  '......owvvo.....',
-  '.....ovwvvo.....',
-  '.....ovwvvvo....',
-  '.....ovwvvvo....',
-  '..oo.ovvvvvo....',
-  '.ovvoovvvvvooo..',
-  '.ovvvovvvvvovvo.',
-  '.owvvovvvvvovco.',
-  '.ovvvovuvvvovco.',
-  '.oooooooooooooo.',
-  '................',
-  '................',
-  '................',
-];
-
-// Final guardian mask: gold-crowned purple face, twin glowing eyes.
-const EV_GUARDIAN: Rows = [
-  '.o....oooo....o.',
-  'oyo...oyyo...oyo',
-  'oyyo.oyyyyo.oyyo',
-  'oyyyooyyyyooyyyo',
-  '.oyyyyyyyyyyyyo.',
-  '.oPPPPPPPPPPPPo.',
-  '.oPovvoPPovvoPo.',
-  '.oPovvoPPovvoPo.',
-  '.oPPooooooooPPo.',
-  '.oqPPPqqqqPPPqo.',
-  '.oqPPooooooPPqo.',
-  '..oqPPPPPPPPqo..',
-  '...oqqqqqqqqo...',
-  '....oooooooo....',
-  '................',
-  '................',
-];
 
 // ---------------------------------------------------------------------------
 // Loot icons (16x16, 1px outline).
 // ---------------------------------------------------------------------------
 
-// L1 copper ore: gray chunk with orange copper nuggets.
-const LOOT_L1: Rows = [
-  '................',
-  '................',
-  '................',
-  '................',
-  '....ooooooo.....',
-  '...oggggggGo....',
-  '..ogttgggggGo...',
-  '..ogtggggttGo...',
-  '..oggggggttGo...',
-  '..ogGggggggGo...',
-  '..oGGgggggGGo...',
-  '...oGGGGGGGo....',
-  '....ooooooo.....',
-  '................',
-  '................',
-  '................',
-];
-
-// L2 cave mushroom: purple cap, pale stem, light spots.
-const LOOT_L2: Rows = [
-  '................',
-  '................',
-  '....oooooooo....',
-  '...opppppppPo...',
-  '..oppwpppppPPo..',
-  '..opppppwppPPo..',
-  '..oPPpppppPPPo..',
-  '..oooooooooooo..',
-  '.....owllo......',
-  '.....owllo......',
-  '.....owllo......',
-  '....owwlllo.....',
-  '....ooooooo.....',
-  '................',
-  '................',
-  '................',
-];
-
-// L3 goblin fang: curved ivory tooth.
-const LOOT_L3: Rows = [
-  '................',
-  '................',
-  '................',
-  '....oooo........',
-  '...owwwlo.......',
-  '...owwwlo.......',
-  '....owwlo.......',
-  '....owwlo.......',
-  '.....owlo.......',
-  '.....owlo.......',
-  '......owlo......',
-  '.......owo......',
-  '........oo......',
-  '................',
-  '................',
-  '................',
-];
-
-// L4 iron ore: angular block with silver flecks.
-const LOOT_L4: Rows = [
-  '................',
-  '................',
-  '................',
-  '................',
-  '...oooooooooo...',
-  '..ollGGGGGGGso..',
-  '..olGGllGGGGso..',
-  '..olGGGGGllGso..',
-  '..olGllGGGGGso..',
-  '..osGGGllGGsso..',
-  '..osssssssssso..',
-  '...oooooooooo...',
-  '................',
-  '................',
-  '................',
-  '................',
-];
-
-// L5 glowing moss: teal clump with drifting glow specks.
-const LOOT_L5: Rows = [
-  '................',
-  '................',
-  '................',
-  '................',
-  '....w.....w.....',
-  '................',
-  '....oo..oo......',
-  '...ovvoovvo.....',
-  '..ovvvvvvvvoo...',
-  '.ovvevvvevvvvo..',
-  '.ovevvevvvevvo..',
-  '.oEvvvevevvEeo..',
-  '..oEEeeEeeEEo...',
-  '...oooooooooo...',
-  '................',
-  '................',
-];
-
-// L6 old pocket watch: gold case, white face, chain.
-const LOOT_L6: Rows = [
-  '...o............',
-  '....o...........',
-  '.....o..........',
-  '......oYYo......',
-  '.....oooooo.....',
-  '...ooyyyyyyoo...',
-  '..oyowwwwwwoYo..',
-  '..oyowwwowwoYo..',
-  '..oyowwwoowoYo..',
-  '..oyowwwwwwoYo..',
-  '..oYowwwwwwoYo..',
-  '...oYYyyyyYYo...',
-  '....oYYYYYYo....',
-  '.....oooooo.....',
-  '................',
-  '................',
-];
-
-// L7 silver ore: brown rock threaded with bright silver.
-const LOOT_L7: Rows = [
-  '................',
-  '................',
-  '................',
-  '................',
-  '...oBbbbbbbno...',
-  '..oBllbbbbbbno..',
-  '..obblwlbbllno..',
-  '..obbbbllwlbno..',
-  '..onbllbbbbbno..',
-  '..onnbbbbbnnno..',
-  '...onnnnnnnno...',
-  '....oooooooo....',
-  '................',
-  '................',
-  '................',
-  '................',
-];
-
-// L8 knight crest: red shield charged with a white cross.
-const LOOT_L8: Rows = [
-  '................',
-  '................',
-  '..oooooooooooo..',
-  '.orrrrwwrrrrRo..',
-  '.orrrrwwrrrrRo..',
-  '.owwwwwwwwwwwo..',
-  '.orrrrwwrrrrRo..',
-  '.orrrrwwrrrrRo..',
-  '..orrrwwrrrRo...',
-  '..orrrwwrrrRo...',
-  '...orrwwrrRo....',
-  '....orwwrRo.....',
-  '.....orro.......',
-  '......oo........',
-  '................',
-  '................',
-];
-
-// L9 dragon scale: gold-rimmed crimson scale, wet shine.
-const LOOT_L9: Rows = [
-  '................',
-  '................',
-  '.......oo.......',
-  '......oyyo......',
-  '.....oyrryo.....',
-  '....oyrrrryo....',
-  '...oyrrwrrryo...',
-  '...oyrwrrrryo...',
-  '..oyrrrrrrrryo..',
-  '..oyrrrrRRrryo..',
-  '..oyrRRRRRRryo..',
-  '..oyyRRRRRRyyo..',
-  '...oyyyyyyyyo...',
-  '....oooooooo....',
-  '................',
-  '................',
-];
-
-// L10 abyssal crystal: faceted blue gem with teal edge glow.
-const LOOT_L10: Rows = [
-  '................',
-  '................',
-  '.......oo.......',
-  '......ovvo......',
-  '.....ovwcco.....',
-  '....ovwcccco....',
-  '...ovwccccuco...',
-  '..ovccccccuuco..',
-  '...occccuuuco...',
-  '....occuuuco....',
-  '.....ocuuco.....',
-  '......ocuo......',
-  '.......oo.......',
-  '................',
-  '................',
-  '................',
-];
-
-// L11 guardian core: gold-caged orb with a white-hot heart.
-const LOOT_L11: Rows = [
-  '................',
-  '................',
-  '................',
-  '...ooyyyyyyoo...',
-  '..oyyoPPPPoyyo..',
-  '..oyoPPvvPPoyo..',
-  '.oyoPPvwwvPPoyo.',
-  '.oyoPvwwwwvPoyo.',
-  '.oyoPvwwwwvPoyo.',
-  '.oyoPPvvvvPPoyo.',
-  '..oyoPPPPPPoyo..',
-  '..oYyoqqqqoyYo..',
-  '...ooYYYYYYoo...',
-  '.....oooooo.....',
-  '................',
-  '................',
-];
 
 // ---------------------------------------------------------------------------
 // Misc UI / markers.
 // ---------------------------------------------------------------------------
 
+// Death marker for the return report, which asks for it by name; the 8x8
+// icon_skull_small further down is the inline version used inside text rows.
 const SKULL: Rows = [
   '................',
   '................',
@@ -1056,117 +361,12 @@ const HEART: Rows = [
   '........',
 ];
 
-const WEIGHT_PIP: Rows = [
-  'oooo',
-  'olgo',
-  'ogGo',
-  'oooo',
-];
 
 // ---------------------------------------------------------------------------
 // Wall decor: transparent 16x16 props scattered inside the shaft to add
 // points of interest, outlined like characters.
 // ---------------------------------------------------------------------------
 
-// Cluster of two glowing-blue cave mushrooms.
-const DECO_MUSHROOM: Rows = [
-  '................',
-  '................',
-  '................',
-  '..ooooo.........',
-  '.occccco........',
-  '.ocwccco........',
-  '.occcwco........',
-  '.occccCo........',
-  '.ooooooo.ooo....',
-  '...ollo.occco...',
-  '...ollo.ocwCo...',
-  '...ollo.ooooo...',
-  '...ollo..olo....',
-  '...oooo..ooo....',
-  '................',
-  '................',
-];
-
-// Old bone half-buried in the shaft wall.
-const DECO_BONE: Rows = [
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-  '.oo........oo...',
-  'owwoooooooowwo..',
-  'owwwwwwwwwlllo..',
-  'owwoooooooowwo..',
-  '.oo........oo...',
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-];
-
-// Small teal crystal pair sprouting from the rock.
-const DECO_CRYSTAL: Rows = [
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-  '.....oo.........',
-  '....ovvo........',
-  '....owvo........',
-  '...ovwvvo..oo...',
-  '...ovwvvo.ovvo..',
-  '...ovvvvo.ovco..',
-  '...ovvcvo.ovco..',
-  '...oooooo.oooo..',
-  '................',
-  '................',
-];
-
-// Roots dangling from the tunnel ceiling (touches the top edge).
-const DECO_ROOT: Rows = [
-  '...ono...ono....',
-  '...ono...ono....',
-  '...ono...onno...',
-  '...onno...ono...',
-  '....ono...ono...',
-  '....ono...ono...',
-  '....ono...ono...',
-  '....ono...ooo...',
-  '....ono.........',
-  '....ono.........',
-  '....obo.........',
-  '....ooo.........',
-  '................',
-  '................',
-  '................',
-  '................',
-];
-
-// Luminous moss patch with drifting spores.
-const DECO_GLOW: Rows = [
-  '................',
-  '................',
-  '................',
-  '................',
-  '....w...........',
-  '............w...',
-  '...oooooo.......',
-  '..ovvvvvvo......',
-  '.ovvwwvvvvo.....',
-  '.ovwwwvevvvo....',
-  '.ovvwvvvevvo....',
-  '..ovvvevvvo.....',
-  '..oEevvEeo......',
-  '...oooooo.......',
-  '................',
-  '................',
-];
 
 // ---------------------------------------------------------------------------
 // Terrain tiles: every 16x16 tile is ONE diggable block. Structure (matching
@@ -1221,103 +421,6 @@ const TILE_TEMPLATE_B: Rows = [
 // point of interest — s0 moss+root, s1 iron glint, s2 amethyst grains,
 // s3 pale glow spots. These use palette chars directly.
 
-const TILE_S0_C: Rows = [
-  'NNNNNNNNNNNNNNNN',
-  'NBBBBBBBBBBBBBnN',
-  'NBeeebbbbeeebbnN',
-  'NBEeebbbbbEebbnN',
-  'NBbbbnbbbbbbbbnN',
-  'NBbbbnbbbbBbbbnN',
-  'NBbbbbnbbbbbbbnN',
-  'NBbbbbnbbbbbbbnN',
-  'NBbnbbnbbbbbbbnN',
-  'NBbbbbbnbbbbbbnN',
-  'NBbbbbbbbbnbbbnN',
-  'NBbbBbbbbbbbbbnN',
-  'NBbbbbbbbbbbbbnN',
-  'NBbbbbbbnbbbbbnN',
-  'NBnnnnnnnnnnnnnN',
-  'NNNNNNNNNNNNNNNN',
-];
-
-const TILE_S1_C: Rows = [
-  'SSSSSSSSSSSSSSSS',
-  'SgggggggggggggsS',
-  'SgGGGGGGGGGGGGsS',
-  'SgGGllGGGGGGGGsS',
-  'SgGGGlGGGGGwGGsS',
-  'SgGGGGGGGGwwwGsS',
-  'SgGGGGGGGGGwGGsS',
-  'SgGsGGGGGGGGGGsS',
-  'SgGGGGGllGGGGGsS',
-  'SgGGGGGGllGGGGsS',
-  'SgGGGGGGGGGGsGsS',
-  'SgGGGGGGGGGGGGsS',
-  'SglGGGGGGGGGGGsS',
-  'SgGGGGGGGGGGGGsS',
-  'SgssssssssssssSS',
-  'SSSSSSSSSSSSSSSS',
-];
-
-const TILE_S2_C: Rows = [
-  'QQQQQQQQQQQQQQQQ',
-  'QpppppppppppppqQ',
-  'QpPPPPPPPPPPPPqQ',
-  'QpPPppPPPPPPPPqQ',
-  'QpPPpwpPPPPPPPqQ',
-  'QpPPPpPPPPqPPPqQ',
-  'QpPPPPPPPPPPPPqQ',
-  'QpPPPPPPPppPPPqQ',
-  'QpPPPPPPPpwpPPqQ',
-  'QpPPPPPPPPpPPPqQ',
-  'QpPqPPPPPPPPPPqQ',
-  'QpPPPPPPPPPPPPqQ',
-  'QpPPPPppPPPPPPqQ',
-  'QpPPPPPPPPPPPPqQ',
-  'QpqqqqqqqqqqqqqQ',
-  'QQQQQQQQQQQQQQQQ',
-];
-
-const TILE_S3_C: Rows = [
-  'UUUUUUUUUUUUUUUU',
-  'UcccccccccccccuU',
-  'UcCCCCCCCCCCCCuU',
-  'UcCCvvCCCCCCCCuU',
-  'UcCvwwvCCCCCCCuU',
-  'UcCCvvCCCCCuCCuU',
-  'UcCCCCCCCCCCCCuU',
-  'UcCCCCCCCvCCCCuU',
-  'UcCCCCCCCCCCCCuU',
-  'UcCCCCCCCCvvCCuU',
-  'UcCCCCCCCvwvCCuU',
-  'UcCuCCCCCCvCCCuU',
-  'UcCCCCCCCCCCCCuU',
-  'UcCCCCCCCCCCCCuU',
-  'UcuuuuuuuuuuuuuU',
-  'UUUUUUUUUUUUUUUU',
-];
-
-// Shaft walls: bgDark base, faint sediment dashes (L = bgLight) and a few
-// near-black diagonal pick-scratch hatches ('o' passes through the remap)
-// so the shaft reads as hand-dug.
-const WALL_TEMPLATE: Rows = [
-  'dddddddddddddddd',
-  'dddddddddddddddd',
-  'dLLddddddddddLLd',
-  'ddddddddddoddddd',
-  'dddddddddodddddd',
-  'ddddddddoddddddd',
-  'dddddddoddLLdddd',
-  'dddddddddddddddd',
-  'ddLLLddddddddddd',
-  'dddddodddddddddd',
-  'ddddoddddddLLddd',
-  'dddodddddddddddd',
-  'dddddddddddddddd',
-  'ddddddddLLLddddd',
-  'dddddddddddddddd',
-  'dddddddddddddddd',
-];
 
 // stratum -> palette chars for [earth, earthDark, accent] and [bgDark, bgLight]
 const STRATUM_TILE_CHARS: readonly (readonly [string, string, string])[] = [
@@ -1326,12 +429,8 @@ const STRATUM_TILE_CHARS: readonly (readonly [string, string, string])[] = [
   ['P', 'q', 'p'], // 2 深層 purple rock
   ['C', 'u', 'c'], // 3 深淵 abyssal blue
 ];
-const STRATUM_WALL_CHARS: readonly (readonly [string, string])[] = [
-  ['N', 'n'],
-  ['S', 's'],
-  ['Q', 'q'],
-  ['U', 'u'],
-];
+// mortar seam per stratum (drawn over the screen background, not over panels)
+const STRATUM_MORTAR: readonly string[] = ['N', 'S', 'Q', 'U'];
 
 function remap(rows: Rows, map: Record<string, string>): string[] {
   return rows.map((row) => {
@@ -1342,13 +441,9 @@ function remap(rows: Rows, map: Record<string, string>): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// 9-slice UI chrome and the two large set pieces, assembled procedurally so
-// the repeated edges stay perfectly uniform.
+// 9-slice UI chrome, assembled procedurally so the repeated edges stay
+// perfectly uniform.
 // ---------------------------------------------------------------------------
-
-function dots(count: number): string {
-  return '.'.repeat(count);
-}
 
 function buildFrame(): string[] {
   // Rings from the edge inward: o, l (top/left) or G (bottom/right), s, o;
@@ -1380,176 +475,6 @@ function buildButton(): string[] {
   return rows;
 }
 
-function buildBalance(): string[] {
-  // Merchant's balance, side view: brass beam and pole, two hanging pans,
-  // wooden base.
-  const rows: string[] = [];
-  const empty = dots(32);
-  rows.push(empty, empty, empty);
-  rows.push(dots(14) + 'oooo' + dots(14));
-  rows.push(dots(13) + 'ooyyoo' + dots(13));
-  rows.push(dots(13) + 'oyyyyo' + dots(13));
-  rows.push(dots(2) + 'o'.repeat(28) + dots(2));
-  rows.push(dots(2) + 'o' + 'y'.repeat(26) + 'o' + dots(2));
-  rows.push(dots(2) + 'o' + 'Y'.repeat(26) + 'o' + dots(2));
-  rows.push(dots(2) + 'o'.repeat(28) + dots(2));
-  const chains = dots(4) + 'o' + dots(9) + 'oyYo' + dots(9) + 'o' + dots(4);
-  for (let i = 0; i < 4; i++) rows.push(chains);
-  rows.push('oooooooooo' + dots(4) + 'oyYo' + dots(4) + 'oooooooooo');
-  rows.push('oYyyyyyyYo' + dots(4) + 'oyYo' + dots(4) + 'oYyyyyyyYo');
-  rows.push('.oYYYYYYo.' + dots(4) + 'oyYo' + dots(4) + '.oYYYYYYo.');
-  rows.push('..oooooo..' + dots(4) + 'oyYo' + dots(4) + '..oooooo..');
-  const pole = dots(14) + 'oyYo' + dots(14);
-  for (let i = 0; i < 8; i++) rows.push(pole);
-  rows.push(dots(10) + 'o'.repeat(12) + dots(10));
-  rows.push(dots(9) + 'o' + 'b'.repeat(12) + 'o' + dots(9));
-  rows.push(dots(8) + 'o' + 'b'.repeat(14) + 'o' + dots(8));
-  rows.push(dots(8) + 'o' + 'n'.repeat(14) + 'o' + dots(8));
-  rows.push(dots(8) + 'o'.repeat(16) + dots(8));
-  rows.push(empty);
-  return rows;
-}
-
-function buildLetter(): string[] {
-  // Folded parchment with envelope flap creases and a red wax seal.
-  const grid: string[][] = [];
-  for (let y = 0; y < 32; y++) {
-    const row: string[] = [];
-    for (let x = 0; x < 32; x++) row.push('.');
-    grid.push(row);
-  }
-  const put = (y: number, x: number, ch: string): void => {
-    const row = grid[y];
-    if (row && x >= 0 && x < 32) row[x] = ch;
-  };
-  // paper body rows 6-25, cols 3-28
-  for (let y = 6; y <= 25; y++) {
-    for (let x = 3; x <= 28; x++) {
-      const edge = y === 6 || y === 25 || x === 3 || x === 28;
-      put(y, x, edge ? 'o' : 'w');
-    }
-  }
-  // soft shadow along the bottom inner edge
-  for (let x = 4; x <= 27; x++) put(24, x, 'l');
-  // envelope flap creases from the top corners toward the seal
-  for (let i = 0; i <= 9; i++) {
-    put(7 + i, 4 + i, 'l');
-    put(7 + i, 27 - i, 'l');
-  }
-  // horizontal fold crease below the seal
-  for (let x = 4; x <= 27; x++) put(21, x, 'l');
-  // wax seal (rows 15-20, cols 13-18)
-  const seal = ['.oooo.', 'orrrro', 'orRRro', 'orRRro', 'orrrro', '.oooo.'];
-  for (let sy = 0; sy < seal.length; sy++) {
-    const srow = seal[sy];
-    if (!srow) continue;
-    for (let sx = 0; sx < srow.length; sx++) {
-      const ch = srow[sx];
-      if (ch && ch !== '.') put(15 + sy, 13 + sx, ch);
-    }
-  }
-  return grid.map((row) => row.join(''));
-}
-
-function buildWeb(): string[] {
-  // Corner spiderweb anchored top-left: radial spokes plus two arcs of pale
-  // silk, with dew glints at crossings. Silk strands are 1px pale lines
-  // (a full dark outline would double their width and clog the weave).
-  const size = 16;
-  const grid: string[][] = [];
-  for (let y = 0; y < size; y++) {
-    const row: string[] = [];
-    for (let x = 0; x < size; x++) row.push('.');
-    grid.push(row);
-  }
-  const put = (y: number, x: number, ch: string): void => {
-    const row = grid[y];
-    if (row && y >= 0 && y < size && x >= 0 && x < size) row[x] = ch;
-  };
-  for (let i = 0; i <= 11; i++) {
-    put(0, i, 'l'); // spoke along the ceiling
-    put(i, 0, 'l'); // spoke down the wall
-    if (i >= 1 && i <= 10) put(i, i, 'l'); // diagonal spoke
-  }
-  for (const r of [6, 11]) {
-    for (let deg = 0; deg <= 90; deg += 6) {
-      const rad = (deg * Math.PI) / 180;
-      put(Math.round(r * Math.sin(rad)), Math.round(r * Math.cos(rad)), 'l');
-    }
-  }
-  put(0, 6, 'w');
-  put(6, 6, 'w');
-  put(11, 0, 'w');
-  return grid.map((row) => row.join(''));
-}
-
-function buildLogo(): string[] {
-  // "OUTFITTER" logotype: a 5x11 letterform set composed with 1px gaps,
-  // integer-scaled x2 (106x22), two-tone gold shading, then auto-traced
-  // with a continuous 1px outline -> 108x24.
-  const F: Record<string, readonly string[]> = {
-    O: ['.yyy.', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', '.yyy.'],
-    U: ['y...y', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', 'y...y', '.yyy.'],
-    T: ['yyyyy', '..y..', '..y..', '..y..', '..y..', '..y..', '..y..', '..y..', '..y..', '..y..', '..y..'],
-    F: ['yyyyy', 'y....', 'y....', 'y....', 'yyyy.', 'y....', 'y....', 'y....', 'y....', 'y....', 'y....'],
-    I: ['yyyyy', '..y..', '..y..', '..y..', '..y..', '..y..', '..y..', '..y..', '..y..', '..y..', 'yyyyy'],
-    E: ['yyyyy', 'y....', 'y....', 'y....', 'yyyy.', 'y....', 'y....', 'y....', 'y....', 'y....', 'yyyyy'],
-    R: ['yyyy.', 'y...y', 'y...y', 'y...y', 'yyyy.', 'y.y..', 'y..y.', 'y..y.', 'y...y', 'y...y', 'y...y'],
-  };
-  const word = 'OUTFITTER';
-  const glyphW = 5;
-  const glyphH = 11;
-  const gap = 1;
-  const textW = word.length * glyphW + (word.length - 1) * gap;
-  const outW = textW * 2 + 2;
-  const outH = glyphH * 2 + 2;
-  const grid: string[][] = [];
-  for (let y = 0; y < outH; y++) {
-    const row: string[] = [];
-    for (let x = 0; x < outW; x++) row.push('.');
-    grid.push(row);
-  }
-  for (let li = 0; li < word.length; li++) {
-    const glyph = F[word[li] ?? ''];
-    if (!glyph) continue;
-    const ox = li * (glyphW + gap);
-    for (let gy = 0; gy < glyphH; gy++) {
-      const grow = glyph[gy];
-      if (!grow) continue;
-      for (let gx = 0; gx < glyphW; gx++) {
-        if (grow[gx] !== 'y') continue;
-        for (let sy = 0; sy < 2; sy++) {
-          for (let sx = 0; sx < 2; sx++) {
-            const y = 1 + gy * 2 + sy;
-            const x = 1 + (ox + gx) * 2 + sx;
-            const row = grid[y];
-            if (row) row[x] = gy * 2 + sy >= 12 ? 'Y' : 'y';
-          }
-        }
-      }
-    }
-  }
-  // trace a continuous 1px outline around every stroke (8-neighborhood)
-  for (let y = 0; y < outH; y++) {
-    const row = grid[y];
-    if (!row) continue;
-    for (let x = 0; x < outW; x++) {
-      if (row[x] !== '.') continue;
-      let touch = false;
-      for (let dy = -1; dy <= 1 && !touch; dy++) {
-        for (let dx = -1; dx <= 1 && !touch; dx++) {
-          const ny = y + dy;
-          const nx = x + dx;
-          const nrow = grid[ny];
-          const nch = nrow ? nrow[nx] : undefined;
-          if (nch === 'y' || nch === 'Y') touch = true;
-        }
-      }
-      if (touch) row[x] = 'o';
-    }
-  }
-  return grid.map((row) => row.join(''));
-}
 
 // ---------------------------------------------------------------------------
 // Sprite table (insertion order = debugSpriteNames() order).
@@ -1557,14 +482,7 @@ function buildLogo(): string[] {
 
 const SPRITES: Record<string, Rows> = {
   hero_walk_0: HERO_WALK_0,
-  hero_walk_1: HERO_WALK_1,
-  hero_walk_2: HERO_WALK_2,
-  hero_walk_3: HERO_WALK_3,
-  hero_mine_0: HERO_MINE_0,
-  hero_mine_1: HERO_MINE_1,
-  hero_hit: HERO_HIT,
   hero_dead: HERO_DEAD,
-  hero_react: HERO_REACT,
   portrait: PORTRAIT,
   ladder: LADDER,
   icon_W1: ICON_W1,
@@ -1574,75 +492,33 @@ const SPRITES: Record<string, Rows> = {
   icon_A1: ICON_A1,
   icon_A2: ICON_A2,
   icon_A3: ICON_A3,
-  icon_A4: ICON_A4,
   icon_T1: ICON_T1,
-  icon_T2: ICON_T2,
-  icon_T3: ICON_T3,
-  icon_T4: ICON_T4,
-  ev_cave: EV_CAVE,
-  ev_goblin: EV_GOBLIN,
-  ev_bridge: EV_BRIDGE,
-  ev_vein: EV_VEIN,
-  ev_corpse: EV_CORPSE,
-  ev_pit: EV_PIT,
-  ev_golem: EV_GOLEM,
-  ev_swamp: EV_SWAMP,
   ev_chest: EV_CHEST,
-  ev_water: EV_WATER,
-  ev_knight: EV_KNIGHT,
-  ev_collapse: EV_COLLAPSE,
-  ev_dragon: EV_DRAGON,
-  ev_deepvein: EV_DEEPVEIN,
-  ev_guardian: EV_GUARDIAN,
-  loot_L1: LOOT_L1,
-  loot_L2: LOOT_L2,
-  loot_L3: LOOT_L3,
-  loot_L4: LOOT_L4,
-  loot_L5: LOOT_L5,
-  loot_L6: LOOT_L6,
-  loot_L7: LOOT_L7,
-  loot_L8: LOOT_L8,
-  loot_L9: LOOT_L9,
-  loot_L10: LOOT_L10,
-  loot_L11: LOOT_L11,
   skull: SKULL,
   star: STAR,
   coin: COIN,
   heart: HEART,
-  weight_pip: WEIGHT_PIP,
-  deco_mushroom: DECO_MUSHROOM,
-  deco_bone: DECO_BONE,
-  deco_crystal: DECO_CRYSTAL,
-  deco_root: DECO_ROOT,
-  deco_web: buildWeb(),
-  deco_glow: DECO_GLOW,
   frame: buildFrame(),
   button: buildButton(),
-  balance: buildBalance(),
-  letter: buildLetter(),
-  logo: buildLogo(),
 };
 
-// Generated terrain: tile_s{0..3}_{a,b,c} and wall_s{0..3}.
-const ACCENT_TILES: readonly Rows[] = [TILE_S0_C, TILE_S1_C, TILE_S2_C, TILE_S3_C];
+// Generated terrain: tile_s{0..3}_{a,b}. Both variants are referenced by
+// string concatenation from base/title/report ("tile_s" + s + "_a" | "_b").
 for (let s = 0; s < 4; s++) {
   const tileChars = STRATUM_TILE_CHARS[s];
-  const wallChars = STRATUM_WALL_CHARS[s];
-  const accentTile = ACCENT_TILES[s];
-  if (!tileChars || !wallChars || !accentTile) continue;
+  const mortar = STRATUM_MORTAR[s];
+  if (!tileChars || mortar === undefined) continue;
   const [earth, earthDark, accent] = tileChars;
-  const [bgDark, bgLight] = wallChars;
-  const tileMap = { x: earth, z: earthDark, a: accent, h: accent, m: bgDark };
+  const tileMap = { x: earth, z: earthDark, a: accent, h: accent, m: mortar };
   SPRITES['tile_s' + String(s) + '_a'] = remap(TILE_TEMPLATE_A, tileMap);
   SPRITES['tile_s' + String(s) + '_b'] = remap(TILE_TEMPLATE_B, tileMap);
-  SPRITES['tile_s' + String(s) + '_c'] = accentTile;
-  SPRITES['wall_s' + String(s)] = remap(WALL_TEMPLATE, { d: bgDark, L: bgLight });
 }
 
 // ---------------------------------------------------------------------------
 // DELVERS additions. Everything below is new art for the idle-hack-and-slash
 // build: weapon/armor base types, job portraits, element pips, rarity frames,
-// stage icons, UI glyphs and the rare-drop burst. Same rules as above --
+// stage icons and paintings, the base camp, UI glyphs and the rare-drop
+// burst. Same rules as above --
 // 1px OUTLINE on characters and items, light from the upper left, 2-3 shades
 // per material, no new palette entries.
 // ---------------------------------------------------------------------------
@@ -1843,7 +719,7 @@ const JOB_SWORDSMAN: Rows = [
   '..oolllllllloo..',
   '.ollllllllllllo.',
   '.olggggggggggGo.',
-  '.oGGGGGGGGGGGGo.',
+  '.oooooooooooooo.',
 ];
 
 const JOB_GUARDIAN: Rows = [
@@ -1862,7 +738,7 @@ const JOB_GUARDIAN: Rows = [
   '.oGGGGGGGGGGGGo.',
   '..oooooooooooo..',
   'oolllllllllllloo',
-  'oGGggggggggggGGo',
+  'oooooooooooooooo',
 ];
 
 const JOB_SKIRMISHER: Rows = [
@@ -1881,7 +757,7 @@ const JOB_SKIRMISHER: Rows = [
   '..oEEeeeeeeEEo..',
   '..oobbbbbbbboo..',
   '.obbbbbbbbbbbno.',
-  '.onbbbbbbbbbnno.',
+  '.oooooooooooooo.',
 ];
 
 // --- Element pips (8x8, one hue plus outline; meant to sit in a row).
@@ -2160,8 +1036,8 @@ const STAGE_6: Rows = [
 const STAGE_7: Rows = [
   '................',
   '.oooooooooooooo.',
-  '.oGssssssssssSo.',
-  '.ossSSSSSSSSSSo.',
+  '.oGGssssssssGGo.',
+  '.ossssGGsssssso.',
   '.oooooooooooooo.',
   '.ottyyttttyytto.',
   '.oyyttttyytttto.',
@@ -2169,8 +1045,8 @@ const STAGE_7: Rows = [
   '.ottyyttyytttto.',
   '.orrttttyyrrrro.',
   '.oooooooooooooo.',
-  '.oSSSSSSSSSSsso.',
-  '.osssssssssssGo.',
+  '.ossssssGGsssso.',
+  '.oGssssssssssGo.',
   '.oooooooooooooo.',
   '................',
   '................',
@@ -2223,8 +1099,8 @@ function buildAbyss(): string[] {
     if (r > 6.0) return 'o';
     if (r > 4.7) return 'p';
     if (r > 3.4) return 'P';
-    if (r > 2.1) return 'q';
-    if (r > 1.0) return 'Q';
+    if (r > 2.1) return 'C';
+    if (r > 1.0) return 'u';
     return 'o';
   };
   for (let y = 0; y < 16; y++) {
@@ -2250,27 +1126,27 @@ function rep(ch: string, n: number): string {
 }
 
 function buildRarityCommon(): string[] {
+  // 並: a thin dull gray line. Lowest rank, so it gets the least metal.
   const rows: string[] = [];
   rows.push(rep('o', 24));
-  rows.push('o' + rep('g', 22) + 'o');
-  rows.push('og' + rep('G', 20) + 'go');
-  rows.push('ogG' + rep('o', 18) + 'Ggo');
-  const fill = 'ogGo' + rep('S', 16) + 'oGgo';
-  for (let i = 0; i < 16; i++) rows.push(fill);
-  rows.push('ogG' + rep('o', 18) + 'Ggo');
-  rows.push('og' + rep('G', 20) + 'go');
-  rows.push('o' + rep('g', 22) + 'o');
+  rows.push('o' + rep('G', 22) + 'o');
+  rows.push('oG' + rep('o', 20) + 'Go');
+  const fill = 'oGo' + rep('S', 18) + 'oGo';
+  for (let i = 0; i < 18; i++) rows.push(fill);
+  rows.push('oG' + rep('o', 20) + 'Go');
+  rows.push('o' + rep('G', 22) + 'o');
   rows.push(rep('o', 24));
   return rows;
 }
 
 function buildRarityFine(): string[] {
+  // 上質: a 4px blue bevel -- one ring more than 並.
   const rows: string[] = [];
   rows.push(rep('o', 24));
   rows.push('o' + rep('c', 22) + 'o');
   rows.push('oc' + rep('C', 20) + 'co');
   rows.push('ocC' + rep('o', 18) + 'Cco');
-  const fill = 'ocCo' + rep('u', 16) + 'oCco';
+  const fill = 'ocCo' + rep('S', 16) + 'oCco';
   for (let i = 0; i < 16; i++) rows.push(fill);
   rows.push('ocC' + rep('o', 18) + 'Cco');
   rows.push('oc' + rep('C', 20) + 'co');
@@ -2280,40 +1156,45 @@ function buildRarityFine(): string[] {
 }
 
 function buildRarityRare(): string[] {
+  // 稀少: the same 4px bevel in purple, plus a stud in every corner.
   const rows: string[] = [];
-  const stud = 'oyYo' + 'yy' + rep('S', 12) + 'yy' + 'oYyo';
-  const studLo = 'oyYo' + 'yY' + rep('S', 12) + 'Yy' + 'oYyo';
-  const fill = 'oyYo' + rep('S', 16) + 'oYyo';
+  const stud = 'opPo' + 'pp' + rep('S', 12) + 'pp' + 'oPpo';
+  const studLo = 'opPo' + 'pP' + rep('S', 12) + 'Pp' + 'oPpo';
+  const fill = 'opPo' + rep('S', 16) + 'oPpo';
   rows.push(rep('o', 24));
-  rows.push('o' + rep('y', 22) + 'o');
-  rows.push('oy' + rep('Y', 20) + 'yo');
-  rows.push('oyY' + rep('o', 18) + 'Yyo');
+  rows.push('o' + rep('p', 22) + 'o');
+  rows.push('op' + rep('P', 20) + 'po');
+  rows.push('opP' + rep('o', 18) + 'Ppo');
   rows.push(stud, studLo);
   for (let i = 0; i < 12; i++) rows.push(fill);
   rows.push(stud, studLo);
-  rows.push('oyY' + rep('o', 18) + 'Yyo');
-  rows.push('oy' + rep('Y', 20) + 'yo');
-  rows.push('o' + rep('y', 22) + 'o');
+  rows.push('opP' + rep('o', 18) + 'Ppo');
+  rows.push('op' + rep('P', 20) + 'po');
+  rows.push('o' + rep('p', 22) + 'o');
   rows.push(rep('o', 24));
   return rows;
 }
 
 function buildRarityRelic(): string[] {
+  // 遺物: gold, and a whole ring thicker than every other tier (5px against
+  // 4px and 3px) with white-lit cornerpieces, so it still outranks the rest
+  // in a screenshot with the colour taken away.
   const rows: string[] = [];
-  const gemHi = 'opPqo' + 'wv' + rep('Q', 10) + 'wv' + 'oqPpo';
-  const gemLo = 'opPqo' + 'vc' + rep('Q', 10) + 'vc' + 'oqPpo';
-  const fill = 'opPqo' + rep('Q', 14) + 'oqPpo';
-  const brow = 'o' + rep('y', 6) + rep('p', 10) + rep('y', 6) + 'o';
-  const brow2 = 'oy' + rep('Y', 4) + rep('P', 12) + rep('Y', 4) + 'yo';
-  const brow3 = 'opY' + rep('q', 18) + 'Ypo';
+  const corner = 'oyYyo' + 'wY' + rep('S', 10) + 'Yw' + 'oyYyo';
+  const cornerLo = 'oyYyo' + 'Yw' + rep('S', 10) + 'wY' + 'oyYyo';
+  const fill = 'oyYyo' + rep('S', 14) + 'oyYyo';
   rows.push(rep('o', 24));
-  rows.push(brow, brow2, brow3);
-  rows.push('opPq' + rep('o', 16) + 'qPpo');
-  rows.push(gemHi, gemLo);
+  rows.push('o' + rep('y', 22) + 'o');
+  rows.push('oy' + rep('Y', 20) + 'yo');
+  rows.push('oyY' + rep('y', 18) + 'Yyo');
+  rows.push('oyYy' + rep('o', 16) + 'yYyo');
+  rows.push(corner, cornerLo);
   for (let i = 0; i < 10; i++) rows.push(fill);
-  rows.push(gemHi, gemLo);
-  rows.push('opPq' + rep('o', 16) + 'qPpo');
-  rows.push(brow3, brow2, brow);
+  rows.push(cornerLo, corner);
+  rows.push('oyYy' + rep('o', 16) + 'yYyo');
+  rows.push('oyY' + rep('y', 18) + 'Yyo');
+  rows.push('oy' + rep('Y', 20) + 'yo');
+  rows.push('o' + rep('y', 22) + 'o');
   rows.push(rep('o', 24));
   return rows;
 }
@@ -2401,6 +1282,709 @@ Object.assign(SPRITES, {
   icon_skull_small: ICON_SKULL_SMALL,
   icon_check: ICON_CHECK,
   burst: buildBurst(),
+} satisfies Record<string, Rows>);
+
+
+// ---------------------------------------------------------------------------
+// Pixel canvas. Everything below (the 88x48 stage paintings and the lodge set)
+// is too large to hand-type as aligned string literals, so it is assembled
+// with these helpers instead: every call writes whole palette characters into
+// a fixed-size grid, so rows can never come out ragged. No rotation, no
+// blending -- only flat fills and mirrored placement.
+// ---------------------------------------------------------------------------
+
+class Px {
+  private readonly g: string[][];
+
+  constructor(readonly w: number, readonly h: number) {
+    this.g = [];
+    for (let y = 0; y < h; y++) this.g.push(new Array<string>(w).fill('.'));
+  }
+
+  set(x: number, y: number, ch: string): void {
+    if (x < 0 || y < 0 || x >= this.w || y >= this.h) return;
+    const row = this.g[y];
+    if (row) row[x] = ch;
+  }
+
+  get(x: number, y: number): string {
+    if (x < 0 || y < 0 || x >= this.w || y >= this.h) return '.';
+    return this.g[y]?.[x] ?? '.';
+  }
+
+  rect(x: number, y: number, w: number, h: number, ch: string): void {
+    for (let j = 0; j < h; j++) {
+      for (let i = 0; i < w; i++) this.set(x + i, y + j, ch);
+    }
+  }
+
+  hline(x: number, y: number, len: number, ch: string): void {
+    this.rect(x, y, len, 1, ch);
+  }
+
+  vline(x: number, y: number, len: number, ch: string): void {
+    this.rect(x, y, 1, len, ch);
+  }
+
+  /** 1px frame around the whole canvas (used by the full-bleed stage art). */
+  border(ch: string): void {
+    this.hline(0, 0, this.w, ch);
+    this.hline(0, this.h - 1, this.w, ch);
+    this.vline(0, 0, this.h, ch);
+    this.vline(this.w - 1, 0, this.h, ch);
+  }
+
+  /**
+   * Wrap every opaque pixel in a 1px dark outline (4-neighbour), so a prop
+   * dropped on the panel never melts into it (§9.2). Objects must be drawn
+   * with a 1px margin for the outline to land inside the canvas.
+   */
+  outline(): void {
+    const add: number[] = [];
+    for (let y = 0; y < this.h; y++) {
+      for (let x = 0; x < this.w; x++) {
+        if (this.get(x, y) !== '.') continue;
+        if (this.get(x - 1, y) !== '.' || this.get(x + 1, y) !== '.' ||
+            this.get(x, y - 1) !== '.' || this.get(x, y + 1) !== '.') {
+          add.push(y * this.w + x);
+        }
+      }
+    }
+    for (const i of add) this.set(i % this.w, Math.floor(i / this.w), 'o');
+  }
+
+  rows(): string[] {
+    return this.g.map((row) => row.join(''));
+  }
+}
+
+/** Deterministic 0..1 hash. §11.3 C2 forbids Math.random anywhere near art. */
+function noise(x: number, y: number, seed: number): number {
+  let h = Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(seed, 2654435761);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/** Scatter `ch` over a box at the given density. Used for rock grain. */
+function speckle(p: Px, x: number, y: number, w: number, h: number,
+                 ch: string, density: number, seed: number): void {
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < w; i++) {
+      if (noise(x + i, y + j, seed) < density) p.set(x + i, y + j, ch);
+    }
+  }
+}
+
+/** Rounded-top opening: a rectangle whose top corners are cut to a curve. */
+function arch(p: Px, cx: number, baseY: number, halfW: number, h: number, ch: string): void {
+  for (let j = 0; j < h; j++) {
+    const y = baseY - j;
+    const t = j - (h - halfW);
+    const cut = t > 0 ? Math.round(halfW - Math.sqrt(Math.max(0, halfW * halfW - t * t))) : 0;
+    for (let x = cx - halfW + cut; x <= cx + halfW - cut; x++) p.set(x, y, ch);
+  }
+}
+
+/** Tapering spike. dir = +1 hangs down from y, dir = -1 grows up from y. */
+function spike(p: Px, x: number, y: number, len: number, dir: number,
+               body: string, edge: string): void {
+  for (let i = 0; i < len; i++) {
+    const half = Math.max(0, Math.round(((len - i) * 2) / len));
+    for (let d = -half; d <= half; d++) {
+      p.set(x + d, y + i * dir, d === half && half > 0 ? edge : body);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Stage paintings (88x48) for the dispatch detail panel. One per stage of
+// §7.1; each is built from three bands -- far wall, mid-ground features and
+// the floor -- and each keeps to six palette entries (§9.3).
+// ---------------------------------------------------------------------------
+
+const SBG_W = 88;
+const SBG_H = 48;
+
+function stageBg(paint: (p: Px) => void): string[] {
+  const p = new Px(SBG_W, SBG_H);
+  paint(p);
+  p.border('o');
+  return p.rows();
+}
+
+// 1 廃坑 — timbered mine shaft. o n b B G s
+const STAGE_BG_1 = stageBg((p) => {
+  p.rect(0, 0, SBG_W, SBG_H, 'G');
+  speckle(p, 0, 0, SBG_W, 40, 's', 0.18, 11);
+  arch(p, 44, 40, 23, 31, 's');            // far: the shaft receding into dark
+  arch(p, 44, 40, 15, 22, 'n');
+  arch(p, 44, 40, 7, 14, 'o');
+  for (const bx of [8, 72]) {              // mid: two timber frames
+    p.rect(bx, 10, 8, 30, 'b');
+    p.vline(bx, 10, 30, 'o');
+    p.vline(bx + 1, 10, 30, 'B');
+    p.vline(bx + 6, 10, 30, 'n');
+    p.vline(bx + 7, 10, 30, 'o');
+    for (let y = 14; y < 40; y += 7) p.hline(bx + 1, y, 6, 'n');
+  }
+  p.rect(8, 5, 72, 5, 'b');                // lintel across the top
+  p.hline(8, 5, 72, 'o');
+  p.hline(8, 6, 72, 'B');
+  p.hline(8, 9, 72, 'o');
+  for (let k = 0; k < 8; k++) {            // corner braces
+    p.set(16 + k, 18 - k, 'B');
+    p.set(17 + k, 18 - k, 'n');
+    p.set(71 - k, 18 - k, 'B');
+    p.set(70 - k, 18 - k, 'n');
+  }
+  p.rect(0, 40, SBG_W, 8, 'b');            // ground: dirt, sleepers and rails
+  p.hline(0, 40, SBG_W, 'o');
+  speckle(p, 0, 41, SBG_W, 7, 'n', 0.22, 5);
+  for (let x = 2; x < SBG_W - 2; x += 6) p.rect(x, 43, 4, 4, 'n');
+  p.hline(0, 43, SBG_W, 'B');
+  p.hline(0, 46, SBG_W, 'B');
+});
+
+// 2 苔の回廊 — mossy stone corridor. o s G g e E
+const STAGE_BG_2 = stageBg((p) => {
+  p.rect(0, 0, SBG_W, SBG_H, 'g');
+  for (let y = 2; y < 42; y += 6) p.hline(0, y, SBG_W, 'G');   // block courses
+  for (let y = 2; y < 42; y += 6) {
+    for (let x = ((y / 6) & 1) === 0 ? 6 : 12; x < SBG_W; x += 18) p.vline(x, y, 6, 'G');
+  }
+  arch(p, 44, 42, 26, 36, 'G');            // far: corridor mouth
+  arch(p, 44, 42, 18, 27, 's');
+  arch(p, 44, 42, 9, 16, 'o');
+  for (let x = 0; x < SBG_W; x++) {        // mid: moss curtain off the ceiling
+    const len = 2 + Math.floor(noise(x, 1, 3) * 9);
+    p.vline(x, 1, len, 'e');
+    p.set(x, len, 'E');
+    if (len > 8) { p.set(x, len + 1, 'E'); p.set(x, len + 2, 'E'); }
+  }
+  for (const sx of [3, 15, 69, 81]) {      // moss creeping up the side walls
+    const h = 12 + Math.floor(noise(sx, 9, 5) * 12);
+    for (let i = 0; i < h; i++) {
+      const half = Math.max(0, 3 - Math.floor((h - i) / 6));
+      p.hline(sx - half, 40 - h + i, half * 2 + 1, 'e');
+      p.set(sx - half, 40 - h + i, 'E');
+      p.set(sx + half, 40 - h + i, 'E');
+    }
+  }
+  p.rect(0, 40, SBG_W, 8, 'G');            // ground
+  p.hline(0, 40, SBG_W, 'o');
+  speckle(p, 0, 41, SBG_W, 7, 'e', 0.22, 9);
+  speckle(p, 0, 41, SBG_W, 7, 'E', 0.16, 21);
+  for (const x of [8, 26, 40, 58, 76]) { p.rect(x, 38, 6, 3, 'e'); p.hline(x, 40, 6, 'E'); }
+});
+
+// 3 灼熱坑 — vent shafts and embers. o s G r t y
+const STAGE_BG_3 = stageBg((p) => {
+  p.rect(0, 0, SBG_W, SBG_H, 's');
+  speckle(p, 0, 0, SBG_W, 30, 'G', 0.16, 7);
+  for (const cx of [12, 33, 56, 78]) {     // far: branching cracks, lit from within
+    let x = cx;
+    for (let y = 2; y < 30; y++) {
+      p.set(x, y, 'r');
+      p.set(x + 1, y, 't');
+      if (y % 5 === 0) x += noise(x, y, 2) < 0.5 ? 1 : -1;
+      if (y === 12) { for (let k = 1; k < 7; k++) p.set(x - k, y + k, 'r'); }
+      if (y === 22) { for (let k = 1; k < 6; k++) p.set(x + k, y + k, 'r'); }
+    }
+  }
+  for (const vx of [22, 46, 68]) {         // mid: vents blasting fire upward
+    for (let i = 0; i < 16; i++) {
+      const half = Math.max(1, 4 - Math.floor(i / 4));
+      const y = 30 - i;
+      p.hline(vx - half, y, half * 2 + 1, i < 11 ? 't' : 'r');
+      if (i < 9) p.hline(vx - half + 1, y, Math.max(1, half * 2 - 1), 'y');
+    }
+    p.rect(vx - 5, 30, 11, 4, 'G');        // the vent lip
+    p.hline(vx - 5, 30, 11, 'o');
+  }
+  p.rect(0, 34, SBG_W, 14, 's');           // ground: fissured hot rock
+  p.hline(0, 34, SBG_W, 'o');
+  speckle(p, 0, 35, SBG_W, 13, 'G', 0.14, 13);
+  for (let x = 4; x < SBG_W; x += 11) {
+    p.vline(x, 36, 8, 'r');
+    p.vline(x + 1, 38, 6, 't');
+    p.set(x, 44, 'y');
+  }
+  for (const e of [[10, 8], [30, 4], [52, 14], [74, 6], [62, 20], [18, 24]]) {
+    p.set(e[0] ?? 0, e[1] ?? 0, 'y');      // embers in the air
+  }
+});
+
+// 4 氷結層 — icicles over a pale blue floor. o C c k w G
+const STAGE_BG_4 = stageBg((p) => {
+  p.rect(0, 0, SBG_W, SBG_H, 'C');
+  speckle(p, 0, 0, SBG_W, 30, 'c', 0.14, 3);
+  arch(p, 44, 38, 24, 30, 'c');            // far: frozen hollow
+  arch(p, 44, 38, 15, 21, 'C');
+  for (let x = 3; x < SBG_W - 3; x += 6) { // mid: icicles from the ceiling
+    const len = 5 + Math.floor(noise(x, 7, 4) * 11);
+    spike(p, x, 1, len, 1, 'k', 'c');
+    p.set(x, 1, 'w');
+    p.set(x, 2, 'w');
+  }
+  for (const x of [12, 70]) {              // ice pillars
+    p.rect(x, 20, 5, 18, 'k');
+    p.vline(x, 20, 18, 'w');
+    p.vline(x + 4, 20, 18, 'c');
+    spike(p, x + 2, 19, 5, -1, 'k', 'c');
+  }
+  p.rect(0, 38, SBG_W, 10, 'k');           // ground: snow crust over ice
+  p.hline(0, 38, SBG_W, 'o');
+  p.hline(0, 39, SBG_W, 'w');
+  speckle(p, 0, 41, SBG_W, 7, 'c', 0.20, 17);
+  speckle(p, 0, 40, SBG_W, 8, 'w', 0.08, 29);
+  for (const x of [24, 50, 62]) spike(p, x, 37, 4, -1, 'w', 'c');
+});
+
+// 5 雷鳴洞 — bolts arcing between charged rods. o s G y Y w
+const STAGE_BG_5 = stageBg((p) => {
+  p.rect(0, 0, SBG_W, SBG_H, 's');
+  speckle(p, 0, 0, SBG_W, 38, 'G', 0.15, 23);
+  arch(p, 44, 40, 25, 33, 'G');            // far: the cave
+  arch(p, 44, 40, 16, 23, 's');
+  arch(p, 44, 40, 8, 14, 'o');
+  const bolt = (x0: number, y0: number, len: number, dx: number, fork: number): void => {
+    let x = x0;
+    for (let i = 0; i < len; i++) {
+      p.set(x, y0 + i, 'Y');
+      p.set(x + 1, y0 + i, 'w');
+      p.set(x + 2, y0 + i, 'y');
+      p.set(x + 3, y0 + i, 'Y');
+      if (i % 3 === 2) x += dx * 2;
+      if (i === fork) {
+        let fx = x;
+        for (let k = 0; k < 9; k++) {
+          p.set(fx, y0 + i + k, 'y');
+          p.set(fx + 1, y0 + i + k, 'w');
+          if (k % 2 === 1) fx -= dx * 2;
+        }
+      }
+    }
+  };
+  bolt(16, 2, 22, 1, 9);                   // mid: two forked bolts
+  bolt(64, 2, 18, -1, 7);
+  for (const x of [4, 76]) {               // charged crystal spires
+    for (let i = 0; i < 22; i++) {
+      const half = Math.max(0, 3 - Math.floor(i / 6));
+      const y = 40 - i;
+      p.hline(x + 4 - half, y, half * 2 + 1, 'y');
+      p.vline(x + 4 - half, y, 1, 'Y');
+      p.set(x + 4 + half, y, 'Y');
+      if (half > 1) p.set(x + 4 - half + 1, y, 'w');
+    }
+    p.set(x + 4, 17, 'w');
+  }
+  p.rect(0, 40, SBG_W, 8, 'G');            // ground
+  p.hline(0, 40, SBG_W, 'o');
+  speckle(p, 0, 41, SBG_W, 7, 's', 0.20, 31);
+  for (const x of [16, 38, 62]) { p.hline(x, 42, 8, 'y'); p.hline(x + 1, 43, 6, 'Y'); }
+});
+
+// 6 腐界 — dead trees over a rotting marsh. o n b e E R
+const STAGE_BG_6 = stageBg((p) => {
+  p.rect(0, 0, SBG_W, SBG_H, 'e');
+  speckle(p, 0, 0, SBG_W, 38, 'E', 0.22, 37);
+  p.rect(0, 0, SBG_W, 5, 'n');             // far: a lid of rotten canopy
+  for (let x = 0; x < SBG_W; x += 3) {
+    p.rect(x, 5, 2, 1 + Math.floor(noise(x, 2, 6) * 7), 'n');
+  }
+  for (const t of [[12, 30], [40, 36], [70, 26]]) {  // mid: dead trunks
+    const x = t[0] ?? 0;
+    const hh = t[1] ?? 20;
+    p.rect(x, 38 - hh, 5, hh, 'n');
+    p.vline(x, 38 - hh, hh, 'b');
+    p.vline(x + 4, 38 - hh, hh, 'o');
+    for (let i = 0; i < 3; i++) {
+      const by = 38 - hh + 5 + i * 8;
+      const dir = i % 2 === 0 ? -1 : 1;
+      for (let k = 1; k <= 9; k++) {
+        const bx = dir < 0 ? x - k : x + 4 + k;
+        p.set(bx, by - Math.floor(k / 2), 'n');
+        p.set(bx, by - Math.floor(k / 2) + 1, 'n');
+      }
+    }
+  }
+  for (const vx of [6, 28, 54, 80]) {      // hanging vines of rot
+    const len = 8 + Math.floor(noise(vx, 4, 12) * 12);
+    p.vline(vx, 6, len, 'E');
+    p.set(vx, 6 + len, 'R');
+  }
+  p.rect(0, 38, SBG_W, 10, 'E');           // ground: standing marsh water
+  p.hline(0, 38, SBG_W, 'o');
+  speckle(p, 0, 39, SBG_W, 9, 'e', 0.24, 41);
+  for (const x of [4, 20, 34, 50, 66, 78]) {
+    p.rect(x, 41, 6, 3, 'R');              // rot slicks
+    p.hline(x + 1, 40, 4, 'R');
+  }
+  for (const x of [12, 46, 62]) { p.set(x, 37, 'e'); p.set(x, 36, 'E'); }
+});
+
+// 7 溶岩回廊 — a lava river cutting a basalt corridor. o s G r t y
+const STAGE_BG_7 = stageBg((p) => {
+  p.rect(0, 0, SBG_W, SBG_H, 's');
+  speckle(p, 0, 0, SBG_W, 30, 'G', 0.14, 43);
+  arch(p, 44, 32, 22, 28, 'G');            // far: corridor mouth, lit from below
+  arch(p, 44, 32, 14, 20, 's');
+  arch(p, 44, 32, 7, 12, 'r');
+  arch(p, 44, 32, 4, 8, 't');
+  for (const x of [4, 20, 62, 78]) {       // mid: basalt columns
+    p.rect(x, 2, 7, 30, 'G');
+    p.vline(x, 2, 30, 'o');
+    p.vline(x + 1, 2, 30, 'G');
+    p.vline(x + 5, 2, 30, 's');
+    p.vline(x + 6, 2, 30, 'o');
+    for (let y = 6; y < 32; y += 6) p.hline(x + 1, y, 5, 's');
+    p.rect(x - 1, 2, 9, 3, 'G');
+    p.hline(x - 1, 2, 9, 'o');
+  }
+  p.rect(0, 30, SBG_W, 4, 's');            // far bank
+  p.hline(0, 30, SBG_W, 'o');
+  p.rect(0, 34, SBG_W, 9, 'r');            // ground: the lava river
+  p.hline(0, 34, SBG_W, 'o');
+  p.rect(0, 35, SBG_W, 6, 't');
+  for (let x = 2; x < SBG_W - 4; x += 7) {
+    p.hline(x, 36 + (x % 3), 5, 'y');
+    p.set(x + 2, 39, 'y');
+  }
+  p.rect(0, 43, SBG_W, 5, 's');            // near bank
+  p.hline(0, 43, SBG_W, 'o');
+  speckle(p, 0, 44, SBG_W, 4, 'G', 0.18, 47);
+});
+
+// 8 骸の間 — a hall of bone pillars and skulls. o s G g w l
+const STAGE_BG_8 = stageBg((p) => {
+  p.rect(0, 0, SBG_W, SBG_H, 's');
+  arch(p, 44, 40, 27, 36, 'G');            // far: the hall
+  arch(p, 44, 40, 19, 27, 's');
+  arch(p, 44, 40, 10, 17, 'o');
+  speckle(p, 0, 0, SBG_W, 36, 'g', 0.10, 53);
+  for (const x of [8, 22, 62, 76]) {       // mid: rib pillars
+    p.rect(x, 6, 4, 34, 'w');
+    p.vline(x + 3, 6, 34, 'l');
+    for (let y = 9; y < 38; y += 5) { p.hline(x - 1, y, 6, 'w'); p.hline(x - 1, y + 1, 6, 'l'); }
+  }
+  p.rect(0, 40, SBG_W, 8, 'g');            // ground: bone drift
+  p.hline(0, 40, SBG_W, 'o');
+  speckle(p, 0, 41, SBG_W, 7, 'G', 0.16, 59);
+  for (const [sx, sy] of [[10, 41], [30, 43], [46, 40], [66, 42]]) {
+    const x = sx ?? 0;
+    const y = sy ?? 0;
+    p.rect(x, y, 7, 5, 'w');               // skull
+    p.hline(x, y, 7, 'o');
+    p.set(x + 1, y + 2, 'o');
+    p.set(x + 5, y + 2, 'o');
+    p.hline(x + 1, y + 4, 5, 'l');
+  }
+  for (let x = 2; x < SBG_W; x += 11) p.hline(x, 46, 8, 'l');
+});
+
+// 9 深層祭壇 — a lit altar under a purple vault. o s P p v w
+const STAGE_BG_9 = stageBg((p) => {
+  p.rect(0, 0, SBG_W, SBG_H, 's');
+  arch(p, 44, 40, 26, 36, 'P');            // far: the vault
+  arch(p, 44, 40, 17, 25, 'p');
+  arch(p, 44, 40, 9, 15, 's');
+  speckle(p, 0, 0, SBG_W, 36, 'P', 0.10, 61);
+  for (const x of [6, 74]) {               // mid: flanking pillars
+    p.rect(x, 4, 8, 36, 'P');
+    p.vline(x, 4, 36, 'p');
+    p.vline(x + 7, 4, 36, 's');
+    p.rect(x - 1, 4, 10, 3, 'p');
+    p.hline(x - 1, 4, 10, 'o');
+    for (let y = 10; y < 38; y += 6) p.hline(x, y, 8, 's');
+  }
+  p.rect(36, 30, 16, 10, 'P');             // the altar block
+  p.hline(36, 30, 16, 'o');
+  p.rect(34, 28, 20, 3, 'p');
+  p.hline(34, 28, 20, 'o');
+  p.rect(41, 16, 6, 8, 'v');               // floating shard over it
+  p.vline(42, 17, 6, 'w');
+  p.set(44, 14, 'v');
+  p.set(43, 13, 'w');
+  for (let y = 24; y < 28; y++) p.set(44, y, 'v');
+  p.rect(0, 40, SBG_W, 8, 'P');            // ground
+  p.hline(0, 40, SBG_W, 'o');
+  for (let x = 4; x < SBG_W; x += 10) p.vline(x, 41, 7, 'p');
+  p.hline(0, 44, SBG_W, 'p');
+});
+
+// 10 深淵 — broken islands falling through the void. o u C c p w
+const STAGE_BG_10 = stageBg((p) => {
+  p.rect(0, 0, SBG_W, SBG_H, 'u');
+  speckle(p, 0, 0, SBG_W, SBG_H, 'C', 0.10, 67);
+  for (let r = 0; r < 5; r++) {            // far: a cold ring hanging in the void
+    const rad = 9 + r * 2;
+    for (let a = 0; a < 96; a++) {
+      const t = (a * Math.PI) / 48;
+      p.set(44 + Math.round(Math.cos(t) * rad), 17 + Math.round(Math.sin(t) * rad * 0.62),
+        r === 2 ? 'w' : r < 2 ? 'p' : 'c');
+    }
+  }
+  for (const isl of [[4, 26, 22], [56, 20, 24], [26, 36, 30], [70, 40, 16]]) {
+    const x = isl[0] ?? 0;                 // mid: shattered slabs falling away
+    const y = isl[1] ?? 0;
+    const w = isl[2] ?? 10;
+    p.rect(x, y, w, 5, 'C');
+    p.hline(x, y, w, 'c');
+    p.hline(x, y + 1, w, 'c');
+    for (let i = 0; i < w; i += 2) {
+      const d = 1 + Math.floor(noise(x + i, y, 8) * 7);
+      p.rect(x + i, y + 5, 2, d, 'o');
+    }
+    p.hline(x, y + 5, w, 'o');
+  }
+  for (let i = 0; i < 44; i++) {           // motes drifting up out of the dark
+    const x = Math.floor(noise(i, 1, 71) * SBG_W);
+    const y = Math.floor(noise(i, 2, 73) * SBG_H);
+    p.set(x, y, i % 5 === 0 ? 'w' : 'c');
+  }
+  p.rect(0, 43, SBG_W, 5, 'o');            // ground: the last ledge, then nothing
+  p.hline(0, 43, SBG_W, 'C');
+  p.hline(0, 44, SBG_W, 'C');
+  for (let x = 0; x < SBG_W; x += 5) p.set(x, 42, 'C');
+});
+
+// ---------------------------------------------------------------------------
+// The base camp: the guild lodge and the props scattered around it, so the
+// home screen stops being four flat rectangles.
+// ---------------------------------------------------------------------------
+
+// 112x72 log-and-stone lodge: shingled gable, stone chimney, plank walls,
+// arched door and two lit windows.
+function buildLodge(): string[] {
+  const p = new Px(112, 72);
+
+  // --- chimney (behind the roof line)
+  p.rect(74, 4, 13, 26, 'G');
+  p.vline(74, 4, 26, 'g');
+  p.vline(86, 4, 26, 'n');
+  for (let y = 8; y < 30; y += 5) p.hline(74, y, 13, 'o');
+  p.rect(72, 1, 17, 4, 'g');
+  p.hline(72, 1, 17, 'o');
+
+  // --- roof: gable with shingle courses
+  const apexY = 6;
+  const eaveY = 34;
+  for (let y = apexY; y <= eaveY; y++) {
+    const half = Math.round(((y - apexY) * 53) / (eaveY - apexY));
+    const band = Math.floor((y - apexY) / 3) % 2;
+    p.hline(56 - half, y, half * 2 + 1, band === 0 ? 'b' : 'n');
+    if ((y - apexY) % 3 === 0) p.hline(56 - half, y, half * 2 + 1, 'o');
+    p.set(56 - half, y, 'o');
+    p.set(56 + half, y, 'o');
+  }
+  p.rect(3, eaveY + 1, 106, 3, 'n');       // fascia board under the eaves
+  p.hline(3, eaveY + 1, 106, 'B');
+  p.rect(53, apexY - 2, 7, 4, 'B');        // ridge cap
+  p.hline(53, apexY - 2, 7, 'o');
+
+  // --- wall
+  p.rect(14, 38, 84, 27, 'b');
+  for (let x = 14; x < 98; x += 6) p.vline(x, 38, 27, 'B');
+  for (let x = 17; x < 98; x += 6) p.vline(x, 38, 27, 'n');
+  p.vline(14, 38, 27, 'o');
+  p.vline(97, 38, 27, 'o');
+
+  // --- stone footing
+  p.rect(11, 62, 90, 9, 'G');
+  p.hline(11, 62, 90, 'o');
+  for (let x = 11; x < 101; x += 10) p.vline(x, 63, 8, 'o');
+  for (let x = 16; x < 101; x += 10) p.vline(x, 67, 4, 'o');
+  p.hline(11, 66, 90, 'o');
+  speckle(p, 12, 63, 88, 8, 'g', 0.18, 91);
+
+  // --- door: arched, planked, gold ring handle
+  arch(p, 56, 67, 9, 25, 'n');
+  arch(p, 56, 66, 7, 23, 'b');
+  for (let x = 51; x <= 61; x += 3) p.vline(x, 46, 21, 'n');
+  p.set(60, 57, 'y');
+  p.set(60, 58, 'y');
+
+  // --- windows: shutters, crossbars, lamp light inside
+  for (const wx of [24, 74]) {
+    p.rect(wx, 42, 18, 16, 'n');
+    p.rect(wx + 2, 44, 14, 12, 'y');
+    p.rect(wx + 3, 45, 12, 10, 't');
+    p.rect(wx + 5, 47, 8, 6, 'y');
+    p.hline(wx + 2, 49, 14, 'n');
+    p.vline(wx + 8, 44, 12, 'n');
+    p.hline(wx, 41, 18, 'B');              // lintel
+    p.hline(wx, 58, 18, 'B');              // sill
+  }
+
+  // --- step in front of the door
+  p.rect(44, 68, 25, 3, 'g');
+  p.hline(44, 68, 25, 'o');
+  p.hline(44, 70, 25, 'G');
+
+  p.outline();
+  return p.rows();
+}
+
+// 40x24 hanging sign: board and ironwork only -- the guild name is drawn on
+// top of it with the bitmap font.
+function buildLodgeSign(): string[] {
+  const p = new Px(40, 24);
+  for (const hx of [7, 32]) {              // iron hooks
+    p.vline(hx, 1, 5, 'l');
+    p.set(hx + 1, 1, 'l');
+    p.set(hx + 1, 2, 'g');
+    p.set(hx, 5, 'g');
+  }
+  p.rect(3, 6, 34, 16, 'b');               // board
+  p.hline(3, 6, 34, 'B');
+  p.hline(3, 7, 34, 'B');
+  p.hline(3, 20, 34, 'n');
+  p.hline(3, 21, 34, 'n');
+  for (let x = 5; x < 37; x += 8) p.vline(x, 8, 12, 'n');
+  for (const [cx, cy] of [[5, 8], [34, 8], [5, 19], [34, 19]]) {
+    p.set(cx ?? 0, cy ?? 0, 'y');          // rivets
+  }
+  p.outline();
+  return p.rows();
+}
+
+// 16x16 campfire, two frames. The logs never move; only the flame does.
+function buildCampfire(tall: boolean): string[] {
+  const p = new Px(16, 16);
+  p.rect(3, 11, 10, 3, 'n');               // crossed logs
+  p.hline(3, 11, 10, 'b');
+  p.set(4, 10, 'b');
+  p.set(11, 10, 'b');
+  for (const sx of [1, 5, 9, 12]) {        // ring of stones
+    p.rect(sx, 13, 3, 2, 'G');
+    p.hline(sx, 13, 3, 'g');
+  }
+  if (tall) {
+    p.rect(6, 3, 4, 8, 't');
+    p.rect(7, 5, 2, 6, 'y');
+    p.set(7, 2, 't');
+    p.set(5, 6, 'r');
+    p.set(10, 6, 'r');
+    p.set(11, 3, 'y');
+  } else {
+    p.rect(5, 5, 6, 6, 't');
+    p.rect(6, 7, 4, 4, 'y');
+    p.set(6, 4, 't');
+    p.set(9, 4, 't');
+    p.set(4, 8, 'r');
+    p.set(11, 8, 'r');
+    p.set(3, 3, 'y');
+  }
+  p.outline();
+  return p.rows();
+}
+
+// 24x40 pine, three stacked skirts of needles. Night silhouette.
+function buildTreePine(): string[] {
+  const p = new Px(24, 40);
+  p.rect(10, 30, 4, 9, 'n');               // trunk
+  p.vline(10, 30, 9, 'b');
+  const tiers: readonly (readonly [number, number, number])[] = [
+    [4, 3, 9], [14, 6, 10], [24, 9, 11]
+  ];
+  for (const t of tiers) {
+    const [top, half0, rows] = t;
+    for (let i = 0; i < rows; i++) {
+      const half = Math.min(10, half0 + Math.round((i * 2) / 3));
+      p.hline(12 - half, top + i, half * 2 + 1, 'E');
+      p.hline(12 - half, top + i, half + 1, 'e');
+      if (i === rows - 1) p.hline(12 - half, top + i, half * 2 + 1, 'E');
+    }
+  }
+  p.set(12, 2, 'E');
+  p.set(12, 1, 'E');
+  p.outline();
+  return p.rows();
+}
+
+// 16x16 fence section. The rails run the full width with no end cap, so
+// copies laid side by side join into one continuous fence.
+function buildFence(): string[] {
+  const p = new Px(16, 16);
+  for (const y of [4, 9]) {
+    p.hline(0, y, 16, 'o');
+    p.hline(0, y + 1, 16, 'B');
+    p.hline(0, y + 2, 16, 'b');
+    p.hline(0, y + 3, 16, 'o');
+  }
+  for (const x of [2, 10]) {               // posts, pointed tops
+    p.rect(x, 2, 4, 14, 'b');
+    p.vline(x, 2, 14, 'B');
+    p.vline(x + 3, 2, 14, 'n');
+    p.set(x, 2, 'o');
+    p.set(x + 3, 2, 'o');
+    p.set(x + 1, 1, 'B');
+    p.set(x + 2, 1, 'b');
+    p.set(x + 1, 0, 'o');
+    p.set(x + 2, 0, 'o');
+    p.set(x, 1, 'o');
+    p.set(x + 3, 1, 'o');
+    p.vline(x - 1, 2, 14, 'o');
+    p.vline(x + 4, 2, 14, 'o');
+    p.hline(x, 15, 4, 'o');
+  }
+  return p.rows();
+}
+
+// 12x14 barrel: staves plus two iron hoops.
+function buildBarrel(): string[] {
+  const p = new Px(12, 14);
+  for (let y = 1; y < 13; y++) {
+    const inset = y <= 2 || y >= 11 ? 2 : 1;
+    p.hline(inset, y, 12 - inset * 2, 'b');
+  }
+  p.vline(2, 3, 8, 'B');
+  p.vline(3, 3, 8, 'B');
+  p.vline(8, 3, 8, 'n');
+  p.vline(9, 3, 8, 'n');
+  p.hline(2, 4, 8, 'l');                   // hoops
+  p.hline(2, 9, 8, 'l');
+  p.hline(3, 1, 6, 'B');                   // lid
+  p.hline(3, 2, 6, 'b');
+  p.outline();
+  return p.rows();
+}
+
+// 14x12 crate: boards with a diagonal brace.
+function buildCrate(): string[] {
+  const p = new Px(14, 12);
+  p.rect(1, 1, 12, 10, 'b');
+  p.hline(1, 1, 12, 'B');
+  p.hline(1, 2, 12, 'B');
+  p.hline(1, 10, 12, 'n');
+  p.vline(1, 1, 10, 'B');
+  p.vline(12, 1, 10, 'n');
+  p.hline(1, 5, 12, 'n');
+  for (let i = 0; i < 8; i++) p.set(3 + i, 9 - i, 'n');
+  for (let i = 0; i < 8; i++) p.set(3 + i, 8 - i, 'B');
+  p.outline();
+  return p.rows();
+}
+
+Object.assign(SPRITES, {
+  stage_bg_1: STAGE_BG_1,
+  stage_bg_2: STAGE_BG_2,
+  stage_bg_3: STAGE_BG_3,
+  stage_bg_4: STAGE_BG_4,
+  stage_bg_5: STAGE_BG_5,
+  stage_bg_6: STAGE_BG_6,
+  stage_bg_7: STAGE_BG_7,
+  stage_bg_8: STAGE_BG_8,
+  stage_bg_9: STAGE_BG_9,
+  stage_bg_10: STAGE_BG_10,
+  lodge: buildLodge(),
+  lodge_sign: buildLodgeSign(),
+  campfire_0: buildCampfire(false),
+  campfire_1: buildCampfire(true),
+  tree_pine: buildTreePine(),
+  fence: buildFence(),
+  barrel: buildBarrel(),
+  crate: buildCrate(),
 } satisfies Record<string, Rows>);
 
 

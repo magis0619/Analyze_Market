@@ -71,7 +71,10 @@ export class Effects {
    * 「色が抜けて石に変わった」ように見える。 */
   applyDesaturate(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
     if (!this.desaturate) return;
-    fillScrim(ctx, x, y, w, h, COLORS.stoneDark, 0.5);
-    fillScrim(ctx, x, y, w, h, OUTLINE, 0.25);
+    // 濃さは残り時間に比例させて抜いていく。一定の濃さで1.2秒固定すると
+    // その間レポートが一切読めず、「演出」ではなく「読めない時間」になる。
+    const t = Math.max(0, Math.min(1, this.freeze / 1.2));
+    fillScrim(ctx, x, y, w, h, COLORS.stoneDark, 0.35 * t);
+    fillScrim(ctx, x, y, w, h, OUTLINE, 0.15 * t);
   }
 }

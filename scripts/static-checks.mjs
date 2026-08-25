@@ -139,6 +139,31 @@ for (const f of allSrc) {
   console.log(`  palette: ${defined.size} colors`);
 }
 
+// ---------------------------------------------------------------- §9.2 フォント
+// ソースに書いた文字がビットマップアトラスに入っているか。
+// 入っていない文字は画面で四角い箱になる（実際に「損」「触」「頼」が
+// 箱になっていた）。文言を足したら node scripts/gen-font.mjs を回すこと。
+{
+  const fontData = readFileSync(join(root, 'src/render/fontdata.ts'), 'utf8');
+  const covered = new Set();
+  for (const m of fontData.matchAll(/chars: "((?:[^"\\]|\\.)*)"/g)) {
+    for (const ch of JSON.parse(`"${m[1]}"`)) covered.add(ch);
+  }
+  if (covered.size === 0) fail('[§9.2] FAIL: フォントアトラスから収録文字を読み取れなかった');
+  const missing = new Set();
+  for (const f of allSrc) {
+    if (f.endsWith('render/fontdata.ts')) continue;
+    for (const ch of readFileSync(f, 'utf8')) {
+      const code = ch.codePointAt(0);
+      if (code > 0x2000 && !covered.has(ch)) missing.add(ch);
+    }
+  }
+  if (missing.size > 0) {
+    fail(`[§9.2] FAIL: アトラスに無い文字が ${missing.size} 種ある: ${[...missing].join('')}\n`
+      + '       node scripts/gen-font.mjs を実行して再生成すること');
+  }
+}
+
 if (failures > 0) {
   console.error(`static checks: ${failures} failure(s)`);
   process.exit(1);

@@ -6,7 +6,7 @@ import { baseDef } from '../data/bases';
 import { affixDef } from '../data/affixes';
 import { bossName, difficultyMul, itemPowerFor } from '../data/stages';
 import { generateItem } from './items';
-import { ENCOUNTERS } from '../data/events';
+import { enemiesForStage } from '../data/enemies';
 
 // 戦闘シミュレーション（仕様書 §6）。
 // 戦闘は内部ターン制で解決し、画面には一切描画しない。
@@ -88,7 +88,9 @@ function makeEnemies(
   }
   // 1遭遇の敵数は 3〜5 体（§6.2）
   const count = 3 + rng.int(3);
-  const pool = ENCOUNTERS.filter(e => e.id !== 'E15');
+  // 1遭遇＝同じ種類の群れ。名前が遭遇ごとに変わることで、
+  // レポートの「何に倒されたか」が具体的になる
+  const pool = enemiesForStage(stage.id);
   const label = pool.length > 0 ? rng.pick(pool).name : '魔物';
   const enemies: Enemy[] = [];
   for (let i = 0; i < count; i++) {

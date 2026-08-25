@@ -1,16 +1,18 @@
 import type { GameScreen, Nav } from '../game/app';
 import type { Element, Item, JobId, RetreatRule } from '../sim/types';
 import { VW, VH } from '../render/screen';
-import { drawNineSlice, drawSprOr, fillRect, fillScrim, hasSpr, strokeRect1 } from '../render/draw';
+import { drawNineSlice, drawSpr, drawSprOr, fillRect, fillScrim, hasSpr, strokeRect1 } from '../render/draw';
 import { drawText, drawTextCentered, drawTextRight, drawTextWrapped } from '../render/font';
 import { THEME } from './theme';
 import { drawBtn, hitBtn, inRect, type Btn } from './widgets';
 import { RETREAT_RULES, canEquipArmor, jobDef, retreatRuleDef } from '../data/jobs';
-import { STAGES, stageDef } from '../data/stages';
+import { STAGES, bossName, stageDef } from '../data/stages';
 import { baseDef } from '../data/bases';
 import { dominantElement } from '../sim/items';
 import { sfx } from '../render/audio';
-import { drawItemRow, elementIconName, elementLabel, itemIconName, itemName, sortItems } from './itemview';
+import { drawItemRow, elementLabel, itemIconName, itemName, sortItems } from './itemview';
+import { textWidth } from '../render/font';
+import { enemiesForStage } from '../data/enemies';
 import { formatDuration } from './base';
 
 // 派遣画面（§4.1）。プレイヤーが行う3つの判断——装備・撤退ルール・派遣先——を
@@ -45,6 +47,16 @@ const RULE_COLOR: Record<RetreatRule, string> = {
   cautious: THEME.green,
   standard: THEME.gold,
   reckless: THEME.red
+};
+
+/** 属性ごとの色。ステージ一覧の札と詳細で共通に使う。 */
+const ELEM_COLOR: Record<string, string> = {
+  physical: THEME.dim,
+  fire: THEME.red,
+  lightning: THEME.gold,
+  poison: THEME.green,
+  ice: THEME.blue,
+  mixed: THEME.purple
 };
 
 const RULE_COND: Record<RetreatRule, string> = {
@@ -262,12 +274,15 @@ export class DispatchScreen implements GameScreen {
       if (!unlocked) {
         drawSprOr(ctx, 'icon_lock', 'icon_A3', 8 + LIST_W - 22, y + 12);
       } else {
-        if (cleared) drawSprOr(ctx, 'icon_check', 'star', 8 + LIST_W - 20, y + 26);
-        if (stage.enemyElement !== 'mixed') {
-          drawSprOr(ctx, elementIconName(stage.enemyElement), 'star', 8 + LIST_W - 20, y + 6);
-        } else {
-          drawText(ctx, '複', 8 + LIST_W - 22, y + 5, 8, THEME.red);
-        }
+        if (cleared) drawSprOr(ctx, 'icon_check', 'star', 8 + LIST_W - 20, y + 22);
+        // 敵属性は行の右上ではなく所要時間の隣に、色付きの札で置く。
+        // 右上に16pxのアイコンだけ置くと、物理（×印）が閉じるボタンに見える
+        const tag = stage.enemyElement === 'mixed' ? '複合' : elementLabel(stage.enemyElement);
+        const tw = textWidth(tag, 8) + 8;
+        const tx = 50 + textWidth(formatDuration(stage.minutes * 60), 8) + 8;
+        fillRect(ctx, tx, y + 22, tw, 13, THEME.outline);
+        strokeRect1(ctx, tx, y + 22, tw, 13, ELEM_COLOR[stage.enemyElement] ?? THEME.dim);
+        drawText(ctx, tag, tx + 4, y + 23, 8, ELEM_COLOR[stage.enemyElement] ?? THEME.dim);
       }
     }
     ctx.restore();
@@ -284,34 +299,63 @@ export class DispatchScreen implements GameScreen {
     let y = STAGE_Y + 8;
     drawTextCentered(ctx, stage.name, PANEL_X + PANEL_W / 2, y, 12, THEME.gold);
     y += 20;
-    drawSprOr(ctx, `stage_${stage.id}`, 'icon_T1', PANEL_X + PANEL_W / 2 - 16, y, 2);
-    y += 38;
+    // ステージ絵（88×48）。16×16のアイコン1個だと10ステージの差が
+    // 「数字が違う」以上には伝わらなかったので、土地柄の分かる絵に置き換えた
+    const artW = 88, artH = 48;
+    const ax = PANEL_X + Math.floor((PANEL_W - artW) / 2);
+    if (hasSpr(`stage_bg_${stage.id}`)) {
+      drawSpr(ctx, `stage_bg_${stage.id}`, ax, y);
+      strokeRect1(ctx, ax - 1, y - 1, artW + 2, artH + 2, THEME.outline);
+      // 未解放のステージは絵も伏せる（何が待っているかは踏み込んでから）
+      if (!unlocked) fillScrim(ctx, ax, y, artW, artH, THEME.outline, 0.75);
+      y += artH + 8;
+    } else {
+      drawSprOr(ctx, `stage_${stage.id}`, 'icon_T1', PANEL_X + PANEL_W / 2 - 16, y, 2);
+      y += 38;
+    }
 
-    const row = (label: string, value: string, icon: string | null, color: string): void => {
+    // 「ラベル」「値」を1行ずつ。属性は色付きの札で出す——
+    // §6.4 が「敵の属性傾向は出撃前に必ず明示する」と定めており、
+    // ここはプレイヤーが装備を選ぶ唯一の手がかりなので最優先で読ませる
+    const row = (label: string, value: string, color: string, chip = false): void => {
       drawText(ctx, label, PANEL_X + 6, y, 8, THEME.dim);
-      y += 13;
-      let vx = PANEL_X + 8;
-      if (icon && hasSpr(icon)) { drawSprOr(ctx, icon, 'star', vx, y); vx += 11; }
-      drawText(ctx, value, vx, y, 8, color);
-      y += 16;
+      if (chip) {
+        const tw = textWidth(value, 8) + 8;
+        const tx = PANEL_X + PANEL_W - 8 - tw;
+        fillRect(ctx, tx, y - 1, tw, 13, THEME.outline);
+        strokeRect1(ctx, tx, y - 1, tw, 13, color);
+        drawText(ctx, value, tx + 4, y, 8, color);
+      } else {
+        drawTextRight(ctx, value, PANEL_X + PANEL_W - 8, y, 8, color);
+      }
+      y += 15;
     };
 
-    row('主な敵属性',
+    row('敵の属性',
       stage.enemyElement === 'mixed' ? '複合' : elementLabel(stage.enemyElement),
-      stage.enemyElement === 'mixed' ? null : elementIconName(stage.enemyElement),
-      THEME.red);
-    row('有効属性',
-      stage.weakTo ? elementLabel(stage.weakTo) : 'なし',
-      stage.weakTo ? elementIconName(stage.weakTo) : null,
-      stage.weakTo ? THEME.green : THEME.dim);
-    if (stage.resists.length > 0) {
-      row('効きにくい', stage.resists.map(elementLabel).join('・'), null, THEME.red);
-    }
+      ELEM_COLOR[stage.enemyElement] ?? THEME.red, true);
+    row('弱点', stage.weakTo ? elementLabel(stage.weakTo) : 'なし',
+      stage.weakTo ? THEME.green : THEME.dim, stage.weakTo !== null);
+    row('効きにくい',
+      stage.resists.length > 0 ? stage.resists.map(elementLabel).join('・') : 'なし',
+      stage.resists.length > 0 ? THEME.red : THEME.dim);
     row('ドロップ',
       stage.dropBias === 'weapon' ? '武器寄り' : stage.dropBias === 'armor' ? '防具寄り' : '均等',
-      null, THEME.text);
-    row('所要時間', formatDuration(stage.minutes * 60), null, THEME.text);
-    drawText(ctx, `遭遇 ${stage.encounters}回`, PANEL_X + 8, y - 4, 8, THEME.dim);
+      THEME.text);
+    row('所要時間', formatDuration(stage.minutes * 60), THEME.text);
+    row('遭遇', `${stage.encounters}回`, THEME.text);
+
+    // 出てくる敵。属性表だけだと抽象的なので、名前で土地柄を裏書きする
+    y += 6;
+    fillRect(ctx, PANEL_X + 6, y, PANEL_W - 12, 1, THEME.panelLight);
+    y += 6;
+    drawText(ctx, '出る敵', PANEL_X + 6, y, 8, THEME.dim);
+    y += 14;
+    for (const e of enemiesForStage(stage.id).slice(0, 4)) {
+      drawText(ctx, `・${e.name}`, PANEL_X + 8, y, 8, THEME.text);
+      y += 13;
+    }
+    drawText(ctx, `ボス『${bossName(stage.id)}』`, PANEL_X + 8, y + 3, 8, THEME.red);
 
     if (!unlocked) {
       const canBuy = st.data.gold >= stage.unlockCost

@@ -9,7 +9,8 @@ import { drawBtn, hitBtn, type Btn } from './widgets';
 import { jobDef, retreatRuleDef } from '../data/jobs';
 import { stageDef } from '../data/stages';
 import { sfx } from '../render/audio';
-import { itemIconName, itemName, RARITY_COLOR } from './itemview';
+import { elementLabel, itemIconName, itemName, RARITY_COLOR } from './itemview';
+import { dominantElement } from '../sim/items';
 import { Effects } from '../render/effects';
 
 // 帰還レポート（§7.3）。ベンチマークは Idle Slayer、観点は「何が起きたか3秒で分かるか」。
@@ -24,6 +25,8 @@ import { Effects } from '../render/effects';
 const PAD = 8;
 const GRAPH_W = 104;
 const FOOTER_H = 70;
+/** グラフ下の目盛りに使う高さ */
+const LABEL_H = 20;
 
 export class ReportScreen implements GameScreen {
   private result: RunResult | null;
@@ -72,10 +75,17 @@ export class ReportScreen implements GameScreen {
 
     // 残りの縦を深度グラフと戦利品で分け合う。ここで初めて高さが決まる
     const bodyTop = y + 14;
-    const bodyH = Math.max(120, VH - FOOTER_H - bodyTop);
-    this.drawDepthGraph(ctx, r, stage, PAD + 4, bodyTop, GRAPH_W, bodyH);
+    // グラフの下には到達数の目盛りを出すので、その分を先に差し引く。
+    // 差し引かないと「5 / 13」がパネルの縁に食い込んで読めない
+    const bodyH = Math.max(120, VH - FOOTER_H - bodyTop - LABEL_H);
+    this.drawDepthGraph(ctx, r, PAD + 4, bodyTop, GRAPH_W, bodyH);
     const lx = PAD + 4 + GRAPH_W + 12;
-    this.drawSpoils(ctx, r, lx, bodyTop, VW - lx - PAD, bodyH);
+    const used = this.drawSpoils(ctx, r, lx, bodyTop, VW - lx - PAD, bodyH + LABEL_H);
+    // 戦利品／損失の下に余った縦を「次にどうするか」で埋める。
+    // §7.3 が求めるのは「なぜこうなったか」だが、分かっただけで手が打てないと
+    // 結局は運ゲーに感じられる。答え合わせは次の一手まで含めて完結する
+    this.drawAdvice(ctx, r, stage, lx, bodyTop + used + 18,
+      VW - lx - PAD, bodyH + LABEL_H - used - 18);
 
     // 添え情報
     const job = d ? jobDef(d.jobId).name : '';
@@ -143,7 +153,7 @@ export class ReportScreen implements GameScreen {
    * 重ねる。1枚で「どこまで／どう削られて／どこで終わったか」が読めること。
    */
   private drawDepthGraph(
-    ctx: CanvasRenderingContext2D, r: RunResult, stage: StageDef,
+    ctx: CanvasRenderingContext2D, r: RunResult,
     x: number, y: number, w: number, h: number
   ): void {
     const total = Math.max(1, r.encountersTotal);
@@ -177,7 +187,7 @@ export class ReportScreen implements GameScreen {
     // 掘り抜いた縦穴（到達したところまで）
     const shaftX = x + Math.floor(w / 2) - 7;
     fillRect(ctx, shaftX, y, 14, reachedY, THEME.outline);
-    for (let ly = 0; ly < reachedY; ly += 16) drawSprOr(ctx, 'ladder', 'weight_pip', shaftX - 1, y + ly);
+    for (let ly = 0; ly < reachedY; ly += 16) drawSprOr(ctx, 'ladder', 'icon_T1', shaftX - 1, y + ly);
 
     // 未踏の領域を沈める。「まだ下がある」ことを見せるのが狙い
     if (reachedY < h) fillScrim(ctx, x, y + reachedY, w, h - reachedY, THEME.outline, 0.62);
@@ -194,10 +204,14 @@ export class ReportScreen implements GameScreen {
       }
     }
 
-    // HP 推移。縦穴の左脇に、右へ行くほど HP が減る向きで引く
+    // HP 推移。縦穴の左脇に、右へ行くほど HP が減る向きで引く。
+    // 線だけだと地層に紛れてただの引っかき傷に見えるので、
+    // 左端に「満タンの位置」の基準線を1本立てて、線が右へ寄るほど
+    // 削られていると読めるようにする
     const curve = r.hpCurve;
     const trackX = x + 3;
     const trackW = Math.max(4, shaftX - trackX - 3);
+    fillRect(ctx, trackX, y, 1, Math.max(1, reachedY), THEME.faint);
     for (let i = 1; i < curve.length; i++) {
       const v0 = curve[i - 1] ?? 1;
       const v1 = curve[i] ?? 1;
@@ -219,21 +233,89 @@ export class ReportScreen implements GameScreen {
     ctx.restore();
 
     strokeRect1(ctx, x, y, w, h, THEME.panelLight);
-    drawTextCentered(ctx, `${r.depth} / ${total}`, x + w / 2, y + h + 4, 8,
-      r.outcome === 'death' ? THEME.red : THEME.text);
-    drawTextCentered(ctx, r.bossDefeated ? `${stage.name} 踏破` : '',
-      x + w / 2, y + h + 18, 8, THEME.green);
+    drawTextCentered(ctx, r.bossDefeated ? '踏破' : `${r.depth} / ${total}`,
+      x + w / 2, y + h + 5, 8,
+      r.bossDefeated ? THEME.green : r.outcome === 'death' ? THEME.red : THEME.text);
+    // 線が何なのかを一言だけ添える（凡例を別枠に出すほどの情報量ではない）
+    drawTextRight(ctx, 'HP', x + w, y - 13, 8, THEME.faint);
   }
 
-  /** 戦利品、または失ったもの。 */
+  /**
+   * 次にどこを変えるか。実際のこの回の内容から引く。
+   * 一般論（「装備を強化しよう」）は書かない——それは何も言っていないのと同じ。
+   */
+  private advice(r: RunResult, stage: StageDef): string[] {
+    const st = this.nav.state;
+    const d = st.dispatchInfo(this.dispatchId);
+    const lost = st.data.lost[this.dispatchId] ?? [];
+    const weapon = st.itemById(d?.weaponId ?? null) ?? lost.find(i => i.slot === 'weapon') ?? null;
+    const armor = st.itemById(d?.armorId ?? null) ?? lost.find(i => i.slot === 'armor') ?? null;
+    const out: string[] = [];
+
+    if (weapon) {
+      const dom = dominantElement(weapon.element);
+      if (stage.resists.includes(dom)) {
+        out.push(stage.weakTo
+          ? `${elementLabel(dom)}は${stage.name}の耐性属性で火力が半減する。${elementLabel(stage.weakTo)}の武器なら1.5倍になる`
+          : `${elementLabel(dom)}は${stage.name}の耐性属性。別の属性の武器に持ち替えたい`);
+      } else if (stage.weakTo && dom !== stage.weakTo) {
+        out.push(`${stage.name}の弱点は${elementLabel(stage.weakTo)}。${elementLabel(stage.weakTo)}寄りの武器なら火力が1.5倍になる`);
+      }
+    }
+    const enemyElem = stage.enemyElement === 'mixed' ? null : stage.enemyElement;
+    if (enemyElem && armor && !armor.affixes.some(a => a.kind === 'resistPct' && a.element === enemyElem)) {
+      out.push(`敵は${elementLabel(enemyElem)}で攻めてくる。${elementLabel(enemyElem)}耐性の付いた防具を探すと生存が伸びる`);
+    }
+    if (r.outcome === 'death' && d?.retreatRule === 'reckless') {
+      out.push('深追いはHP0まで戦う。標準か慎重にしておけば、装備を失わずに戦利品を持ち帰れた');
+    }
+    if (r.depth / Math.max(1, r.encountersTotal) < 0.35) {
+      out.push('装備がこの階層に届いていない。一段浅いステージを回して稼ぐのが近道');
+    }
+    return out.slice(0, 3);
+  }
+
+  private drawAdvice(
+    ctx: CanvasRenderingContext2D, r: RunResult, stage: StageDef,
+    x: number, y: number, w: number, h: number
+  ): void {
+    if (h < 46) return;
+    const lines = this.advice(r, stage);
+    if (lines.length === 0) return;
+    const wrapped = lines.map(l => wrapText(l, w - 26, 8, 3));
+    let need = 14;
+    const shown: string[][] = [];
+    for (const ls of wrapped) {
+      if (need + ls.length * 13 + 4 > h) break;
+      shown.push(ls);
+      need += ls.length * 13 + 4;
+    }
+    if (shown.length === 0) return;
+    drawText(ctx, '次の一手', x, y - 13, 8, THEME.dim);
+    drawNineSlice(ctx, 'frame', x, y, w, need);
+    let ly = y + 7;
+    for (const ls of shown) {
+      fillRect(ctx, x + 8, ly + 4, 4, 4, THEME.green);
+      ls.forEach((ln, k) => drawText(ctx, ln, x + 18, ly + k * 13, 8, THEME.dim));
+      ly += ls.length * 13 + 4;
+    }
+  }
+
+  /** 戦利品、または失ったもの。使用した高さを返す。 */
   private drawSpoils(
     ctx: CanvasRenderingContext2D, r: RunResult,
     x: number, y: number, w: number, h: number
-  ): void {
+  ): number {
     if (r.outcome === 'death') {
       drawText(ctx, '失ったもの', x, y - 13, 8, THEME.red);
-      drawNineSlice(ctx, 'frame', x, y, w, h);
+      // 枠は中身の分だけにする。深度2で死ぬと戦利品も金もゼロなので、
+      // 高さを固定すると下半分が丸ごと空いて「情報が抜けた画面」に見える
       const lost = this.nav.state.data.lost[this.dispatchId] ?? [];
+      const extra = (r.loot.length > 0 ? 1 : 0) + (r.gold > 0 ? 1 : 0);
+      const bodyLines = wrapText('冒険者本人は無事に帰還した。最低限の装備は支給される。', w - 20, 8, 4);
+      const need = 16 + Math.max(1, Math.min(2, lost.length)) * 32
+        + (extra > 0 ? 15 + extra * 16 : 0) + 10 + bodyLines.length * 13;
+      drawNineSlice(ctx, 'frame', x, y, w, Math.min(h, need));
       let ly = y + 8;
       // 装備2点は現物を見せる。名前と枠色まで出さないと「何を失ったか」が伝わらない
       lost.slice(0, 2).forEach((it: Item) => {
@@ -253,28 +335,36 @@ export class ReportScreen implements GameScreen {
       });
       if (lost.length === 0) {
         drawText(ctx, '装備していた2点', x + 8, ly, 8, THEME.red);
-        ly += 16;
+        ly += 32;
       }
-      ly += 6;
-      fillRect(ctx, x + 8, ly, w - 16, 1, THEME.panelLight);
-      ly += 8;
-      drawText(ctx, `未鑑定品 ${r.loot.length}個も失われた`, x + 8, ly, 8, THEME.red);
-      ly += 16;
-      drawText(ctx, `持ち帰るはずだった ${r.gold}G`, x + 8, ly, 8, THEME.red);
-      ly += 22;
+      // 拾う前に死んだ回は戦利品も金もゼロ。「0個も失われた」は日本語として
+      // おかしいうえ、失っていないものを損失として並べることになるので出さない
+      if (extra > 0) {
+        ly += 3;
+        fillRect(ctx, x + 8, ly, w - 16, 1, THEME.panelLight);
+        ly += 8;
+        if (r.loot.length > 0) {
+          drawText(ctx, `未鑑定品 ${r.loot.length}個も失われた`, x + 8, ly, 8, THEME.red);
+          ly += 16;
+        }
+        if (r.gold > 0) {
+          drawText(ctx, `持ち帰るはずだった ${r.gold}G`, x + 8, ly, 8, THEME.red);
+          ly += 16;
+        }
+      }
+      ly += 10;
       // 救い：本人は帰る。ここが無いと「詰んだ」と受け取られる
-      wrapText('冒険者本人は無事に帰還した。最低限の装備は支給される。',
-        w - 20, 8, 4).forEach((ln, i) => {
-        drawText(ctx, ln, x + 8, ly + i * 13, 8, THEME.dim);
-      });
-      return;
+      bodyLines.forEach((ln, i) => drawText(ctx, ln, x + 8, ly + i * 13, 8, THEME.dim));
+      return Math.min(h, need);
     }
 
     drawText(ctx, '戦利品', x, y - 13, 8, THEME.dim);
-    drawNineSlice(ctx, 'frame', x, y, w, h);
     // 未鑑定のまま見せる（中身は開封まで分からない）
     const cols = 4;
     const cell = 36;
+    const gridRows = Math.max(1, Math.ceil(Math.min(10, r.loot.length) / cols));
+    const need = Math.min(h, 10 + gridRows * cell + 8 + 32);
+    drawNineSlice(ctx, 'frame', x, y, w, need);
     r.loot.slice(0, 10).forEach((_it, i) => {
       const cx = x + 10 + (i % cols) * cell;
       const cy = y + 10 + Math.floor(i / cols) * cell;
@@ -284,10 +374,11 @@ export class ReportScreen implements GameScreen {
       fillRect(ctx, cx + 12, cy + 12, 6, 6, THEME.redDark);
       drawTextCentered(ctx, '?', cx + 15, cy + 8, 12, THEME.dim);
     });
-    let ly = y + 10 + Math.ceil(Math.min(10, r.loot.length) / cols) * cell + 8;
+    let ly = y + 10 + gridRows * cell + 8;
     drawText(ctx, `未鑑定品 ${r.loot.length}個`, x + 10, ly, 8, THEME.gold);
     ly += 16;
     drawText(ctx, `${r.gold}G を持ち帰った`, x + 10, ly, 8, THEME.gold);
+    return need;
   }
 
   pointerDown(px: number, py: number): void {

@@ -1,8 +1,7 @@
 import type { GameScreen, Nav } from '../game/app';
 import { VW, VH } from '../render/screen';
 import { drawText, drawTextCentered } from '../render/font';
-import { drawSpr, drawSprOr, fillRect, hasSpr } from '../render/draw';
-import { spr } from '../render/sprites';
+import { drawSpr, drawSprOr, fillRect } from '../render/draw';
 import { THEME } from './theme';
 import { unlockAudio, sfx } from '../render/audio';
 
@@ -28,16 +27,16 @@ export class TitleScreen implements GameScreen {
       }
     }
 
-    if (hasSpr('logo')) {
-      const s = spr('logo');
-      ctx.drawImage(s, Math.round(VW / 2 - s.width), 130, s.width * 2, s.height * 2);
-    } else {
-      ctx.save();
-      ctx.translate(VW / 2, 150);
-      ctx.scale(3, 3);
-      drawTextCentered(ctx, 'DELVERS', 0, -6, 12, THEME.gold);
-      ctx.restore();
-    }
+    // ロゴはビットマップフォントを3倍に伸ばして組む。
+    // スプライトのロゴタイプは v1 の "OUTFITTER" の字形しか持っておらず、
+    // D/L/V/S の字が無い。フォント側には既に全字あるうえ、
+    // imageSmoothingEnabled=false なので3倍でもドットは崩れない。
+    ctx.save();
+    ctx.translate(VW / 2, 150);
+    ctx.scale(3, 3);
+    drawTextCentered(ctx, 'DELVERS', 1, -5, 12, THEME.outline);
+    drawTextCentered(ctx, 'DELVERS', 0, -6, 12, THEME.gold);
+    ctx.restore();
     drawTextCentered(ctx, '― 潜る者たち ―', VW / 2, 200, 12, THEME.dim);
 
     // 3人の冒険者

@@ -145,10 +145,10 @@ export class BaseScreen implements GameScreen {
       } else {
         drawText(ctx, next.affordable ? '雇う準備ができている' : '金が足りない',
           16, y + 22, 8, next.affordable ? THEME.green : THEME.red);
-        drawTextRight(ctx, `${next.cost}G`, VW - 16, y + 6, 8,
+        drawText(ctx, `${next.cost}G`, 16 + 104, y + 6, 8,
           next.affordable ? THEME.gold : THEME.red);
         this.slotBtn = {
-          x: VW - 96, y: y + 20, w: 80, h: 24,
+          x: VW - 88, y: y + 14, w: 68, h: 26,
           label: '雇う', accent: true, disabled: !next.affordable
         };
         this.slotBtnVisible = true;
