@@ -45,16 +45,16 @@ await shot('01-title');
 await tap(180, 320);              // タイトル → 拠点
 await shot('02-base');
 
-await tap(94, 536);               // 派遣する
+await tap(180, 344);              // メニュー: 派遣準備
 await shot('03-dispatch');
-await tap(159, 80);               // 武器枠 → 選択オーバーレイ
+await tap(166, 82);               // 武器枠 → 選択オーバーレイ
 await shot('04-pick-weapon');
 await tap(180, 100);              // 一覧の先頭を装備
-await tap(283, 80);               // 防具枠
+await tap(290, 82);               // 防具枠
 await tap(180, 100);
 await shot('05-equipped');
-await tap(294, 176);              // 撤退ルール「慎重」
-await tap(180, 252);              // ステージ1
+await tap(300, 180);              // 撤退ルール「慎重」
+await tap(100, 252);              // ステージ1
 await shot('06-dispatch-ready');
 await tap(180, 613);              // 派遣する
 await shot('07-dispatched');
@@ -66,7 +66,7 @@ for (let i = 0; i < 40; i++) {
   if (st > 0) break;
 }
 await shot('08-returned');
-await tap(180, 40);               // 帰還レポートを開く
+await tap(180, 256);              // メニュー: 帰還レポート
 await shot('09-report');
 await tap(180, 613);              // 開封へ
 await shot('10-opening');
@@ -80,12 +80,12 @@ await shot('12-after-open');
 
 // インベントリ・図鑑
 for (let i = 0; i < 6 && await screenName() !== 'BaseScreen'; i++) await tap(180, 613);
-await tap(266, 536);              // インベントリ
+await tap(180, 388);              // メニュー: インベントリ
 await shot('13-inventory');
 await tap(180, 300);
 await shot('14-inventory-detail');
 await tap(36, 14);                // 戻る
-await tap(94, 578);               // 図鑑
+await tap(180, 432);              // メニュー: 図鑑
 await shot('15-compendium');
 
 console.log(`final: ${await screenName()}`);
