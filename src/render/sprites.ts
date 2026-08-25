@@ -1640,6 +1640,770 @@ for (let s = 0; s < 4; s++) {
 }
 
 // ---------------------------------------------------------------------------
+// DELVERS additions. Everything below is new art for the idle-hack-and-slash
+// build: weapon/armor base types, job portraits, element pips, rarity frames,
+// stage icons, UI glyphs and the rare-drop burst. Same rules as above --
+// 1px OUTLINE on characters and items, light from the upper left, 2-3 shades
+// per material, no new palette entries.
+// ---------------------------------------------------------------------------
+
+// --- Weapon base types (16x16). Silhouette carries the type: blade length,
+// blade width and guard span separate dagger / sword / greatsword; spear, bow
+// and staff differ in overall shape and in showing wood instead of steel.
+
+const BASE_DAGGER: Rows = [
+  '................',
+  '................',
+  '.......oo.......',
+  '......olgo......',
+  '.....olggGo.....',
+  '.....olggGo.....',
+  '.....olggGo.....',
+  '.....olggGo.....',
+  '....oooooooo....',
+  '....oyyYyyYo....',
+  '....ooonnooo....',
+  '......onno......',
+  '......onno......',
+  '......oyyo......',
+  '......oooo......',
+  '................',
+];
+
+const BASE_SWORD: Rows = [
+  '................',
+  '.......oo.......',
+  '......olgo......',
+  '......olgo......',
+  '......olgo......',
+  '......olgo......',
+  '......olgo......',
+  '......olgo......',
+  '......olgo......',
+  '......olgo......',
+  '...oooooooooo...',
+  '...oyyYyyyYyo...',
+  '...oooonnoooo...',
+  '......onno......',
+  '......oyyo......',
+  '......oooo......',
+];
+
+const BASE_GREATSWORD: Rows = [
+  '.......oo.......',
+  '......olgo......',
+  '.....olggGo.....',
+  '.....olggGo.....',
+  '.....olggGo.....',
+  '.....olggGo.....',
+  '.....olggGo.....',
+  '.....olggGo.....',
+  '.....olggGo.....',
+  '.....olggGo.....',
+  '.oooooooooooooo.',
+  '.oyyYyyyyyyYYyo.',
+  '.oooooonnoooooo.',
+  '......onno......',
+  '......oyyo......',
+  '......oooo......',
+];
+
+const BASE_SPEAR: Rows = [
+  '.......oo.......',
+  '......olgo......',
+  '.....olggGo.....',
+  '.....olggGo.....',
+  '......olgo......',
+  '.....oooooo.....',
+  '.....oyYYyo.....',
+  '.....oooooo.....',
+  '......oBbo......',
+  '......oBbo......',
+  '......oBbo......',
+  '......oBbo......',
+  '......oBbo......',
+  '......oBbo......',
+  '......oBbo......',
+  '......oooo......',
+];
+
+const BASE_BOW: Rows = [
+  '.......ooooo....',
+  '.......oBbol....',
+  '......oBbo.l....',
+  '.....oBbo..l....',
+  '....oBbo...l....',
+  '...oBbo....l....',
+  '..oBbo.....l....',
+  '..oBbo.....l....',
+  '..oBbo.....l....',
+  '..oBbo.....l....',
+  '...oBbo....l....',
+  '....oBbo...l....',
+  '.....oBbo..l....',
+  '......oBbo.l....',
+  '.......oBbol....',
+  '.......ooooo....',
+];
+
+const BASE_STAFF: Rows = [
+  '......oooo......',
+  '.....owvvo......',
+  '....owvvvvo.....',
+  '....ovvvvco.....',
+  '.....ovvcco.....',
+  '......oooo......',
+  '......oBbo......',
+  '......oBbo......',
+  '......oBbo......',
+  '......oBbo......',
+  '......oBbo......',
+  '......oBbo......',
+  '......oBbo......',
+  '......oBbo......',
+  '......oBbo......',
+  '......oooo......',
+];
+
+// --- Armour base types (16x16). Read as bulk: 10px leather, 12px mail,
+// 14px plate with pauldrons and a belt.
+
+const BASE_LIGHT: Rows = [
+  '................',
+  '................',
+  '...oooo..oooo...',
+  '...oBbo..oBno...',
+  '...oBboooobno...',
+  '...oBbbbbbbno...',
+  '...oBbbbbbbno...',
+  '...oBbnbbbbno...',
+  '...oBbbnbbbno...',
+  '...oBbbbnbbno...',
+  '...oBbbbbbbno...',
+  '...onbbbbbnno...',
+  '...oonnnnnnoo...',
+  '....oooooooo....',
+  '................',
+  '................',
+];
+
+const BASE_MEDIUM: Rows = [
+  '................',
+  '................',
+  '..oooo....oooo..',
+  '..olgo....olGo..',
+  '..olggoooogGGo..',
+  '..olggGGggGGGo..',
+  '..olGGggGGggGo..',
+  '..olggGGggGGGo..',
+  '..olGGggGGggGo..',
+  '..olggGGggGGGo..',
+  '..olGGggGGggGo..',
+  '..oGGggGGggGGo..',
+  '..oGGGGGGGGGGo..',
+  '..oooooooooooo..',
+  '................',
+  '................',
+];
+
+const BASE_HEAVY: Rows = [
+  '................',
+  '.oooo......oooo.',
+  '.olgo......olGo.',
+  '.olggoooooogGGo.',
+  '.olgggoooogggGo.',
+  '.olgggglgggggGo.',
+  '.olgggglgggggGo.',
+  '.olgggglgggggGo.',
+  '.olgggglgggggGo.',
+  '.oooooooooooooo.',
+  '.oyyYyyyyyyYYyo.',
+  '.oooooooooooooo.',
+  '..oGGGGGGGGGGo..',
+  '..oGGGGGGGGGGo..',
+  '..oooooooooooo..',
+  '................',
+];
+
+// --- Job portraits (16x16 bust, same construction as `portrait`).
+
+const JOB_SWORDSMAN: Rows = [
+  '....oooooooo....',
+  '...onbbbbbbno...',
+  '..onbbbbbbbbno..',
+  '..orrrrrrrrrro..',
+  '..oooooooooooo..',
+  '..oFffffffffFo..',
+  '..offoffffoffo..',
+  '..offffffffffo..',
+  '..offffffffffo..',
+  '..oFffoooofffo..',
+  '..ooffffffffoo..',
+  '...oooffffooo...',
+  '..oolllllllloo..',
+  '.ollllllllllllo.',
+  '.olggggggggggGo.',
+  '.oGGGGGGGGGGGGo.',
+];
+
+const JOB_GUARDIAN: Rows = [
+  '...oooooooooo...',
+  '..olggggggggGo..',
+  '.ollgggggggggGo.',
+  '.ollgggggggggGo.',
+  '.ollgggggggggGo.',
+  '.olooooooooooGo.',
+  '.olosssssssoGGo.',
+  '.oloooooooooGGo.',
+  '.ollgggggggggGo.',
+  '.ollgggoooggGGo.',
+  '.ollgggggggGGGo.',
+  '.oGGGGGGGGGGGGo.',
+  '..oooooooooooo..',
+  '.oolllllllllloo.',
+  'ollllllllllllllo',
+  'oGGggggggggGGGGo',
+];
+
+const JOB_SKIRMISHER: Rows = [
+  '......oooo......',
+  '.....oeeeeo.....',
+  '....oeeeeeEo....',
+  '...oeeeeeeEEo...',
+  '..oeeeeeeeeEEo..',
+  '.oeeooooooooEEo.',
+  '.oeeoFffffFoEEo.',
+  '.oeeofoffofoEEo.',
+  '.oeeoffffffoEEo.',
+  '.oeeoFffffFoEEo.',
+  '.oeeooooooooEEo.',
+  '.oEeeeeeeeeEEo..',
+  '...oEEeeeeEEo...',
+  '..oobbbbbbbboo..',
+  '.obbbbbbbbbbbno.',
+  '.onbbbbbbbbbnno.',
+];
+
+// --- Element pips (8x8, one hue plus outline; meant to sit in a row).
+
+const ELEM_PHYSICAL: Rows = [
+  'oo....oo',
+  'olo..olo',
+  '.oloolo.',
+  '..ollo..',
+  '..ollo..',
+  '.oloolo.',
+  'olo..olo',
+  'oo....oo',
+];
+
+const ELEM_FIRE: Rows = [
+  '...oo...',
+  '..otto..',
+  '..otyto.',
+  '.ottyyto',
+  'ortyyyto',
+  'ortyyyto',
+  '.orttro.',
+  '..oooo..',
+];
+
+const ELEM_LIGHTNING: Rows = [
+  '...ooo..',
+  '..oyyo..',
+  '.oyyoo..',
+  '.oyyyyoo',
+  '.ooYyyyo',
+  '...oyyo.',
+  '..oyyo..',
+  '...oo...',
+];
+
+const ELEM_POISON: Rows = [
+  '...oo...',
+  '..oeeo..',
+  '..oeeo..',
+  '.oeeeEo.',
+  'oeeeeEEo',
+  'oeeeeEEo',
+  '.oEeeEo.',
+  '..oooo..',
+];
+
+const ELEM_ICE: Rows = [
+  '...oo...',
+  '..okko..',
+  '.okkkko.',
+  'okwkkkco',
+  'okkkkkco',
+  '.okkkco.',
+  '..okco..',
+  '...oo...',
+];
+
+// --- UI glyphs.
+
+const ICON_LOCK: Rows = [
+  '................',
+  '......oooo......',
+  '.....oYYYYo.....',
+  '....oYYooYYo....',
+  '....oYo..oYo....',
+  '....oYo..oYo....',
+  '..oooooooooooo..',
+  '..oyyyyyyyyyYo..',
+  '..oyyyyoooyyYo..',
+  '..oyyyyoooyyYo..',
+  '..oyyyyyoyyyYo..',
+  '..oyyyyyoyyyYo..',
+  '..oyyyyyyyyYYo..',
+  '..oYYYYYYYYYYo..',
+  '..oooooooooooo..',
+  '................',
+];
+
+const ICON_SORT: Rows = [
+  '................',
+  '................',
+  '...oo.....oooo..',
+  '..ollo....ollo..',
+  '.ollllo...ollo..',
+  '.oolloo...ollo..',
+  '..ollo....ollo..',
+  '..ollo....ollo..',
+  '..ollo....ollo..',
+  '..ollo....ollo..',
+  '..ollo...oolloo.',
+  '..ollo...ollllo.',
+  '..ollo....ollo..',
+  '..oooo.....oo...',
+  '................',
+  '................',
+];
+
+const ICON_SELL: Rows = [
+  '................',
+  '......oooo......',
+  '.....oBnnBo.....',
+  '....ooBnnBoo....',
+  '...obBbbbbBno...',
+  '..obBbbbbbbBno..',
+  '..obbbbbbbbbno..',
+  '.obbbbyyybbbno..',
+  '.obbbyyYyybbno..',
+  '.obbbbYYYbbbno..',
+  '.obbbbbbbbbbno..',
+  '.obbbbbbbbbnno..',
+  '..onbbbbbbbnno..',
+  '..oonnnnnnnnoo..',
+  '...oooooooooo...',
+  '................',
+];
+
+const ICON_HOURGLASS: Rows = [
+  '................',
+  '..oooooooooooo..',
+  '..oBbbbbbbbbno..',
+  '..oooooooooooo..',
+  '...okyyyyyyko...',
+  '....okyyyyko....',
+  '.....okyyko.....',
+  '......oyyo......',
+  '......oyyo......',
+  '.....okkko......',
+  '....okkkkko.....',
+  '...okkyyyyko....',
+  '..oooooooooooo..',
+  '..oBbbbbbbbbno..',
+  '..oooooooooooo..',
+  '................',
+];
+
+const ICON_SKULL_SMALL: Rows = [
+  '..oooo..',
+  '.owwwwo.',
+  'owwwwwwo',
+  'owowwowo',
+  'owwwwwwo',
+  '.owlwlo.',
+  '..oooo..',
+  '........',
+];
+
+const ICON_CHECK: Rows = [
+  '......o.',
+  '.o...oeo',
+  'oeo.oeeo',
+  'oeeoeeo.',
+  '.oeeeo..',
+  '..oeo...',
+  '...o....',
+  '........',
+];
+
+// --- Stage icons (16x16), one per depth band.
+
+const STAGE_1: Rows = [
+  '................',
+  '.oooooooooooooo.',
+  '.oBbbbbbbbbbbno.',
+  '.oooooooooooooo.',
+  '.oBboSSSSSSoBbo.',
+  '.oBbollllllobbo.',
+  '.oBboggbbGgoBbo.',
+  '.oBboSSbbSSoBbo.',
+  '.oBboSSbbSSoBbo.',
+  '.oBboSSbbSSoBbo.',
+  '.oBboSSbbSSoBbo.',
+  '.oBboSSSSSSoBbo.',
+  '.oooooooooooooo.',
+  '.oBbbbbbbbbbbno.',
+  '.oooooooooooooo.',
+  '................',
+];
+
+const STAGE_2: Rows = [
+  '................',
+  '..oooooooooooo..',
+  '..ogggggggggGo..',
+  '..oooooooooooo..',
+  '...ogggggggGo...',
+  '...ogvvgggGGo...',
+  '...oggvvggGGo...',
+  '...oggggggGGo...',
+  '...oggevvgGGo...',
+  '...ogggevgGGo...',
+  '...oggggggGGo...',
+  '...ogvvgggGGo...',
+  '..oooooooooooo..',
+  '..ogggggggggGo..',
+  '..oooooooooooo..',
+  '................',
+];
+
+const STAGE_3: Rows = [
+  '................',
+  '................',
+  '...oooooooooo...',
+  '..oossssssssoo..',
+  '..osssttssssSo..',
+  '..ossstysssSSo..',
+  '..ossssttssSSo..',
+  '..ossssstysSSo..',
+  '..ossssttsSSSo..',
+  '..osstytssSSSo..',
+  '..osttssssSSSo..',
+  '..oossssSSSSoo..',
+  '...oooooooooo...',
+  '................',
+  '................',
+  '................',
+];
+
+const STAGE_4: Rows = [
+  '.oooooooooooooo.',
+  '.okkkkkkkkkkcco.',
+  '.occccccccCCCCo.',
+  '.oooooooooooooo.',
+  '..okcookcookco..',
+  '..okcookcookco..',
+  '...okookcookco..',
+  '...oo.okcookco..',
+  '......okco.oko..',
+  '......okco.oo...',
+  '.......oko......',
+  '.......oo.......',
+  '................',
+  '................',
+  '................',
+  '................',
+];
+
+const STAGE_5: Rows = [
+  '................',
+  '.....oooooo.....',
+  '...oosSSSSsoo...',
+  '..oosSSSSSSsoo..',
+  '.oosSSSSSSSSsoo.',
+  '.osSSSSSyySSSso.',
+  '.osSSSSyySSSSso.',
+  '.osSSSyySSSSSso.',
+  '.osSyyyYYYSSSso.',
+  '.osSSSSyYSSSSso.',
+  '.osSSSyYSSSSSso.',
+  '.osSSYYSSSSSSso.',
+  '.osSSSSSSSSSSso.',
+  '.oooooooooooooo.',
+  '................',
+  '................',
+];
+
+const STAGE_6: Rows = [
+  '...oo...........',
+  '..oeeo....oo....',
+  '..oEEo...oeeo...',
+  '...oo....oEEo...',
+  '..........oo....',
+  '................',
+  '....oooooooo....',
+  '..oorrRrrrrRoo..',
+  '.oorrrRrerrRRoo.',
+  '.orrrrreerrrRRo.',
+  '.orrerrrrrRrRRo.',
+  '.oRrrrrrrrrRRRo.',
+  '..oRRrrrrrRRRo..',
+  '...ooRRRRRRoo...',
+  '....oooooooo....',
+  '................',
+];
+
+const STAGE_7: Rows = [
+  '................',
+  '.oooooooooooooo.',
+  '.oGssssssssssSo.',
+  '.ossSSSSSSSSSSo.',
+  '.oooooooooooooo.',
+  '.ottyyttttyytto.',
+  '.oyyttttyytttto.',
+  '.ottttyyttttyyo.',
+  '.ottyyttyytttto.',
+  '.orrttttyyrrrro.',
+  '.oooooooooooooo.',
+  '.oSSSSSSSSSSsso.',
+  '.osssssssssssGo.',
+  '.oooooooooooooo.',
+  '................',
+  '................',
+];
+
+const STAGE_8: Rows = [
+  '................',
+  '....oooooooo....',
+  '..oowwwwwwwwoo..',
+  '.owwwwwwwwwwllo.',
+  '.owwoowwwwoowlo.',
+  '.owwoowwwwoowlo.',
+  '.owwwwwoowwwwlo.',
+  '..owwwwwwwwwlo..',
+  '..owlwlwlwlwlo..',
+  '...oooooooooo...',
+  '.oooo.oooo.oooo.',
+  '.owwo.owwo.owwo.',
+  '.owlo.owlo.owlo.',
+  '.oooo.oooo.oooo.',
+  '................',
+  '................',
+];
+
+const STAGE_9: Rows = [
+  '................',
+  '.......oo.......',
+  '......ovvo......',
+  '.....ovwvvo.....',
+  '.....ovvvvo.....',
+  '......ovvo......',
+  '.......oo.......',
+  '..oooooooooooo..',
+  '..ogggggggggGo..',
+  '..oooooooooooo..',
+  '....ogggggGo....',
+  '....ogGGGGGo....',
+  '....ogggggGo....',
+  '..oooooooooooo..',
+  '..ogGGGGGGGGGo..',
+  '..oooooooooooo..',
+];
+
+// Stage 10 "the abyss": a swirl of nested dark rings, built so the bands stay
+// perfectly concentric. Mirrored, never rotated.
+function buildAbyss(): string[] {
+  const rows: string[] = [];
+  const band = (r: number): string => {
+    if (r > 7.1) return '.';
+    if (r > 6.0) return 'o';
+    if (r > 4.7) return 'p';
+    if (r > 3.4) return 'P';
+    if (r > 2.1) return 'q';
+    if (r > 1.0) return 'Q';
+    return 'o';
+  };
+  for (let y = 0; y < 16; y++) {
+    let line = '';
+    for (let x = 0; x < 16; x++) {
+      const dx = x - 7.5;
+      const dy = y - 7.5;
+      const r = Math.sqrt(dx * dx + dy * dy);
+      const swirl = Math.atan2(dy, dx) / Math.PI; // -1..1
+      line += band(r > 6.0 ? r : r + swirl * 0.85);
+    }
+    rows.push(line);
+  }
+  return rows;
+}
+
+// --- Rarity frames (24x24, 9-sliced on 8px corners). Common is a flat gray
+// band; each tier adds a ring, a richer hue and corner metalwork, so a row of
+// four reads as a clear promotion.
+
+function rep(ch: string, n: number): string {
+  return ch.repeat(n);
+}
+
+function buildRarityCommon(): string[] {
+  const rows: string[] = [];
+  rows.push(rep('o', 24));
+  rows.push('o' + rep('G', 22) + 'o');
+  rows.push('oG' + rep('o', 20) + 'Go');
+  const fill = 'oGo' + rep('S', 18) + 'oGo';
+  for (let i = 0; i < 18; i++) rows.push(fill);
+  rows.push('oG' + rep('o', 20) + 'Go');
+  rows.push('o' + rep('G', 22) + 'o');
+  rows.push(rep('o', 24));
+  return rows;
+}
+
+function buildRarityFine(): string[] {
+  const rows: string[] = [];
+  rows.push(rep('o', 24));
+  rows.push('o' + rep('c', 22) + 'o');
+  rows.push('oc' + rep('C', 20) + 'co');
+  rows.push('ocC' + rep('o', 18) + 'Cco');
+  const fill = 'ocCo' + rep('u', 16) + 'oCco';
+  for (let i = 0; i < 16; i++) rows.push(fill);
+  rows.push('ocC' + rep('o', 18) + 'Cco');
+  rows.push('oc' + rep('C', 20) + 'co');
+  rows.push('o' + rep('c', 22) + 'o');
+  rows.push(rep('o', 24));
+  return rows;
+}
+
+function buildRarityRare(): string[] {
+  const rows: string[] = [];
+  const stud = 'oyYo' + 'yy' + rep('S', 12) + 'yy' + 'oYyo';
+  const studLo = 'oyYo' + 'yY' + rep('S', 12) + 'Yy' + 'oYyo';
+  const fill = 'oyYo' + rep('S', 16) + 'oYyo';
+  rows.push(rep('o', 24));
+  rows.push('o' + rep('y', 22) + 'o');
+  rows.push('oy' + rep('Y', 20) + 'yo');
+  rows.push('oyY' + rep('o', 18) + 'Yyo');
+  rows.push(stud, studLo);
+  for (let i = 0; i < 12; i++) rows.push(fill);
+  rows.push(studLo, stud);
+  rows.push('oyY' + rep('o', 18) + 'Yyo');
+  rows.push('oy' + rep('Y', 20) + 'yo');
+  rows.push('o' + rep('y', 22) + 'o');
+  rows.push(rep('o', 24));
+  return rows;
+}
+
+function buildRarityRelic(): string[] {
+  const rows: string[] = [];
+  const gem = 'opPqo' + 'yy' + rep('Q', 10) + 'yy' + 'oqPpo';
+  const gemLo = 'opPqo' + 'yY' + rep('Q', 10) + 'Yy' + 'oqPpo';
+  const fill = 'opPqo' + rep('Q', 14) + 'oqPpo';
+  rows.push(rep('o', 24));
+  rows.push('o' + rep('y', 4) + rep('p', 14) + rep('y', 4) + 'o');
+  rows.push('oy' + rep('Y', 2) + rep('P', 16) + rep('Y', 2) + 'yo');
+  rows.push('opY' + rep('q', 18) + 'Ypo');
+  rows.push('opPq' + rep('o', 16) + 'qPpo');
+  rows.push(gem, gemLo);
+  for (let i = 0; i < 10; i++) rows.push(fill);
+  rows.push(gemLo, gem);
+  rows.push('opPq' + rep('o', 16) + 'qPpo');
+  rows.push('opY' + rep('q', 18) + 'Ypo');
+  rows.push('oy' + rep('Y', 2) + rep('P', 16) + rep('Y', 2) + 'yo');
+  rows.push('o' + rep('y', 4) + rep('p', 14) + rep('y', 4) + 'o');
+  rows.push(rep('o', 24));
+  return rows;
+}
+
+// --- Rare-drop burst (32x32): eight rays out of a white core, no outline
+// because it is additive light rather than an object. Built by reflection so
+// the four quadrants match exactly.
+function buildBurst(): string[] {
+  const N = 32;
+  const grid: string[][] = [];
+  for (let y = 0; y < N; y++) grid.push(new Array<string>(N).fill('.'));
+  const put = (x: number, y: number, ch: string): void => {
+    if (x < 0 || y < 0 || x >= N || y >= N) return;
+    const row = grid[y];
+    if (row) row[x] = ch;
+  };
+  const shade = (d: number): string => (d < 5 ? 'w' : d < 10 ? 'y' : 't');
+  for (let d = 0; d < 16; d++) {
+    const ch = shade(d);
+    put(15, 15 - d, ch);
+    put(15, 16 + d, ch);
+    put(15 - d, 15, ch);
+    put(16 + d, 15, ch);
+    if (d < 10) {
+      put(16, 15 - d, ch);
+      put(16, 16 + d, ch);
+      put(15 - d, 16, ch);
+      put(16 + d, 16, ch);
+    }
+  }
+  for (let d = 0; d < 12; d++) {
+    const ch = shade(d);
+    put(15 - d, 15 - d, ch);
+    put(16 + d, 15 - d, ch);
+    put(15 - d, 16 + d, ch);
+    put(16 + d, 16 + d, ch);
+  }
+  for (let y = 12; y <= 19; y++) {
+    for (let x = 12; x <= 19; x++) {
+      const dx = x < 15.5 ? 15 - x : x - 16;
+      const dy = y < 15.5 ? 15 - y : y - 16;
+      if (dx + dy <= 3) put(x, y, 'w');
+      else if (dx + dy <= 5) put(x, y, 'y');
+    }
+  }
+  return grid.map((r) => r.join(''));
+}
+
+Object.assign(SPRITES, {
+  base_dagger: BASE_DAGGER,
+  base_sword: BASE_SWORD,
+  base_greatsword: BASE_GREATSWORD,
+  base_spear: BASE_SPEAR,
+  base_bow: BASE_BOW,
+  base_staff: BASE_STAFF,
+  base_light: BASE_LIGHT,
+  base_medium: BASE_MEDIUM,
+  base_heavy: BASE_HEAVY,
+  job_swordsman: JOB_SWORDSMAN,
+  job_guardian: JOB_GUARDIAN,
+  job_skirmisher: JOB_SKIRMISHER,
+  elem_physical: ELEM_PHYSICAL,
+  elem_fire: ELEM_FIRE,
+  elem_lightning: ELEM_LIGHTNING,
+  elem_poison: ELEM_POISON,
+  elem_ice: ELEM_ICE,
+  rarity_common: buildRarityCommon(),
+  rarity_fine: buildRarityFine(),
+  rarity_rare: buildRarityRare(),
+  rarity_relic: buildRarityRelic(),
+  stage_1: STAGE_1,
+  stage_2: STAGE_2,
+  stage_3: STAGE_3,
+  stage_4: STAGE_4,
+  stage_5: STAGE_5,
+  stage_6: STAGE_6,
+  stage_7: STAGE_7,
+  stage_8: STAGE_8,
+  stage_9: STAGE_9,
+  stage_10: buildAbyss(),
+  icon_lock: ICON_LOCK,
+  icon_sort: ICON_SORT,
+  icon_sell: ICON_SELL,
+  icon_hourglass: ICON_HOURGLASS,
+  icon_skull_small: ICON_SKULL_SMALL,
+  icon_check: ICON_CHECK,
+  burst: buildBurst(),
+} satisfies Record<string, Rows>);
+
+
+// ---------------------------------------------------------------------------
 // Decoder + public API.
 // ---------------------------------------------------------------------------
 

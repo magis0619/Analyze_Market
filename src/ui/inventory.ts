@@ -728,7 +728,7 @@ export class InventoryScreen implements GameScreen {
     this.confirm = null;
     if (c.single) this.selectedId = null;
     this.dirty = true;
-    this.showToast(`${c.count}個を売却して +${fmtGold(gained)}G`);
+    this.showToast(`${c.count}個を売却 +${fmtGold(gained)}G`);
     sfx('loot');
   }
 

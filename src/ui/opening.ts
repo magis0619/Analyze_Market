@@ -191,9 +191,35 @@ export class OpeningScreen implements GameScreen {
   // 一覧から開く詳細
   private detail: Item | null = null;
 
+  /** 獲得の確定（openAll）を済ませたか。演出の経路に関わらず必ず一度だけ呼ぶ */
+  private claimed = false;
+
   constructor(nav: Nav, items: Item[]) {
     this.nav = nav;
     this.items = items;
+  }
+
+  // -------------------------------------------------------------- 獲得の確定
+
+  /**
+   * 未鑑定品をインベントリと図鑑へ確定させる（§7.4）。
+   *
+   * 演出は「見せ方」でしかなく、獲得はここで確定する。スキップしても、
+   * 途中で拠点へ戻っても、必ず一度だけ呼ばれること（取りこぼすと戦利品が消える）。
+   * GameState.openAll() は pending を空にしてから返すので、二度呼んでも
+   * 二重登録にはならないが、念のためフラグでも守る。
+   */
+  private claim(): void {
+    if (this.claimed) return;
+    this.claimed = true;
+    const opened = this.nav.state.openAll();
+    // 開封済み（identified: true）の実体に差し替えて、以降の表示を一致させる
+    if (opened.length === this.items.length) {
+      for (let i = 0; i < opened.length; i++) {
+        const o = opened[i];
+        if (o) this.items[i] = o;
+      }
+    }
   }
 
   // -------------------------------------------------------------- 進行
@@ -263,6 +289,7 @@ export class OpeningScreen implements GameScreen {
   }
 
   private finish(): void {
+    this.claim();
     this.phase = 'done';
     this.t = 0;
     sfx('confirm');
@@ -377,6 +404,8 @@ export class OpeningScreen implements GameScreen {
     if (this.phase === 'intro') {
       if (hitBtn(MAIN_BTN, x, y)) {
         sfx('confirm');
+        // 演出を始める前に獲得を確定させる（以降どの経路を通っても取りこぼさない）
+        this.claim();
         this.phase = 'flow';
         this.t = 0;
       }
@@ -385,6 +414,7 @@ export class OpeningScreen implements GameScreen {
     if (this.phase === 'done') {
       if (hitBtn(BACK_BTN, x, y)) {
         sfx('confirm');
+        this.claim();
         this.nav.goBase();
         return;
       }
@@ -436,6 +466,7 @@ export class OpeningScreen implements GameScreen {
   }
 
   private skipAll(): void {
+    this.claim();
     for (let i = this.idx; i < this.items.length; i++) {
       const it = this.items[i];
       if (it) this.goldTarget += sellValue(it);
