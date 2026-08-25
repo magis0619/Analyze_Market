@@ -1,7 +1,7 @@
 import { Screen } from './render/screen';
 import { initSprites } from './render/sprites';
 import { App } from './game/app';
-import { GameState } from './game/state';
+import { GameState, debugLoot } from './game/state';
 import { TitleScreen } from './ui/title';
 import { BaseScreen } from './ui/base';
 import { DispatchScreen } from './ui/dispatch';
@@ -27,6 +27,20 @@ if (params.get('reset') === '1') {
 }
 
 const state = new GameState(seed, Date.now());
+
+// 開発用: インベントリに任意個の装備を積む（?devitems=200）。
+// C10（200個所持時の操作性）の確認と、画面の詰まり具合を実機で見るために使う。
+const devItems = parseInt(params.get('devitems') ?? '0', 10);
+if (Number.isFinite(devItems) && devItems > 0) {
+  const n = Math.min(2000, devItems);
+  for (let i = 0; i < n; i++) {
+    const stageId = 1 + (i % 10);
+    state.data.inventory.push(...debugLoot(seed ^ (i * 7919), stageId, 1)
+      .map(it => ({ ...it, id: `dev-${i}`, identified: true })));
+  }
+  state.data.gold += 50000;
+  state.save();
+}
 const app = new App(state, {
   base: nav => new BaseScreen(nav),
   dispatch: nav => new DispatchScreen(nav),
