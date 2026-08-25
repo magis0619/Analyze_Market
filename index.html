@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>OUTFITTER</title>
+  <title>DELVERS</title>
   <style>
     html, body {
       margin: 0; padding: 0; width: 100%; height: 100%;
@@ -13,8 +13,8 @@
     }
     canvas {
       position: absolute; left: 0; top: 0;
+      /* 非整数 dpr のときも最近傍で拡大させる（にじみ防止・C1） */
       image-rendering: pixelated;
-      image-rendering: crisp-edges;
     }
   </style>
 </head>

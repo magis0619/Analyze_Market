@@ -73,3 +73,81 @@ export function strokeRect1(
 export function iconSize(name: string): { w: number; h: number } {
   return sprSize(name);
 }
+
+// スプライトの存在確認は毎フレーム try/catch すると重いのでキャッシュする。
+const existCache = new Map<string, boolean>();
+
+export function hasSpr(name: string): boolean {
+  const hit = existCache.get(name);
+  if (hit !== undefined) return hit;
+  let ok = true;
+  try { spr(name); } catch { ok = false; }
+  existCache.set(name, ok);
+  return ok;
+}
+
+/** name が無ければ fallback を描く。アセット差分に強くするための逃げ道。 */
+export function drawSprOr(
+  ctx: CanvasRenderingContext2D, name: string, fallback: string,
+  x: number, y: number, scale = 1
+): void {
+  drawSpr(ctx, hasSpr(name) ? name : fallback, x, y, scale);
+}
+
+/**
+ * 半透明の暗幕をパレット内の色だけで敷く（§9.3「32色まで」）。
+ *
+ * ctx.fillStyle = 'rgba(...)' で塗ると背景と混色した中間色が画面に現れ、
+ * 数え上げた色数を軽く超える。代わりに 4x4 の順序ディザを敷き詰めて、
+ * 「使っている色は1色のまま、見た目だけ暗くなる」ようにする。
+ * パターンは (色, 濃さ) ごとに1枚だけ焼いて使い回す。
+ *
+ * density: 0..1。
+ */
+const BAYER4: readonly number[] = [
+  0, 8, 2, 10,
+  12, 4, 14, 6,
+  3, 11, 1, 9,
+  15, 7, 13, 5
+];
+
+const scrimCache = new Map<string, CanvasPattern | null>();
+
+function scrimPattern(
+  ctx: CanvasRenderingContext2D, color: string, level: number
+): CanvasPattern | null {
+  const key = `${color}|${level}`;
+  const hit = scrimCache.get(key);
+  if (hit !== undefined) return hit;
+  const c = document.createElement('canvas');
+  c.width = 4;
+  c.height = 4;
+  const cc = c.getContext('2d');
+  let pat: CanvasPattern | null = null;
+  if (cc) {
+    cc.fillStyle = color;
+    for (let y = 0; y < 4; y++) {
+      for (let x = 0; x < 4; x++) {
+        if ((BAYER4[y * 4 + x] ?? 16) < level) cc.fillRect(x, y, 1, 1);
+      }
+    }
+    pat = ctx.createPattern(c, 'repeat');
+  }
+  scrimCache.set(key, pat);
+  return pat;
+}
+
+export function fillScrim(
+  ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number,
+  color: string, density: number
+): void {
+  const level = Math.round(Math.max(0, Math.min(1, density)) * 16);
+  if (level <= 0) return;
+  if (level >= 16) { fillRect(ctx, x, y, w, h, color); return; }
+  const pat = scrimPattern(ctx, color, level);
+  if (!pat) { fillRect(ctx, x, y, w, h, color); return; }
+  ctx.save();
+  ctx.fillStyle = pat;
+  ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+  ctx.restore();
+}

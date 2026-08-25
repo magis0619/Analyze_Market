@@ -1,3 +1,6 @@
+import { fillScrim } from './draw';
+import { COLORS, OUTLINE } from './palette';
+
 // §5.4 演出のメリハリ：
 //  1. レア戦利品 … 0.8秒ホールド＋パーティクル
 //  2. 装備由来の選択肢 … 該当装備アイコンが1回光る
@@ -60,16 +63,18 @@ export class Effects {
     }
   }
 
-  /** 死亡演出：領域の彩度を落とす */
+  /** 死亡演出：領域から色を抜く。
+   *
+   * 以前は globalCompositeOperation='saturation' に灰色を重ねていたが、
+   * 合成の結果できる中間色はパレットの外なので §9.3 の32色制限を壊していた。
+   * 代わりに石色の順序ディザを2枚重ねる。打つ色はパレット内の2色だけのまま、
+   * 「色が抜けて石に変わった」ように見える。 */
   applyDesaturate(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
     if (!this.desaturate) return;
-    ctx.save();
-    ctx.globalCompositeOperation = 'saturation';
-    ctx.fillStyle = '#808080';
-    ctx.fillRect(x, y, w, h);
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = 'rgba(13,10,18,0.35)';
-    ctx.fillRect(x, y, w, h);
-    ctx.restore();
+    // 濃さは残り時間に比例させて抜いていく。一定の濃さで1.2秒固定すると
+    // その間レポートが一切読めず、「演出」ではなく「読めない時間」になる。
+    const t = Math.max(0, Math.min(1, this.freeze / 1.2));
+    fillScrim(ctx, x, y, w, h, COLORS.stoneDark, 0.22 * t);
+    fillScrim(ctx, x, y, w, h, OUTLINE, 0.10 * t);
   }
 }

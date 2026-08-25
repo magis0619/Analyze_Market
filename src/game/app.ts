@@ -1,80 +1,94 @@
-import { Shop } from './shop';
-import type { AdvSnapshot, RunOutcome } from '../sim/types';
-import { TitleScreen } from '../ui/title';
-import { NegotiationScreen } from '../ui/negotiation';
-import { SendoffScreen } from '../ui/sendoff';
-import { SpectateScreen } from '../ui/spectate';
-import { ResultScreen } from '../ui/result';
-import { Prng } from '../sim/prng';
+import type { Item } from '../sim/types';
+import { GameState } from './state';
 
 export interface GameScreen {
   update(dt: number): void;
   draw(ctx: CanvasRenderingContext2D): void;
   pointerDown?(x: number, y: number): void;
+  /** ドラッグでのスクロールに対応する画面だけ実装すればよい */
+  pointerMove?(x: number, y: number): void;
+  pointerUp?(x: number, y: number): void;
 }
 
-/** 進行中の1ラン。リプレイは seed + equipment + choices で完全再現できる。 */
-export interface RunRecord {
-  seed: number;
-  adv: AdvSnapshot;
-  equipment: string[];
-  choices: number[];
-  outcome?: RunOutcome;
+/** 画面から呼ぶ遷移。画面同士は互いを import しない。 */
+export interface Nav {
+  readonly state: GameState;
+  /** 実時間の倍率（デバッグ用。1が本番） */
+  readonly timeScale: number;
+  now(): number;
+  goBase(): void;
+  goDispatch(): void;
+  goInventory(): void;
+  goCompendium(): void;
+  goOpening(items: Item[]): void;
+  goReport(dispatchId: string): void;
 }
 
-export class App {
-  shop: Shop;
-  run: RunRecord | null = null;
+export class App implements Nav {
   screen: GameScreen;
-  /** 自動プレイ（検証用 ?auto=1） */
-  auto = false;
-  /** 再生速度（検証用 ?fast=N） */
-  speed = 1;
+  readonly state: GameState;
+  timeScale = 1;
+  private factories: {
+    base: (nav: Nav) => GameScreen;
+    dispatch: (nav: Nav) => GameScreen;
+    inventory: (nav: Nav) => GameScreen;
+    compendium: (nav: Nav) => GameScreen;
+    opening: (nav: Nav, items: Item[]) => GameScreen;
+    report: (nav: Nav, dispatchId: string) => GameScreen;
+  };
 
-  constructor(seed: number) {
-    this.shop = new Shop(seed);
-    this.screen = new TitleScreen(this);
+  constructor(
+    state: GameState,
+    factories: App['factories'],
+    initial: (nav: Nav) => GameScreen
+  ) {
+    this.state = state;
+    this.factories = factories;
+    this.screen = initial(this);
   }
 
-  gotoTitle(): void {
-    this.screen = new TitleScreen(this);
+  now(): number {
+    // timeScale > 1 のとき、経過時間を水増しして見せる（開発時の確認用）。
+    // 本番（timeScale = 1）では Date.now() をそのまま使う。
+    if (this.timeScale === 1) return Date.now();
+    const origin = this.originMs;
+    return origin + (Date.now() - origin) * this.timeScale;
+  }
+  private originMs = Date.now();
+
+  /**
+   * 画面遷移を起こしたタップの後始末フラグ。
+   *
+   * 画面は pointerDown で切り替わるが、そのタップの pointerUp / pointerMove は
+   * **新しい画面**に届く。座標がたまたま新画面の当たり判定に重なっていると、
+   * 押した覚えのない操作が1回入る。実際、拠点の「派遣準備」（y=324〜364）は
+   * 派遣画面のステージ一覧（y∈[232,558)）の内側にあり、開いた瞬間に
+   * ステージ3〜4が選ばれていた。
+   *
+   * 画面ごとにガードを足すと同じバグを永遠に作り続けるので、遷移した時点で
+   * 「次の up を1回だけ捨てる」ことを App の責務として持つ。
+   */
+  private swallowUp = false;
+
+  /** 遷移直後かどうか（pointerMove の判定用。フラグは消費しない）。 */
+  pendingSwallow(): boolean { return this.swallowUp; }
+
+  /** 入力層から呼ぶ。true が返ったらその pointerUp は無視すること。 */
+  consumeSwallowedUp(): boolean {
+    if (!this.swallowUp) return false;
+    this.swallowUp = false;
+    return true;
   }
 
-  gotoNegotiation(): void {
-    this.run = null;
-    this.screen = new NegotiationScreen(this);
-    if (this.auto) {
-      // 自動プレイ：決定論的に0〜3点を見立てて送り出す
-      const rng = new Prng(this.shop.runSeed() ^ 0xa07a);
-      const avail = this.shop.available();
-      const n = Math.min(avail.length, rng.int(4));
-      const pick: string[] = [];
-      const pool = [...avail];
-      for (let i = 0; i < n; i++) {
-        const idx = rng.int(pool.length);
-        const id = pool.splice(idx, 1)[0];
-        if (id) pick.push(id);
-      }
-      this.startRun(pick);
-    }
+  private go(next: GameScreen): void {
+    this.screen = next;
+    this.swallowUp = true;
   }
 
-  startRun(equipment: string[]): void {
-    this.run = {
-      seed: this.shop.runSeed(),
-      adv: this.shop.advSnapshot(),
-      equipment: [...equipment],
-      choices: []
-    };
-    this.screen = new SendoffScreen(this);
-    if (this.auto) this.gotoSpectate();
-  }
-
-  gotoSpectate(): void {
-    this.screen = new SpectateScreen(this);
-  }
-
-  gotoResult(): void {
-    this.screen = new ResultScreen(this);
-  }
+  goBase(): void { this.go(this.factories.base(this)); }
+  goDispatch(): void { this.go(this.factories.dispatch(this)); }
+  goInventory(): void { this.go(this.factories.inventory(this)); }
+  goCompendium(): void { this.go(this.factories.compendium(this)); }
+  goOpening(items: Item[]): void { this.go(this.factories.opening(this, items)); }
+  goReport(id: string): void { this.go(this.factories.report(this, id)); }
 }

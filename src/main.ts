@@ -1,8 +1,16 @@
 import { Screen } from './render/screen';
 import { initSprites } from './render/sprites';
 import { App } from './game/app';
+import { GameState, debugLoot } from './game/state';
+import { TitleScreen } from './ui/title';
+import { BaseScreen } from './ui/base';
+import { DispatchScreen } from './ui/dispatch';
+import { InventoryScreen } from './ui/inventory';
+import { CompendiumScreen } from './ui/compendium';
+import { OpeningScreen } from './ui/opening';
+import { ReportScreen } from './ui/report';
 
-// ブート。描画は 360×640 の内部解像度 → 整数倍スケール表示。
+// ブート。描画は 360×640 の内部解像度 → 整数倍スケール。
 
 const params = new URLSearchParams(location.search);
 const seedParam = params.get('seed');
@@ -13,25 +21,70 @@ initSprites();
 const canvas = document.getElementById('game') as HTMLCanvasElement | null;
 if (!canvas) throw new Error('canvas not found');
 const screen = new Screen(canvas);
-const app = new App(seed);
-app.auto = params.get('auto') === '1';
-app.speed = Math.max(0.25, Math.min(8, parseFloat(params.get('fast') ?? '1') || 1));
-if (app.auto) app.gotoNegotiation();
 
+if (params.get('reset') === '1') {
+  try { localStorage.removeItem('delvers.save.v1'); } catch { /* 続行 */ }
+}
+
+const state = new GameState(seed, Date.now());
+
+// 開発用: インベントリに任意個の装備を積む（?devitems=200）。
+// C10（200個所持時の操作性）の確認と、画面の詰まり具合を実機で見るために使う。
+const devItems = parseInt(params.get('devitems') ?? '0', 10);
+if (Number.isFinite(devItems) && devItems > 0) {
+  const n = Math.min(2000, devItems);
+  for (let i = 0; i < n; i++) {
+    const stageId = 1 + (i % 10);
+    // debugLoot は `i % 2` でスロットを振るので、count=1 だと **武器しか作らない**。
+    // 以前これで「200個所持」の検証をしていたが、実際は武器201・防具1で、
+    // 防具のフィルタもピッカーも空のまま撮っていた。2個ずつ作って両方入れる。
+    state.data.inventory.push(...debugLoot(seed ^ (i * 7919), stageId, 2)
+      .map((it, k) => ({ ...it, id: `dev-${i}-${k}`, identified: true })));
+  }
+  state.data.gold += 50000;
+  state.save();
+}
+const app = new App(state, {
+  base: nav => new BaseScreen(nav),
+  dispatch: nav => new DispatchScreen(nav),
+  inventory: nav => new InventoryScreen(nav),
+  compendium: nav => new CompendiumScreen(nav),
+  opening: (nav, items) => new OpeningScreen(nav, items),
+  report: (nav, id) => new ReportScreen(nav, id)
+}, nav => new TitleScreen(nav));
+
+// 実時間の倍率（開発時の確認用。本番は 1）。
+const ts = parseFloat(params.get('timescale') ?? '1');
+app.timeScale = Number.isFinite(ts) && ts >= 1 ? Math.min(20000, ts) : 1;
+
+let dragging = false;
 canvas.addEventListener('pointerdown', (e) => {
   const p = screen.toInternal(e.clientX, e.clientY);
+  dragging = true;
   app.screen.pointerDown?.(p.x, p.y);
 });
+canvas.addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  // 画面が切り替わった直後の move も、押した覚えのない操作になるので捨てる
+  if (app.pendingSwallow()) return;
+  const p = screen.toInternal(e.clientX, e.clientY);
+  app.screen.pointerMove?.(p.x, p.y);
+});
+const endDrag = (e: PointerEvent): void => {
+  if (!dragging) return;
+  dragging = false;
+  // pointerDown で画面が切り替わっていたら、この up は前の画面のもの。
+  // 新しい画面に渡すと押した覚えのない操作が1回入る
+  if (app.consumeSwallowedUp()) return;
+  const p = screen.toInternal(e.clientX, e.clientY);
+  app.screen.pointerUp?.(p.x, p.y);
+};
+canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointercancel', endDrag);
 
-// フレーム計測（C4 検査用に window へ公開）。
-// over17_5: フレーム落ちとみなす閾値（60fps の 16.7ms + vsync ジッタ余裕）
-// over33_4: 明確な2フレーム落ち
+// フレーム計測（C軸のfps検査用に window へ公開）
 const frameStats = { frames: 0, over17_5: 0, over33_4: 0, worst: 0 };
-interface DebugApi {
-  app: App;
-  frameStats: typeof frameStats;
-}
-(window as unknown as { __outfitter: DebugApi }).__outfitter = { app, frameStats };
+(window as unknown as { __delvers: unknown }).__delvers = { app, state, frameStats };
 
 let last = performance.now();
 function loop(now: number): void {
