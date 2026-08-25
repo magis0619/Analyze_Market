@@ -1193,8 +1193,8 @@ export class OpeningScreen implements GameScreen {
     // --- 札 ---
     //
     // 地は必ず不透明なベタで塗る。ディザで背景を透かすと、粒が札の中まで
-    // 続いて「枠線だけの窓」になり、いちばん読ませたい名前・アフィックス・★が
-    // 模様の上に乗ってしまう。背景がどんな模様でも輪郭が立つよう、
+    // 続いて「枠線だけの抜け」になり、いちばん読ませたい名前・アフィックス・★が
+    // 模様の上に乗ってしまう。背景がどんな模様でも境目が立つよう、
     //   外に1pxの暗色 → レアリティ枠2px → 内に1pxの暗色 → ベタ地
     // の順に重ねる。
     fillRect(ctx, cardX - 1, cardY - 1, cardW + 2, cardH + 2, THEME.outline);
@@ -1202,7 +1202,7 @@ export class OpeningScreen implements GameScreen {
     strokeRect1(ctx, cardX + 1, cardY + 1, cardW - 2, cardH - 2, color);
     strokeRect1(ctx, cardX + 2, cardY + 2, cardW - 4, cardH - 4, THEME.outline);
     // 地は panelLight。THEME.panel は稀少の流動場の最下層と同じ色なので、
-    // それを地に使うと札と背景が同じ明度になり、枠だけの窓に見えてしまう。
+    // それを地に使うと札と背景が同じ明度になり、枠だけの抜けに見えてしまう。
     fillRect(ctx, cardX + 3, cardY + 3, cardW - 6, cardH - 6, THEME.panelLight);
 
     // アイコン（整数倍スケール）。枠だけ先に出て、1テンポ置いて中身が入る。
@@ -1256,7 +1256,7 @@ export class OpeningScreen implements GameScreen {
       ly += Math.max(1, this.cutLines.length) * LH;
       affixFrom = 0.62 + total * 0.030 + 0.12;
       // ユニーク行とアフィックス枠の境目
-      // 地より暗い線で彫る（地と同じ panelLight では見えない）
+      // 地より暗い線を1本（地と同じ panelLight では見えない）
       if (since >= affixFrom) fillRect(ctx, cardX + 16, ly + 4, cardW - 32, 1, THEME.panel);
       ly += SEP_GAP;
     }
