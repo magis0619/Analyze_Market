@@ -1,7 +1,14 @@
 import { Screen } from './render/screen';
 import { initSprites } from './render/sprites';
 import { App } from './game/app';
+import { GameState } from './game/state';
 import { TitleScreen } from './ui/title';
+import { BaseScreen } from './ui/base';
+import { DispatchScreen } from './ui/dispatch';
+import { InventoryScreen } from './ui/inventory';
+import { CompendiumScreen } from './ui/compendium';
+import { OpeningScreen } from './ui/opening';
+import { ReportScreen } from './ui/report';
 
 // ブート。描画は 360×640 の内部解像度 → 整数倍スケール。
 
@@ -14,16 +21,48 @@ initSprites();
 const canvas = document.getElementById('game') as HTMLCanvasElement | null;
 if (!canvas) throw new Error('canvas not found');
 const screen = new Screen(canvas);
-const app = new App(seed, new TitleScreen());
 
+if (params.get('reset') === '1') {
+  try { localStorage.removeItem('delvers.save.v1'); } catch { /* 続行 */ }
+}
+
+const state = new GameState(seed, Date.now());
+const app = new App(state, {
+  base: nav => new BaseScreen(nav),
+  dispatch: nav => new DispatchScreen(nav),
+  inventory: nav => new InventoryScreen(nav),
+  compendium: nav => new CompendiumScreen(nav),
+  opening: (nav, items) => new OpeningScreen(nav, items),
+  report: (nav, id) => new ReportScreen(nav, id)
+}, nav => new TitleScreen(nav));
+
+// 実時間の倍率（開発時の確認用。本番は 1）。
+const ts = parseFloat(params.get('timescale') ?? '1');
+app.timeScale = Number.isFinite(ts) && ts >= 1 ? Math.min(20000, ts) : 1;
+
+let dragging = false;
 canvas.addEventListener('pointerdown', (e) => {
   const p = screen.toInternal(e.clientX, e.clientY);
+  dragging = true;
   app.screen.pointerDown?.(p.x, p.y);
 });
+canvas.addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  const p = screen.toInternal(e.clientX, e.clientY);
+  app.screen.pointerMove?.(p.x, p.y);
+});
+const endDrag = (e: PointerEvent): void => {
+  if (!dragging) return;
+  dragging = false;
+  const p = screen.toInternal(e.clientX, e.clientY);
+  app.screen.pointerUp?.(p.x, p.y);
+};
+canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointercancel', endDrag);
 
 // フレーム計測（C軸のfps検査用に window へ公開）
 const frameStats = { frames: 0, over17_5: 0, over33_4: 0, worst: 0 };
-(window as unknown as { __delvers: unknown }).__delvers = { app, frameStats };
+(window as unknown as { __delvers: unknown }).__delvers = { app, state, frameStats };
 
 let last = performance.now();
 function loop(now: number): void {

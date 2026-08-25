@@ -75,11 +75,11 @@ interface SplitShape {
 
 // §5.2 L2「属性配分は大きく振る」
 const SPLIT_SHAPES: readonly SplitShape[] = [
-  { physical: 1.0, weight: 30, casterWeight: 5 },
-  { physical: 0.7, weight: 25, casterWeight: 15 },
-  { physical: 0.5, weight: 20, casterWeight: 25 },
-  { physical: 0.3, weight: 15, casterWeight: 30 },
-  { physical: 0.0, weight: 10, casterWeight: 25 }
+  { physical: 1.0, weight: 18, casterWeight: 4 },
+  { physical: 0.7, weight: 22, casterWeight: 12 },
+  { physical: 0.5, weight: 22, casterWeight: 22 },
+  { physical: 0.3, weight: 20, casterWeight: 30 },
+  { physical: 0.0, weight: 18, casterWeight: 32 }
 ];
 
 const NON_PHYSICAL: readonly Element[] = ['fire', 'lightning', 'poison', 'ice'];

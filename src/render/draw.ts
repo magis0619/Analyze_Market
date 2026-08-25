@@ -73,3 +73,23 @@ export function strokeRect1(
 export function iconSize(name: string): { w: number; h: number } {
   return sprSize(name);
 }
+
+// スプライトの存在確認は毎フレーム try/catch すると重いのでキャッシュする。
+const existCache = new Map<string, boolean>();
+
+export function hasSpr(name: string): boolean {
+  const hit = existCache.get(name);
+  if (hit !== undefined) return hit;
+  let ok = true;
+  try { spr(name); } catch { ok = false; }
+  existCache.set(name, ok);
+  return ok;
+}
+
+/** name が無ければ fallback を描く。アセット差分に強くするための逃げ道。 */
+export function drawSprOr(
+  ctx: CanvasRenderingContext2D, name: string, fallback: string,
+  x: number, y: number, scale = 1
+): void {
+  drawSpr(ctx, hasSpr(name) ? name : fallback, x, y, scale);
+}
