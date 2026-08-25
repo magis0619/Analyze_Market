@@ -61,6 +61,7 @@ let dragging = false;
 canvas.addEventListener('pointerdown', (e) => {
   const p = screen.toInternal(e.clientX, e.clientY);
   dragging = true;
+  app.notePointerDown();
   app.screen.pointerDown?.(p.x, p.y);
 });
 canvas.addEventListener('pointermove', (e) => {
@@ -73,6 +74,7 @@ canvas.addEventListener('pointermove', (e) => {
 const endDrag = (e: PointerEvent): void => {
   if (!dragging) return;
   dragging = false;
+  app.notePointerUp();
   // pointerDown で画面が切り替わっていたら、この up は前の画面のもの。
   // 新しい画面に渡すと押した覚えのない操作が1回入る
   if (app.consumeSwallowedUp()) return;

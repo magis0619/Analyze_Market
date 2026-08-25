@@ -10,7 +10,7 @@ import { sfx } from '../render/audio';
 import { hasCutIn, sellValue } from '../sim/items';
 import { uniqueDef } from '../data/uniques';
 import { THEME } from './theme';
-import { drawBtn, hitBtn, type Btn } from './widgets';
+import { drawButton, hitButton, type Button } from './components';
 import {
   RARITY_COLOR, RARITY_LABEL, affixLine, drawItemDetail, drawItemRow,
   itemIconName, itemName, tierStars
@@ -50,9 +50,9 @@ function rowY(i: number): number {
   return LIST_Y + i * (ROW_H + ROW_GAP);
 }
 
-const MAIN_BTN: Btn = { x: 80, y: 570, w: 200, h: 44, label: '一括開封', accent: true };
-const BACK_BTN: Btn = { x: 80, y: 570, w: 200, h: 44, label: '拠点へ戻る', accent: true };
-const SKIP_BTN: Btn = { x: 244, y: 526, w: 100, h: 32, label: 'スキップ' };
+const MAIN_BTN: Button = { x: 80, y: 570, w: 200, h: 44, label: '一括開封', accent: true };
+const BACK_BTN: Button = { x: 80, y: 570, w: 200, h: 44, label: '拠点へ戻る', accent: true };
+const SKIP_BTN: Button = { x: 244, y: 526, w: 100, h: 32, label: 'スキップ' };
 
 // ---------------------------------------------------------------- レアリティ配色
 //
@@ -728,7 +728,7 @@ export class OpeningScreen implements GameScreen {
       return;
     }
     if (this.phase === 'intro') {
-      if (hitBtn(MAIN_BTN, x, y)) {
+      if (hitButton(MAIN_BTN, x, y)) {
         sfx('confirm');
         // 演出を始める前に獲得を確定させる（以降どの経路を通っても取りこぼさない）
         this.claim();
@@ -738,7 +738,7 @@ export class OpeningScreen implements GameScreen {
       return;
     }
     if (this.phase === 'done') {
-      if (hitBtn(BACK_BTN, x, y)) {
+      if (hitButton(BACK_BTN, x, y)) {
         sfx('confirm');
         this.claim();
         this.nav.goBase();
@@ -753,7 +753,7 @@ export class OpeningScreen implements GameScreen {
       return;
     }
     // 開封中：スキップ
-    if (hitBtn(SKIP_BTN, x, y)) {
+    if (hitButton(SKIP_BTN, x, y)) {
       this.skipAll();
       return;
     }
@@ -998,11 +998,11 @@ export class OpeningScreen implements GameScreen {
   private drawButtons(ctx: CanvasRenderingContext2D): void {
     if (this.phase === 'intro') {
       drawTextCentered(ctx, `${this.items.length}個の未鑑定品を持ち帰った`, VW / 2, 516, 8, THEME.dim);
-      drawBtn(ctx, MAIN_BTN);
+      drawButton(ctx, MAIN_BTN);
     } else if (this.phase === 'done') {
-      drawBtn(ctx, BACK_BTN);
+      drawButton(ctx, BACK_BTN);
     } else {
-      drawBtn(ctx, SKIP_BTN, 8);
+      drawButton(ctx, SKIP_BTN, 8);
     }
   }
 

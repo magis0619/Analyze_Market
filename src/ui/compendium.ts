@@ -4,7 +4,9 @@ import { VW, VH } from '../render/screen';
 import { drawNineSlice, drawSprOr, fillRect, strokeRect1 } from '../render/draw';
 import { drawText, drawTextCentered, drawTextRight, drawTextWrapped } from '../render/font';
 import { THEME } from './theme';
-import { drawBtn, hitBtn, inRect, type Btn } from './widgets';
+import { drawHeader, drawTabs, hitHeaderBack, hitTab } from './components';
+
+const TAB_LABELS = ['装備', 'ユニーク効果'] as const;
 import { BASE_TYPES } from '../data/bases';
 import { UNIQUES } from '../data/uniques';
 import { stageDef } from '../data/stages';
@@ -25,8 +27,8 @@ const GRID_Y = 78;
 const CELL = 40;
 const COLS = 8;
 const GRID_X = Math.floor((VW - COLS * CELL) / 2);
-const GRID_H = 300;
-const DETAIL_Y = GRID_Y + GRID_H + 8;
+/** グリッドに使う最大の高さ。中身が少なければその分だけ縮める */
+const GRID_H_MAX = 300;
 
 interface Entry {
   key: string;
@@ -43,7 +45,6 @@ export class CompendiumScreen implements GameScreen {
   private dragged = false;
   private tab: 0 | 1 = 0;
   private selected = 0;
-  private backBtn: Btn = { x: 8, y: 4, w: 64, h: 20, label: '戻る' };
 
   constructor(private nav: Nav) {}
 
@@ -83,24 +84,23 @@ export class CompendiumScreen implements GameScreen {
     return Math.ceil(n / COLS);
   }
 
+  /** 中身の行数からグリッドの高さを決める。余った縦は詳細に回す。 */
+  private gridH(count: number): number {
+    return Math.max(CELL * 2, Math.min(GRID_H_MAX, this.gridRows(count) * CELL));
+  }
+
   draw(ctx: CanvasRenderingContext2D): void {
     const st = this.nav.state;
     const rows = this.entries();
+    const GRID_H = this.gridH(rows.length);
+    const DETAIL_Y = GRID_Y + GRID_H + 8;
     fillRect(ctx, 0, 0, VW, VH, THEME.bg);
-    fillRect(ctx, 0, 0, VW, 26, THEME.panel);
-    drawBtn(ctx, this.backBtn, 8);
-    drawTextCentered(ctx, '図鑑', VW / 2, 5, 12, THEME.text);
     const found = rows.filter(r => st.data.compendium[r.key]).length;
-    drawTextRight(ctx, `${found}/${rows.length}`, VW - 8, 5, 12, THEME.gold);
-
-    // タブ
-    ['装備', 'ユニーク効果'].forEach((label, i) => {
-      const w = 120, x = 8 + i * (w + 4);
-      const sel = this.tab === i;
-      fillRect(ctx, x, 32, w, 22, sel ? THEME.panelLight : THEME.panel);
-      if (sel) strokeRect1(ctx, x, 32, w, 22, THEME.gold);
-      drawTextCentered(ctx, label, x + w / 2, 36, 8, sel ? THEME.gold : THEME.dim);
+    drawHeader(ctx, VW, {
+      title: '図鑑', back: true,
+      gold: st.data.gold, meta: `${found}/${rows.length}`
     });
+    drawTabs(ctx, 8, 32, VW - 16, 22, TAB_LABELS, this.tab);
 
     // グリッド（未発見は影）
     ctx.save();
@@ -167,16 +167,14 @@ export class CompendiumScreen implements GameScreen {
   pointerDown(px: number, py: number): void {
     this.dragY = py;
     this.dragged = false;
-    if (hitBtn(this.backBtn, px, py)) { sfx('tap'); this.nav.goBase(); return; }
-    for (let i = 0; i < 2; i++) {
-      const w = 120, x = 8 + i * (w + 4);
-      if (inRect(px, py, x, 32, w, 22)) {
-        this.tab = i === 0 ? 0 : 1;
-        this.scroll = 0;
-        this.selected = 0;
-        sfx('tap');
-        return;
-      }
+    if (hitHeaderBack(px, py)) { sfx('tap'); this.nav.goBase(); return; }
+    const tab = hitTab(8, 32, VW - 16, 22, TAB_LABELS.length, px, py);
+    if (tab >= 0) {
+      this.tab = tab === 0 ? 0 : 1;
+      this.scroll = 0;
+      this.selected = 0;
+      sfx('tap');
+      return;
     }
   }
 
@@ -184,7 +182,8 @@ export class CompendiumScreen implements GameScreen {
     if (this.dragY === null) return;
     const dy = this.dragY - py;
     if (Math.abs(dy) > 3) this.dragged = true;
-    const maxScroll = Math.max(0, this.gridRows(this.entries().length) * CELL - GRID_H);
+    const n = this.entries().length;
+    const maxScroll = Math.max(0, this.gridRows(n) * CELL - this.gridH(n));
     this.scroll = Math.max(0, Math.min(maxScroll, this.scroll + dy));
     this.dragY = py;
   }
@@ -195,7 +194,7 @@ export class CompendiumScreen implements GameScreen {
     this.dragged = false;
     if (wasDragging) return;
     if (px < GRID_X || px >= GRID_X + COLS * CELL) return;
-    if (py < GRID_Y || py >= GRID_Y + GRID_H) return;
+    if (py < GRID_Y || py >= GRID_Y + this.gridH(this.entries().length)) return;
     const c = Math.floor((px - GRID_X) / CELL);
     const r = Math.floor((py - GRID_Y + this.scroll) / CELL);
     const i = r * COLS + c;
