@@ -1,5 +1,5 @@
 {
-  "name": "outfitter",
+  "name": "delvers",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node scripts/static-checks.mjs && echo "(tests pending rewrite for DELVERS)""
+    "test": "node scripts/static-checks.mjs && tsx test/run-tests.ts"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

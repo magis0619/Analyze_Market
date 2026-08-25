@@ -1,0 +1,289 @@
+// DELVERS 破綻検査（仕様書 §11.3）。C2/C6 は scripts/static-checks.mjs 側。
+// ここでは C3/C4/C5/C7/C8/C9 と、完成の定義（§13）の一部を検査する。
+import { Prng } from '../src/sim/prng';
+import { simulateRun } from '../src/sim/combat';
+import { generateItem, POWER_CAP } from '../src/sim/items';
+import { advanceClock, dispatchProgress, OFFLINE_CAP_SEC } from '../src/sim/offline';
+import { AFFIXES } from '../src/data/affixes';
+import { BASE_TYPES, baseDef } from '../src/data/bases';
+import { JOBS, RETREAT_RULES, canEquipArmor, jobDef, retreatRuleDef } from '../src/data/jobs';
+import { STAGES, itemPowerFor, stageDef } from '../src/data/stages';
+import type { Dispatch, Item } from '../src/sim/types';
+
+let failures = 0;
+function check(name: string, ok: boolean, detail = ''): void {
+  if (ok) console.log(`  ok: ${name}`);
+  else { failures++; console.error(`  FAIL: ${name} ${detail}`); }
+}
+
+function makeItem(rng: Prng, baseId: string, itemPower: number, stageId = 1): Item {
+  // 指定ベースが出るまで引く（生成器はベースをランダムに選ぶため）
+  const slot = baseDef(baseId).slot;
+  for (let i = 0; i < 5000; i++) {
+    const it = generateItem(rng, {
+      itemPower, slot, stageId, rarityBonus: 1, id: `t${i}`
+    });
+    if (it.baseId === baseId) return it;
+  }
+  throw new Error(`could not roll base ${baseId}`);
+}
+
+// ---------------------------------------------------------------- C3
+console.log('C3: 同一seed・同一装備・同一撤退ルールで結果が完全一致するか（100回）');
+{
+  const rng = new Prng(0xabc);
+  const weapon = makeItem(rng, 'sword', 120);
+  const armor = makeItem(rng, 'medium', 120);
+  const input = {
+    seed: 0xdeadbeef, job: jobDef('swordsman'), weapon, armor,
+    rule: retreatRuleDef('standard'), stage: stageDef(3), tier: 1
+  };
+  const first = JSON.stringify(simulateRun(input));
+  let same = true;
+  for (let i = 0; i < 100; i++) {
+    if (JSON.stringify(simulateRun(input)) !== first) { same = false; break; }
+  }
+  check('100回連続で完全一致', same);
+
+  // 装備生成そのものも同一seedで再現できること
+  const genA = JSON.stringify(
+    Array.from({ length: 50 }, (_, i) =>
+      generateItem(new Prng(0x1234 + i), { itemPower: 150, slot: 'weapon', stageId: 4, rarityBonus: 1.2, id: `x${i}` })
+    )
+  );
+  const genB = JSON.stringify(
+    Array.from({ length: 50 }, (_, i) =>
+      generateItem(new Prng(0x1234 + i), { itemPower: 150, slot: 'weapon', stageId: 4, rarityBonus: 1.2, id: `x${i}` })
+    )
+  );
+  check('装備生成も同一seedで完全再現', genA === genB);
+}
+
+// ---------------------------------------------------------------- C4
+console.log('C4: オフライン8時間の一括計算と分割計算が一致するか');
+{
+  const start = 1_700_000_000_000;
+  const dispatch: Dispatch = {
+    id: 'd1', jobId: 'swordsman', stageId: 10, weaponId: 'w', armorId: 'a',
+    retreatRule: 'standard', seed: 1, startedAt: start,
+    durationSec: 8 * 3600
+  };
+  const end = start + 8 * 3600 * 1000;
+
+  // 一括: いきなり8時間後を観測
+  const bulk = dispatchProgress(dispatch, advanceClock({ lastSeen: start }, end));
+
+  // 分割: 1分ずつ480回に分けて観測
+  let clock = { lastSeen: start };
+  for (let i = 1; i <= 480; i++) {
+    clock = advanceClock(clock, start + i * 60_000);
+  }
+  const split = dispatchProgress(dispatch, clock);
+
+  check(`一括 ${bulk.elapsedSec}s == 分割 ${split.elapsedSec}s`, bulk.elapsedSec === split.elapsedSec);
+  check('一括・分割ともに完了', bulk.completed && split.completed);
+
+  // 不規則な刻みでも一致すること
+  let clock2 = { lastSeen: start };
+  const steps = [13, 900, 77, 4000, 60, 12000, 5, 9000, 1, 2400];
+  let acc = 0;
+  for (const s of steps) { acc += s; clock2 = advanceClock(clock2, start + acc * 1000); }
+  const irregular = dispatchProgress(dispatch, clock2);
+  const same = dispatchProgress(dispatch, advanceClock({ lastSeen: start }, start + acc * 1000));
+  check('不規則な分割でも一致', irregular.elapsedSec === same.elapsedSec);
+
+  // 8時間の上限（§7.2）
+  const far = dispatchProgress(dispatch, advanceClock({ lastSeen: start }, start + 40 * 3600 * 1000));
+  check(`上限8時間でクランプ（${far.elapsedSec}s == ${OFFLINE_CAP_SEC}s）`, far.elapsedSec === OFFLINE_CAP_SEC);
+}
+
+// ---------------------------------------------------------------- C5
+console.log('C5: 端末時刻の巻き戻しで進行しないか');
+{
+  const start = 1_700_000_000_000;
+  const dispatch: Dispatch = {
+    id: 'd2', jobId: 'swordsman', stageId: 1, weaponId: 'w', armorId: 'a',
+    retreatRule: 'standard', seed: 1, startedAt: start, durationSec: 300
+  };
+  // 60秒進めてから、1時間巻き戻す
+  let clock = advanceClock({ lastSeen: start }, start + 60_000);
+  const before = dispatchProgress(dispatch, clock);
+  clock = advanceClock(clock, start - 3600_000);
+  const after = dispatchProgress(dispatch, clock);
+  check(`巻き戻しても進行量が変わらない（${before.elapsedSec}s → ${after.elapsedSec}s）`,
+    after.elapsedSec === before.elapsedSec);
+  check('巻き戻しで完了扱いにならない', !after.completed);
+
+  // 巻き戻したまま何度観測しても増えない
+  for (let i = 0; i < 20; i++) clock = advanceClock(clock, start - 3600_000 + i * 1000);
+  const stuck = dispatchProgress(dispatch, clock);
+  check('巻き戻し中は何度観測しても進まない', stuck.elapsedSec === before.elapsedSec);
+}
+
+// ---------------------------------------------------------------- C7
+console.log('C7: 特定の武器・防具の組み合わせが常に最適になっていないか');
+{
+  const weapons = BASE_TYPES.filter(b => b.slot === 'weapon');
+  const armors = BASE_TYPES.filter(b => b.slot === 'armor');
+  const results: { combo: string; avg: number }[] = [];
+  for (const w of weapons) {
+    for (const a of armors) {
+      // その防具を装備できる職だけで平均する（§4.2の装備制限）
+      const jobs = JOBS.filter(j => canEquipArmor(j, a.tags));
+      let sum = 0, n = 0;
+      for (const job of jobs) {
+        for (const stage of [stageDef(2), stageDef(5), stageDef(8)]) {
+          for (let i = 0; i < 12; i++) {
+            const rng = new Prng(0x5000 + i * 6151 + stage.id * 97);
+            const weapon = makeItem(rng, w.id, itemPowerFor(stage.id, 1), stage.id);
+            const armor = makeItem(rng, a.id, itemPowerFor(stage.id, 1), stage.id);
+            const r = simulateRun({
+              seed: (0x6000 + i * 22079) >>> 0, job, weapon, armor,
+              rule: retreatRuleDef('standard'), stage, tier: 1
+            });
+            sum += r.depth / stage.encounters;
+            n++;
+          }
+        }
+      }
+      results.push({ combo: `${w.name}+${a.name}`, avg: sum / Math.max(1, n) });
+    }
+  }
+  results.sort((x, y) => y.avg - x.avg);
+  const top = results[0], second = results[1], worst = results[results.length - 1];
+  if (top && second && worst) {
+    const gap = (top.avg - second.avg) / Math.max(0.001, second.avg);
+    console.log(`  1位 ${top.combo} ${(top.avg * 100).toFixed(1)}% / 2位 ${second.combo} ${(second.avg * 100).toFixed(1)}% / 最下位 ${worst.combo} ${(worst.avg * 100).toFixed(1)}%`);
+    check(`1位と2位の差が20%未満（${(gap * 100).toFixed(1)}%）`, gap < 0.20, `gap=${(gap * 100).toFixed(1)}%`);
+    check('組み合わせで差はつく（1位＞最下位）', top.avg > worst.avg * 1.02);
+  }
+}
+
+// ---------------------------------------------------------------- C8
+console.log('C8: 攻撃力が4桁に到達しないか');
+{
+  let maxSeen = 0;
+  for (let tier = 1; tier <= 8; tier++) {
+    for (let i = 0; i < 400; i++) {
+      const it = generateItem(new Prng(0x7000 + i + tier * 31), {
+        itemPower: itemPowerFor(10, tier), slot: i % 2 === 0 ? 'weapon' : 'armor',
+        stageId: 10, rarityBonus: 2, id: `c8-${i}`
+      });
+      maxSeen = Math.max(maxSeen, it.power);
+    }
+  }
+  check(`最大値 ${maxSeen} が上限 ${POWER_CAP} 以下（4桁未満）`, maxSeen <= POWER_CAP && maxSeen < 1000);
+}
+
+// ---------------------------------------------------------------- C9
+console.log('C9: 回復アフィックスが武器側に存在しないか');
+{
+  const healOnWeapon = AFFIXES.filter(a => a.slot === 'weapon' && a.kind === 'killHeal');
+  check('武器プールに回復アフィックスがない', healOnWeapon.length === 0);
+  const healDefs = AFFIXES.filter(a => a.kind === 'killHeal');
+  check('回復アフィックスは防具のみ', healDefs.every(a => a.slot === 'armor'));
+  check('回復は固定値（割合ではない）', healDefs.every(a => !a.isPercent));
+
+  // 生成物の側でも武器に回復が乗らないこと
+  let leaked = 0;
+  for (let i = 0; i < 3000; i++) {
+    const it = generateItem(new Prng(0x8000 + i), {
+      itemPower: 200, slot: 'weapon', stageId: 5, rarityBonus: 3, id: `c9-${i}`
+    });
+    if (it.affixes.some(a => a.kind === 'killHeal')) leaked++;
+  }
+  check(`生成3000本の武器に回復が0件（${leaked}件）`, leaked === 0);
+}
+
+// ---------------------------------------------------------------- §13-1
+console.log('§13-1: ステージ1〜10がクリア可能か（周回した装備を想定）');
+{
+  const unclearable: number[] = [];
+  for (const stage of STAGES) {
+    let cleared = false;
+    const power = itemPowerFor(Math.min(10, stage.id + 2), 1);
+    outer:
+    for (const job of JOBS) {
+      for (const rule of RETREAT_RULES) {
+        for (let i = 0; i < 30; i++) {
+          const rng = new Prng(0x9000 + i * 7919 + stage.id * 131);
+          let weapon: Item | null = null, armor: Item | null = null;
+          for (let k = 0; k < 300 && (!weapon || !armor); k++) {
+            const it = generateItem(rng, {
+              itemPower: power, slot: k % 2 === 0 ? 'weapon' : 'armor',
+              stageId: stage.id, rarityBonus: 1.5, id: `s${k}`
+            });
+            if (it.slot === 'weapon' && !weapon) weapon = it;
+            if (it.slot === 'armor' && !armor && canEquipArmor(job, baseDef(it.baseId).tags)) armor = it;
+          }
+          if (!weapon || !armor) continue;
+          const r = simulateRun({
+            seed: (0xa000 + i * 104729) >>> 0, job, weapon, armor, rule, stage, tier: 1
+          });
+          if (r.outcome === 'clear') { cleared = true; break outer; }
+        }
+      }
+    }
+    if (!cleared) unclearable.push(stage.id);
+  }
+  check(`全10ステージがクリア可能（未クリア: ${unclearable.join(',') || 'なし'}）`, unclearable.length === 0);
+}
+
+// ---------------------------------------------------------------- 装備の個性
+console.log('装備: ドロップ1個1個に個性があるか（§10 担当3のベンチマーク観点）');
+{
+  const items = Array.from({ length: 500 }, (_, i) =>
+    generateItem(new Prng(0xb000 + i), {
+      itemPower: 200, slot: i % 2 === 0 ? 'weapon' : 'armor',
+      stageId: 6, rarityBonus: 1.3, id: `d${i}`
+    })
+  );
+  const sig = (it: Item): string =>
+    `${it.baseId}|${it.rarity}|${Object.keys(it.element).sort().join(',')}|` +
+    it.affixes.map(a => `${a.kind}${a.element ?? ''}${a.tier}`).sort().join(',') + `|${it.unique ?? ''}`;
+
+  // 並（アフィックス0枠）は「個性がない」のが設計どおり（§5.7 レアリティは枠数で
+  // 表現する）。売却前提のゴミなので、ここに多様性を求めても意味がない。
+  // 個性が問われるのは、プレイヤーが手に取るかどうか迷う 上質以上。
+  const keepers = items.filter(it => it.rarity !== 'common');
+  const keeperSigs = new Set(keepers.map(sig));
+  const ratio = keeperSigs.size / Math.max(1, keepers.length);
+  const allRatio = new Set(items.map(sig)).size / items.length;
+  console.log(`  上質以上 ${keepers.length}個中 ${keeperSigs.size} 種類（${(ratio * 100).toFixed(0)}%）` +
+    ` ／ 並を含む全体では ${(allRatio * 100).toFixed(0)}%`);
+  check('上質以上は9割以上が異なる構成（1個1個に個性がある）', ratio > 0.9, `ratio=${ratio.toFixed(2)}`);
+
+  const rar = { common: 0, fine: 0, rare: 0, relic: 0 };
+  const big = Array.from({ length: 20000 }, (_, i) =>
+    generateItem(new Prng(0xc000 + i), {
+      itemPower: 100, slot: 'weapon', stageId: 1, rarityBonus: 1, id: `r${i}`
+    })
+  );
+  for (const it of big) rar[it.rarity]++;
+  const pct = (n: number) => ((n / big.length) * 100).toFixed(1);
+  console.log(`  レアリティ分布: 並${pct(rar.common)}% 上質${pct(rar.fine)}% 稀少${pct(rar.rare)}% 遺物${pct(rar.relic)}%`);
+  check('稀少+遺物が10〜14%（§5.7の9%+3%に整合）',
+    (rar.rare + rar.relic) / big.length > 0.10 && (rar.rare + rar.relic) / big.length < 0.14);
+
+  // §14「10個開封して1個嬉しいものが出るか」
+  let batchesWithJoy = 0;
+  const BATCHES = 400;
+  for (let b = 0; b < BATCHES; b++) {
+    const rng = new Prng(0xd000 + b);
+    let joy = false;
+    for (let i = 0; i < 10; i++) {
+      const it = generateItem(rng, {
+        itemPower: 200, slot: i % 2 === 0 ? 'weapon' : 'armor',
+        stageId: 6, rarityBonus: 1.28, id: `j${i}`
+      });
+      if (it.rarity === 'rare' || it.rarity === 'relic') joy = true;
+    }
+    if (joy) batchesWithJoy++;
+  }
+  const joyRate = batchesWithJoy / BATCHES;
+  console.log(`  10個開封して稀少以上が1個以上出る確率: ${(joyRate * 100).toFixed(0)}%`);
+  check('10個開封の7割以上で「嬉しいもの」が出る（§14）', joyRate >= 0.7, `${(joyRate * 100).toFixed(0)}%`);
+}
+
+console.log(failures === 0 ? '\nALL TESTS PASSED' : `\n${failures} FAILURE(S)`);
+process.exit(failures === 0 ? 0 : 1);
