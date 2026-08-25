@@ -1201,7 +1201,9 @@ export class OpeningScreen implements GameScreen {
     strokeRect1(ctx, cardX, cardY, cardW, cardH, color);
     strokeRect1(ctx, cardX + 1, cardY + 1, cardW - 2, cardH - 2, color);
     strokeRect1(ctx, cardX + 2, cardY + 2, cardW - 4, cardH - 4, THEME.outline);
-    fillRect(ctx, cardX + 3, cardY + 3, cardW - 6, cardH - 6, THEME.panel);
+    // 地は panelLight。THEME.panel は稀少の流動場の最下層と同じ色なので、
+    // それを地に使うと札と背景が同じ明度になり、枠だけの窓に見えてしまう。
+    fillRect(ctx, cardX + 3, cardY + 3, cardW - 6, cardH - 6, THEME.panelLight);
 
     // アイコン（整数倍スケール）。枠だけ先に出て、1テンポ置いて中身が入る。
     // 台座は地より暗くして、はめ込まれているように見せる
@@ -1254,7 +1256,8 @@ export class OpeningScreen implements GameScreen {
       ly += Math.max(1, this.cutLines.length) * LH;
       affixFrom = 0.62 + total * 0.030 + 0.12;
       // ユニーク行とアフィックス枠の境目
-      if (since >= affixFrom) fillRect(ctx, cardX + 16, ly + 4, cardW - 32, 1, THEME.panelLight);
+      // 地より暗い線で彫る（地と同じ panelLight では見えない）
+      if (since >= affixFrom) fillRect(ctx, cardX + 16, ly + 4, cardW - 32, 1, THEME.panel);
       ly += SEP_GAP;
     }
     // アフィックスを1行ずつ、間を置いて出す（稀少も遺物も同じ枠を見せる）
@@ -1270,7 +1273,7 @@ export class OpeningScreen implements GameScreen {
     if (since > 0.52) {
       const pop = since < 0.70 && Math.floor(this.clock * 20) % 2 === 0;
       drawTextRight(ctx, `+${sellValue(it)}G`, cardX + cardW - 16, cardY + cardH - 28, 12,
-        pop ? THEME.text : THEME.goldDark);
+        pop ? THEME.text : THEME.gold);
     }
 
     // 札の周りを1周する光点

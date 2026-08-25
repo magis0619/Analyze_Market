@@ -157,12 +157,16 @@ export interface GenerateOptions {
   rarityBonus: number;
   /** アイテムIDの生成に使う一意な接頭辞 */
   id: string;
+  /** レアリティ抽選を飛ばして固定する（救済枠 §14 で使う） */
+  forceRarity?: Rarity;
 }
 
 export function generateItem(rng: Prng, opts: GenerateOptions): Item {
   const candidates = BASE_TYPES.filter(b => b.slot === opts.slot);
   const base = rng.pick(candidates);
-  const rule = rollRarity(rng, opts.rarityBonus);
+  const rule = opts.forceRarity
+    ? (RARITY_RULES.find(r => r.rarity === opts.forceRarity) ?? rollRarity(rng, opts.rarityBonus))
+    : rollRarity(rng, opts.rarityBonus);
 
   // --- L1 基礎値（§5.3）---
   // 攻撃力と攻撃速度は厳密な逆相関にする。片方が高ロールならもう片方は必ず低ロール。

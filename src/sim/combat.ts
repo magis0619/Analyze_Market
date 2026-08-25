@@ -45,6 +45,8 @@ const MAX_LOOT = 10;
  * これが無いと「8時間」と表示した派遣が1秒で帰ってくる。
  */
 export const MIN_TRIP_RATIO = 0.25;
+/** 救済枠が働く最低の戦利品数（これ未満の浅い撤退は救わない） */
+const PITY_MIN_LOOT = 4;
 /** heavy の薙ぎ払いで、次の敵へ流れる際の減衰率 */
 
 /** balanced が無視する敵防御の割合 */
@@ -542,6 +544,29 @@ export function simulateRun(input: SimulateInput): RunResult {
         rarityBonus: stage.rarityBonus,
         id: `${input.seed.toString(36)}-${i}`
       }));
+    }
+
+    // 救済枠（§14「10個開封して、7割以上の確率で嬉しいものが出るか」）。
+    //
+    // §5.7 の素の確率（稀少9%／遺物3%）だと、10個引いても2割の回は
+    // 稀少以上が1つも出ない。開封は演出を最も濃く積んでいる画面なので、
+    // 「めくったが何も起きなかった」回が混ざると、その回の派遣がまるごと
+    // 作業になる。批評でも20回中5回が「作業に感じた」と数えられた。
+    // 一定数以上を持ち帰った回に限り、1つを稀少へ引き上げる。
+    // 下限を置いているのは、浅い撤退まで救うと稀少の意味が薄れるため。
+    if (loot.length >= PITY_MIN_LOOT && !loot.some(it => it.rarity === 'rare' || it.rarity === 'relic')) {
+      const idx = rng.int(loot.length);
+      const victim = loot[idx];
+      if (victim) {
+        loot[idx] = generateItem(rng, {
+          itemPower: power,
+          slot: victim.slot,
+          stageId: stage.id,
+          rarityBonus: stage.rarityBonus,
+          id: `${input.seed.toString(36)}-p${idx}`,
+          forceRarity: 'rare'
+        });
+      }
     }
   }
 

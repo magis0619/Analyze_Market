@@ -5,6 +5,7 @@ import { simulateRun } from '../src/sim/combat';
 import { generateItem, POWER_CAP } from '../src/sim/items';
 import { advanceClock, dispatchProgress, OFFLINE_CAP_SEC } from '../src/sim/offline';
 import { AFFIXES } from '../src/data/affixes';
+import { uniqueDef } from '../src/data/uniques';
 import { BASE_TYPES, baseDef } from '../src/data/bases';
 import { JOBS, RETREAT_RULES, canEquipArmor, jobDef, retreatRuleDef } from '../src/data/jobs';
 import { STAGES, itemPowerFor, stageDef } from '../src/data/stages';
@@ -447,9 +448,71 @@ console.log('回帰: 批評R2で検出した破綻');
   const lead = ((first - second) / Math.max(0.0001, second)) * 100;
   check(`首位が2位を20%以上引き離していない（${lead.toFixed(1)}%）`, lead < 20);
 
-  // 派遣枠は踏破しただけでは増えず、金を払って初めて増える（§7.5）
   const seen = new Set(Object.keys(rank));
   check(`ベース比較が6種すべてを回した（${seen.size}種）`, seen.size === 6);
+
+  // 開封が「作業」になる回が無いか（§11.2 は1回でもあれば不合格）。
+  // 素の確率だけだと10個引いても2割の回は稀少以上がゼロになるので、
+  // combat 側に救済枠を入れてある。simulateRun 経由で確かめる。
+  let chore = 0, batches = 0;
+  for (let i = 0; i < 60; i++) {
+    const stageId = 1 + (i % 10);
+    const rng = new Prng(0x5100 + i * 7919);
+    let w: Item | null = null, a: Item | null = null;
+    for (let k = 0; k < 300 && (!w || !a); k++) {
+      const it = generateItem(rng, {
+        itemPower: itemPowerFor(stageId, 1), slot: k % 2 === 0 ? 'weapon' : 'armor',
+        stageId, rarityBonus: 1, id: `ch${k}`
+      });
+      if (it.slot === 'weapon' && !w) w = it;
+      if (it.slot === 'armor' && !a && canEquipArmor(jobDef('swordsman'), baseDef(it.baseId).tags)) a = it;
+    }
+    if (!w || !a) continue;
+    const r = simulateRun({
+      seed: (0x5200 + i * 104729) >>> 0, job: jobDef('swordsman'), weapon: w, armor: a,
+      rule: retreatRuleDef('standard'), stage: stageDef(stageId), tier: 1
+    });
+    if (r.outcome === 'death' || r.loot.length < 4) continue;
+    batches++;
+    if (!r.loot.some(it => it.rarity === 'rare' || it.rarity === 'relic')) chore++;
+  }
+  check(`4個以上持ち帰った回に必ず稀少以上が混ざる（${chore}/${batches}回が空振り）`, chore === 0);
+
+  // ステージ1でも見どころ1行目が無情報にならないか
+  let blank = 0;
+  for (let i = 0; i < 40; i++) {
+    const rng = new Prng(0x5300 + i * 131);
+    let w: Item | null = null, a: Item | null = null;
+    for (let k = 0; k < 300 && (!w || !a); k++) {
+      const it = generateItem(rng, {
+        itemPower: itemPowerFor(1, 1), slot: k % 2 === 0 ? 'weapon' : 'armor',
+        stageId: 1, rarityBonus: 1, id: `s1${k}`
+      });
+      if (it.slot === 'weapon' && !w) w = it;
+      if (it.slot === 'armor' && !a) a = it;
+    }
+    if (!w || !a) continue;
+    const r = simulateRun({
+      seed: (0x5400 + i * 7919) >>> 0, job: jobDef('swordsman'), weapon: w, armor: a,
+      rule: retreatRuleDef('standard'), stage: stageDef(1), tier: 1
+    });
+    if ((r.highlights[0] ?? '').includes('得も損もしていない')) blank++;
+  }
+  check(`ステージ1でも見どころ1行目が無情報にならない（${blank}/40件）`, blank === 0);
+
+  // ユニークがスロットに合っているか（防具に武器用の効果が載らない）
+  let mismatched = 0;
+  const uRng = new Prng(0x5500);
+  for (let i = 0; i < 40000; i++) {
+    const it = generateItem(uRng, {
+      itemPower: 200, slot: i % 2 === 0 ? 'weapon' : 'armor',
+      stageId: 9, rarityBonus: 3, id: `u${i}`
+    });
+    if (!it.unique) continue;
+    const def = uniqueDef(it.unique);
+    if (def.slot !== 'both' && def.slot !== it.slot) mismatched++;
+  }
+  check(`ユニークがスロットに合っている（不一致 ${mismatched}件）`, mismatched === 0);
 }
 
 console.log(failures === 0 ? '\nALL TESTS PASSED' : `\n${failures} FAILURE(S)`);
