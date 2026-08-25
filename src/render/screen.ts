@@ -52,7 +52,17 @@ export class Screen {
     // 実機の画面幅では k=1 に固定され、方式そのものが機能しなくなる）。
     const availW = window.innerWidth * dpr;
     const availH = window.innerHeight * dpr;
-    const k = Math.max(1, Math.min(Math.floor(availW / VW), Math.floor(availH / VH)));
+    // 整数倍の判定には少しだけ余裕を持たせる。
+    //
+    // Pixel 系（411 CSS px × dpr 2.625 = 1078.9 デバイスpx）は VW*3 = 1080 に
+    // **1.1px だけ**届かないため floor で k=2 に落ち、画面幅の67%しか使わずに
+    // 左右へ68pxずつ黒帯が出ていた。0.4 CSS px のはみ出しは body の
+    // overflow:hidden で切れるだけなので、2%の余裕を許して k を1段上げる。
+    const FIT_SLACK = 1.02;
+    const k = Math.max(1, Math.min(
+      Math.floor((availW * FIT_SLACK) / VW),
+      Math.floor((availH * FIT_SLACK) / VH)
+    ));
     this.scale = k;
 
     // バッキングストアは常にデバイスピクセル数（VW*k, VH*k）に厳密一致。

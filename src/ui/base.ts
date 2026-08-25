@@ -42,6 +42,8 @@ interface MenuEntry {
   mark: string;
   markColor: string;
   accent?: boolean;
+  /** バッジが0のときは押せない項目か */
+  needsBadge?: boolean;
 }
 
 const SCENE_Y = 28;
@@ -71,8 +73,10 @@ export class BaseScreen implements GameScreen {
   private menu(): MenuEntry[] {
     const st = this.nav.state;
     return [
-      { label: '帰還レポート', badge: st.data.inbox.length, action: 'report', mark: '報', markColor: THEME.blue },
-      { label: '未鑑定品を開封', badge: st.data.pending.length, action: 'open', mark: '封', markColor: THEME.gold, accent: true },
+      { label: '帰還レポート', badge: st.data.inbox.length, action: 'report',
+        mark: '報', markColor: THEME.blue, needsBadge: true },
+      { label: '未鑑定品を開封', badge: st.data.pending.length, action: 'open',
+        mark: '封', markColor: THEME.gold, accent: true, needsBadge: true },
       { label: '派遣準備', badge: 0, action: 'dispatch', mark: '派', markColor: THEME.green },
       { label: 'インベントリ', badge: 0, action: 'inventory', mark: '品', markColor: THEME.panelLight },
       { label: '図鑑', badge: 0, action: 'compendium', mark: '図', markColor: THEME.panelLight }
@@ -309,7 +313,10 @@ export class BaseScreen implements GameScreen {
 
   private drawMenu(ctx: CanvasRenderingContext2D, m: MenuEntry, x: number, y: number): void {
     const w = VW - 16;
-    const enabled = m.action !== 'open' || m.badge > 0;
+    // 「やることが無い」状態は全部同じに見せる。
+    // 以前は開封だけ暗転し、帰還レポートは中身が0でも明るいままで、
+    // 押すと deny 音が鳴るだけだった
+    const enabled = !m.needsBadge || m.badge > 0;
     drawNineSlice(ctx, 'button', x, y, w, MENU_H);
     // 暗幕はラベルより先。文字の上からディザを被せると字形が抜けて読めなくなる
     if (!enabled) fillScrim(ctx, x + 1, y + 1, w - 2, MENU_H - 2, THEME.bg, 0.5);

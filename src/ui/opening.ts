@@ -43,6 +43,9 @@ const SUMMARY_Y = 506;
 /** 本文の行送り（フォントは 8 / 12 の2段階のみ。§9.3） */
 const LH = lineHeight(12);
 
+/** ユニーク効果とアフィックス枠を隔てる余白（区切り線ぶん） */
+const SEP_GAP = 10;
+
 function rowY(i: number): number {
   return LIST_Y + i * (ROW_H + ROW_GAP);
 }
@@ -1160,7 +1163,9 @@ export class OpeningScreen implements GameScreen {
     const bodyRows = (u ? 1 + this.cutLines.length : 0) + it.affixes.length;
     const iconScale = relic ? 4 : 3;
     const iconPx = 16 * iconScale;
-    const cardH = 14 + iconPx + 12 + 18 + bodyRows * LH + 30;
+    // ユニーク行とアフィックス枠の間には区切り線ぶんの余白を足す。
+    // 行送り（16px の字に 3px）の中に線を割り込ませると字を横切ってしまう。
+    const cardH = 14 + iconPx + 12 + 18 + bodyRows * LH + 34 + (u ? SEP_GAP : 0);
     const cardY = BURST_CY - Math.floor(cardH / 2);
     const cardX = Math.round(cx - cardW / 2);
 
@@ -1186,15 +1191,23 @@ export class OpeningScreen implements GameScreen {
     ctx.restore();
 
     // --- 札 ---
-    fillRect(ctx, cardX, cardY, cardW, cardH, THEME.bg);
+    //
+    // 地は必ず不透明なベタで塗る。ディザで背景を透かすと、粒が札の中まで
+    // 続いて「枠線だけの窓」になり、いちばん読ませたい名前・アフィックス・★が
+    // 模様の上に乗ってしまう。背景がどんな模様でも輪郭が立つよう、
+    //   外に1pxの暗色 → レアリティ枠2px → 内に1pxの暗色 → ベタ地
+    // の順に重ねる。
+    fillRect(ctx, cardX - 1, cardY - 1, cardW + 2, cardH + 2, THEME.outline);
     strokeRect1(ctx, cardX, cardY, cardW, cardH, color);
     strokeRect1(ctx, cardX + 1, cardY + 1, cardW - 2, cardH - 2, color);
-    strokeRect1(ctx, cardX + 3, cardY + 3, cardW - 6, cardH - 6, THEME.panelLight);
+    strokeRect1(ctx, cardX + 2, cardY + 2, cardW - 4, cardH - 4, THEME.outline);
+    fillRect(ctx, cardX + 3, cardY + 3, cardW - 6, cardH - 6, THEME.panel);
 
-    // アイコン（整数倍スケール）。枠だけ先に出て、1テンポ置いて中身が入る
+    // アイコン（整数倍スケール）。枠だけ先に出て、1テンポ置いて中身が入る。
+    // 台座は地より暗くして、はめ込まれているように見せる
     const ix = Math.round(cx - iconPx / 2);
     const iy = cardY + 14;
-    fillRect(ctx, ix - 6, iy - 6, iconPx + 12, iconPx + 12, THEME.panel);
+    fillRect(ctx, ix - 6, iy - 6, iconPx + 12, iconPx + 12, THEME.outline);
     strokeRect1(ctx, ix - 6, iy - 6, iconPx + 12, iconPx + 12,
       relic && Math.floor(this.clock * 8) % 2 === 0 ? color : THEME.outline);
     if (since >= 0.36) {
@@ -1241,7 +1254,8 @@ export class OpeningScreen implements GameScreen {
       ly += Math.max(1, this.cutLines.length) * LH;
       affixFrom = 0.62 + total * 0.030 + 0.12;
       // ユニーク行とアフィックス枠の境目
-      if (since >= affixFrom) fillRect(ctx, cardX + 16, ly - 8, cardW - 32, 1, THEME.panelLight);
+      if (since >= affixFrom) fillRect(ctx, cardX + 16, ly + 4, cardW - 32, 1, THEME.panelLight);
+      ly += SEP_GAP;
     }
     // アフィックスを1行ずつ、間を置いて出す（稀少も遺物も同じ枠を見せる）
     it.affixes.forEach((a, i) => {
@@ -1255,7 +1269,7 @@ export class OpeningScreen implements GameScreen {
     // 増える売却額。数値が跳ねる瞬間を札の中にも置く
     if (since > 0.52) {
       const pop = since < 0.70 && Math.floor(this.clock * 20) % 2 === 0;
-      drawTextRight(ctx, `+${sellValue(it)}G`, cardX + cardW - 16, cardY + cardH - 24, 12,
+      drawTextRight(ctx, `+${sellValue(it)}G`, cardX + cardW - 16, cardY + cardH - 28, 12,
         pop ? THEME.text : THEME.goldDark);
     }
 

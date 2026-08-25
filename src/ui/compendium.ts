@@ -16,6 +16,11 @@ import { RARITY_COLOR, RARITY_LABEL, drawRarityFrame } from './itemview';
 
 const RARITIES: readonly Rarity[] = ['common', 'fine', 'rare', 'relic'];
 
+/** レアリティ＝アフィックスの枠数（§5.7）。マスに点で出して差を見せる。 */
+const AFFIX_SLOTS: Record<Rarity, number> = {
+  common: 0, fine: 2, rare: 4, relic: 3
+};
+
 const GRID_Y = 78;
 const CELL = 40;
 const COLS = 8;
@@ -114,8 +119,17 @@ export class CompendiumScreen implements GameScreen {
         const entry = st.data.compendium[e.key];
         if (entry) {
           drawRarityFrame(ctx, e.rarity, x + 1, y + 1, CELL - 2, CELL - 2);
-          drawSprOr(ctx, e.icon, 'icon_W1', x + CELL / 2 - 8, y + CELL / 2 - 10);
-          drawTextRight(ctx, `${entry.count}`, x + CELL - 4, y + CELL - 14, 8, THEME.dim);
+          drawSprOr(ctx, e.icon, 'icon_W1', x + CELL / 2 - 8, y + CELL / 2 - 11);
+          // 同じベースは並・上質・稀少で絵が完全に同じになる。枠の色だけでは
+          // 何が違うのか読み取れないので、レアリティの正体である
+          // 「アフィックスの枠数」（§5.7）を点で見せる。
+          const slots = AFFIX_SLOTS[e.rarity];
+          for (let k = 0; k < slots; k++) {
+            fillRect(ctx, x + 5 + k * 5, y + CELL - 8, 3, 3,
+              e.rarity === 'relic' ? THEME.gold : THEME.dim);
+          }
+          if (e.rarity === 'relic') drawText(ctx, '遺', x + CELL - 12, y + CELL - 10, 8, THEME.gold);
+          drawTextRight(ctx, `${entry.count}`, x + CELL - 4, y + 3, 8, THEME.faint);
         } else {
           fillRect(ctx, x + 1, y + 1, CELL - 2, CELL - 2, THEME.panel);
           strokeRect1(ctx, x + 1, y + 1, CELL - 2, CELL - 2, THEME.outline);

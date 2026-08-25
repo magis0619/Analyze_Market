@@ -2,7 +2,7 @@ import type { GameScreen, Nav } from '../game/app';
 import type { Item, JobId, Slot } from '../sim/types';
 import { VW, VH } from '../render/screen';
 import { drawText, drawTextCentered, drawTextRight, textWidth } from '../render/font';
-import { drawSpr, fillRect, strokeRect1 } from '../render/draw';
+import { drawSpr, drawSprOr, fillRect, strokeRect1 } from '../render/draw';
 import { sellValue } from '../sim/items';
 import { Prng } from '../sim/prng';
 import { jobDef } from '../data/jobs';
@@ -112,7 +112,6 @@ export class InventoryScreen implements GameScreen {
   private bulkRare = 0;
   private bulkRelic = 0;
   private headerCount = '';
-  private viewCount = '';
   private goldShown = -1;
   private goldStr = '0';
   private emptyHint = '';
@@ -222,8 +221,11 @@ export class InventoryScreen implements GameScreen {
     this.bulkBtn.disabled = this.bulkIds.length === 0;
     this.bulkBtn.accent = this.bulkIds.length > 0;
 
-    this.headerCount = `所持 ${inv.length}`;
-    this.viewCount = `表示 ${this.view.length}`;
+    // 「所持品」の見出しと数字がぶつかっていたので、数字は1本にまとめる
+    this.headerCount = this.view.length === inv.length
+      ? `${inv.length}点`
+      : `${this.view.length} / ${inv.length}点`;
+
     this.emptyHint = inv.length === 0 ? '装備をまだ持っていない' : '条件に合う装備がない';
     this.emptyHint2 = inv.length === 0 ? '派遣して戦利品を持ち帰ろう' : '絞り込みを「全部／全レア」に戻す';
 
@@ -354,8 +356,7 @@ export class InventoryScreen implements GameScreen {
     fillRect(ctx, 0, 0, VW, HEADER_H, THEME.panel);
     fillRect(ctx, 0, HEADER_H - 1, VW, 1, THEME.outline);
     drawText(ctx, '所持品', 7, 5, 12, THEME.text);
-    drawText(ctx, this.headerCount, 56, 8, 8, THEME.dim);
-    drawText(ctx, this.viewCount, 112, 8, 8, THEME.dim);
+    drawText(ctx, this.headerCount, 62, 8, 8, THEME.dim);
     drawSpr(ctx, 'coin', VW - 8 - textWidth(this.goldStr, 12) - 11, 7);
     drawTextRight(ctx, this.goldStr, VW - 8, 6, 12, THEME.gold);
   }
@@ -366,6 +367,8 @@ export class InventoryScreen implements GameScreen {
       if (!b) continue;
       b.accent = SORT_KEYS[i] === this.sort;
       drawBtn(ctx, b, 8);
+      // 選択中の並び順にだけ印を出す。文字だけだとどれが効いているか分かりにくい
+      if (b.accent) drawSprOr(ctx, 'icon_sort', 'icon_check', b.x + 3, b.y + 1);
     }
     for (let i = 0; i < 3; i++) {
       const sb = this.slotBtns[i];
@@ -499,6 +502,9 @@ export class InventoryScreen implements GameScreen {
     drawBtn(ctx, this.lockBtn, 8);
     drawBtn(ctx, this.reidBtn, 8);
     drawBtn(ctx, this.sellBtn, 8);
+    if (!this.sellBtn.disabled) {
+      drawSprOr(ctx, 'icon_sell', 'coin', this.sellBtn.x + 3, this.sellBtn.y + 7);
+    }
     drawBtn(ctx, this.closeBtn, 8);
   }
 
