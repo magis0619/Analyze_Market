@@ -1,11 +1,11 @@
 import type { GameScreen, Nav } from '../game/app';
 import type { JobId } from '../sim/types';
 import { VW, VH } from '../render/screen';
-import { drawNineSlice, drawSprOr, fillRect, hasSpr, strokeRect1 } from '../render/draw';
+import { drawNineSlice, drawSpr, drawSprOr, fillRect, strokeRect1 } from '../render/draw';
 import { drawText, drawTextCentered, drawTextRight } from '../render/font';
 import { THEME } from './theme';
-import { drawBtn, hitBtn, inRect, type Btn } from './widgets';
-import { jobDef, retreatRuleDef } from '../data/jobs';
+import { inRect } from './widgets';
+import { jobDef } from '../data/jobs';
 import { stageDef } from '../data/stages';
 import { sfx } from '../render/audio';
 import { itemIconName } from './itemview';
@@ -30,22 +30,52 @@ export function formatDuration(sec: number): string {
   return `${s}秒`;
 }
 
+interface MenuEntry {
+  label: string;
+  badge: number;
+  action: 'report' | 'open' | 'dispatch' | 'inventory' | 'compendium';
+  /** 見出しの1文字マーカー。スプライトはサイズがまちまちで行に収まらないため、
+   *  ビットマップフォントの1文字で統一する */
+  mark: string;
+  markColor: string;
+  accent?: boolean;
+}
+
+const SCENE_Y = 28;
+const SCENE_H = 150;
+const SLOT_Y = 184;
+const SLOT_H = 40;
+const MENU_H = 40;
+const MENU_GAP = 4;
+
 export class BaseScreen implements GameScreen {
-  private openBtn: Btn = { x: 12, y: 470, w: VW - 24, h: 40, label: '', accent: true };
-  private dispatchBtn: Btn = { x: 12, y: 518, w: 164, h: 36, label: '派遣する' };
-  private invBtn: Btn = { x: 184, y: 518, w: 164, h: 36, label: 'インベントリ' };
-  private bookBtn: Btn = { x: 12, y: 560, w: 164, h: 36, label: '図鑑' };
-  private slotY = 96;
-  private slotH = 116;
+  private t = 0;
 
   constructor(private nav: Nav) {}
 
-  update(): void {
+  update(dt: number): void {
+    this.t += dt;
     this.nav.state.tick(this.nav.now());
   }
 
   private jobs(): JobId[] {
     return this.nav.state.availableJobs();
+  }
+
+  private menu(): MenuEntry[] {
+    const st = this.nav.state;
+    return [
+      { label: '帰還レポート', badge: st.data.inbox.length, action: 'report', mark: '報', markColor: THEME.blue },
+      { label: '未鑑定品を開封', badge: st.data.pending.length, action: 'open', mark: '封', markColor: THEME.gold, accent: true },
+      { label: '派遣準備', badge: 0, action: 'dispatch', mark: '派', markColor: THEME.green },
+      { label: 'インベントリ', badge: 0, action: 'inventory', mark: '品', markColor: THEME.panelLight },
+      { label: '図鑑', badge: 0, action: 'compendium', mark: '図', markColor: THEME.panelLight }
+    ];
+  }
+
+  private menuTop(): number {
+    const jobs = this.jobs().length;
+    return SLOT_Y + jobs * (SLOT_H + 4) + 8;
   }
 
   draw(ctx: CanvasRenderingContext2D): void {
@@ -54,124 +84,177 @@ export class BaseScreen implements GameScreen {
 
     // ヘッダ
     fillRect(ctx, 0, 0, VW, 26, THEME.panel);
-    drawText(ctx, '拠点', 8, 8, 12, THEME.text);
-    drawTextRight(ctx, `${st.data.gold}G`, VW - 8, 8, 12, THEME.gold);
+    drawText(ctx, '拠点', 8, 5, 12, THEME.text);
+    drawSprOr(ctx, 'coin', 'star', VW - 92, 8);
+    drawTextRight(ctx, `${st.data.gold}`, VW - 8, 5, 12, THEME.gold);
     if (st.data.tier > 1) {
-      drawTextCentered(ctx, `難易度 +${st.data.tier - 1}`, VW / 2, 9, 8, THEME.red);
+      drawTextCentered(ctx, `難易度+${st.data.tier - 1}`, VW / 2, 7, 8, THEME.red);
     }
 
-    // 未確認レポート
-    const inbox = st.data.inbox;
-    if (inbox.length > 0) {
-      const id = inbox[0];
-      const d = id ? st.data.results[id] : undefined;
-      fillRect(ctx, 0, 30, VW, 22, THEME.panelLight);
-      drawText(ctx, d ? `帰還: ${d.headline}` : '帰還した仲間がいる', 8, 36, 8, THEME.gold);
-      drawTextRight(ctx, 'タップで確認 ▶', VW - 8, 36, 8, THEME.text);
-    } else {
-      drawText(ctx, '派遣枠', 8, 36, 8, THEME.dim);
-      drawTextRight(ctx, `${st.data.dispatches.length}/${this.jobs().length} 稼働中`, VW - 8, 36, 8, THEME.dim);
-    }
+    this.drawScene(ctx);
 
-    // 派遣スロット
+    // 派遣スロット（誰が出ているか・あと何分か）
     const jobs = this.jobs();
     jobs.forEach((jobId, i) => {
-      this.drawSlot(ctx, jobId, 12, this.slotY + i * (this.slotH + 6));
+      this.drawSlot(ctx, jobId, 8, SLOT_Y + i * (SLOT_H + 4));
     });
 
-    // 未開封
-    const pending = st.data.pending.length;
-    this.openBtn.label = pending > 0 ? `未鑑定品 ${pending}個を開封する` : '未鑑定品はない';
-    this.openBtn.disabled = pending === 0;
-    drawBtn(ctx, this.openBtn, 12);
+    // メニュー
+    const top = this.menuTop();
+    this.menu().forEach((m, i) => {
+      this.drawMenu(ctx, m, 8, top + i * (MENU_H + MENU_GAP));
+    });
 
-    drawBtn(ctx, this.dispatchBtn, 12);
-    drawBtn(ctx, this.invBtn, 12);
-    drawBtn(ctx, this.bookBtn, 12);
-    drawTextRight(ctx, `所持 ${st.data.inventory.length}点`, VW - 16, 570, 8, THEME.dim);
+    drawTextRight(ctx, `所持 ${st.data.inventory.length}点`, VW - 8, VH - 14, 8, THEME.dim);
     if (this.nav.timeScale !== 1) {
-      drawTextRight(ctx, `時間×${this.nav.timeScale}`, VW - 8, VH - 14, 8, THEME.red);
+      drawText(ctx, `時間×${this.nav.timeScale}`, 8, VH - 14, 8, THEME.red);
     }
+  }
+
+  /** 拠点の情景。夜空の下に建つ小屋と、待機中の冒険者たち。 */
+  private drawScene(ctx: CanvasRenderingContext2D): void {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, SCENE_Y, VW, SCENE_H);
+    ctx.clip();
+
+    fillRect(ctx, 0, SCENE_Y, VW, SCENE_H, '#0c0810');
+    // 星
+    for (let i = 0; i < 60; i++) {
+      const h = ((i * 2654435761) >>> 0);
+      const x = h % VW;
+      const y = SCENE_Y + ((h >> 9) % (SCENE_H - 46));
+      if ((h >> 20) % 3 === 0) fillRect(ctx, x, y, 1, 1, THEME.dim);
+    }
+    // 地面
+    const groundY = SCENE_Y + SCENE_H - 34;
+    for (let col = 0; col < Math.ceil(VW / 16); col++) {
+      drawSpr(ctx, `tile_s0_${col % 2 === 0 ? 'a' : 'b'}`, col * 16, groundY + 18);
+    }
+    fillRect(ctx, 0, groundY + 14, VW, 4, '#3c6430');
+
+    // 小屋（拠点）
+    const hx = 24;
+    fillRect(ctx, hx, groundY - 40, 96, 54, '#5a3c22');
+    fillRect(ctx, hx - 6, groundY - 52, 108, 12, '#802828');
+    fillRect(ctx, hx - 4, groundY - 41, 104, 2, THEME.outline);
+    // 窓と扉
+    fillRect(ctx, hx + 12, groundY - 30, 20, 16, '#e8c84c');
+    fillRect(ctx, hx + 60, groundY - 30, 20, 16, '#e8c84c');
+    fillRect(ctx, hx + 38, groundY - 22, 18, 36, '#0c0810');
+    // 看板
+    fillRect(ctx, hx + 104, groundY - 26, 4, 40, '#5a3c22');
+    fillRect(ctx, hx + 90, groundY - 34, 34, 12, '#3e3450');
+    drawText(ctx, 'DELVERS', hx + 92, groundY - 32, 8, THEME.gold);
+
+    // 待機中の冒険者だけを小屋の前に立たせる
+    const jobs = this.jobs();
+    let sx = 200;
+    for (const jobId of jobs) {
+      if (this.nav.state.isBusy(jobId)) continue;
+      const bob = Math.floor(this.t * 2 + sx) % 2;
+      drawSprOr(ctx, JOB_SPRITE[jobId], 'portrait', sx, groundY - 2 - bob, 2);
+      sx += 44;
+    }
+    ctx.restore();
+    fillRect(ctx, 0, SCENE_Y + SCENE_H - 1, VW, 1, THEME.outline);
   }
 
   private drawSlot(ctx: CanvasRenderingContext2D, jobId: JobId, x: number, y: number): void {
     const st = this.nav.state;
-    const w = VW - 24;
+    const w = VW - 16;
     const job = jobDef(jobId);
     const running = st.data.dispatches.find(d => d.jobId === jobId);
-    drawNineSlice(ctx, 'frame', x, y, w, this.slotH);
+    fillRect(ctx, x, y, w, SLOT_H, THEME.panel);
+    strokeRect1(ctx, x, y, w, SLOT_H, running ? THEME.gold : THEME.outline);
 
-    const sprName = JOB_SPRITE[jobId];
-    drawSprOr(ctx, hasSpr(sprName) ? sprName : 'portrait', 'portrait', x + 8, y + 8, 2);
-    drawText(ctx, job.name, x + 46, y + 10, 12, THEME.text);
-    drawText(ctx, `HP ${job.hp}`, x + 46, y + 26, 8, THEME.dim);
+    drawSprOr(ctx, JOB_SPRITE[jobId], 'portrait', x + 5, y + 12);
+    drawText(ctx, job.name, x + 24, y + 4, 8, THEME.text);
 
-    // 装備中の2点
     const eq = st.data.equipped[jobId];
     const weapon = st.itemById(eq.weapon);
     const armor = st.itemById(eq.armor);
-    let ix = x + w - 44;
-    for (const it of [armor, weapon]) {
-      fillRect(ctx, ix, y + 8, 20, 20, THEME.outline);
-      if (it) drawSprOr(ctx, itemIconName(it), 'icon_W1', ix + 2, y + 10);
-      ix -= 24;
-    }
 
     if (running) {
       const p = st.progressOf(running);
       const stage = stageDef(running.stageId);
-      drawText(ctx, `${stage.name}へ潜行中`, x + 8, y + 46, 8, THEME.gold);
-      drawSprOr(ctx, 'icon_hourglass', 'icon_T1', x + 8, y + 60);
-      drawText(ctx, `残り ${formatDuration(p.remainingSec)}`, x + 28, y + 64, 8, THEME.text);
-      drawTextRight(ctx, retreatRuleDef(running.retreatRule).name, x + w - 8, y + 64, 8, THEME.dim);
-      // 進捗バー
-      fillRect(ctx, x + 8, y + 84, w - 16, 8, THEME.outline);
-      fillRect(ctx, x + 9, y + 85, Math.round((w - 18) * p.ratio), 6, THEME.gold);
-      drawTextCentered(ctx, `${Math.round(p.ratio * 100)}%`, x + w / 2, y + 98, 8, THEME.dim);
+      drawText(ctx, `${stage.name}へ潜行中`, x + 24, y + 20, 8, THEME.gold);
+      drawSprOr(ctx, 'icon_hourglass', 'icon_T1', x + w - 106, y + 3);
+      drawTextRight(ctx, `残り ${formatDuration(p.remainingSec)}`, x + w - 6, y + 5, 8, THEME.text);
+      fillRect(ctx, x + w - 104, y + 24, 98, 8, THEME.outline);
+      fillRect(ctx, x + w - 103, y + 25, Math.round(96 * p.ratio), 6, THEME.gold);
+    } else if (weapon && armor) {
+      drawText(ctx, '待機中', x + 24, y + 20, 8, THEME.dim);
+      let ix = x + w - 44;
+      for (const it of [armor, weapon]) {
+        fillRect(ctx, ix, y + 11, 20, 20, THEME.outline);
+        drawSprOr(ctx, itemIconName(it), 'icon_W1', ix + 2, y + 13);
+        ix -= 24;
+      }
     } else {
-      const ready = weapon && armor;
-      drawText(ctx, ready ? '待機中' : '装備が足りない', x + 8, y + 46, 8, ready ? THEME.dim : THEME.red);
-      drawText(ctx, job.desc, x + 8, y + 62, 8, THEME.dim);
-      const b: Btn = { x: x + 8, y: y + 82, w: w - 16, h: 26, label: 'このまま派遣', disabled: !ready };
-      drawBtn(ctx, b, 8);
-      strokeRect1(ctx, x, y, w, this.slotH, THEME.panelLight);
+      drawText(ctx, '装備が足りない', x + 24, y + 20, 8, THEME.red);
+    }
+  }
+
+  private drawMenu(ctx: CanvasRenderingContext2D, m: MenuEntry, x: number, y: number): void {
+    const w = VW - 16;
+    const enabled = m.action !== 'open' || m.badge > 0;
+    drawNineSlice(ctx, 'button', x, y, w, MENU_H);
+    if (m.accent && m.badge > 0) fillRect(ctx, x + 2, y + 2, w - 4, 2, THEME.gold);
+    // 1文字マーカー
+    const my = y + Math.floor((MENU_H - 20) / 2);
+    fillRect(ctx, x + 8, my, 20, 20, enabled ? m.markColor : THEME.panel);
+    strokeRect1(ctx, x + 8, my, 20, 20, THEME.outline);
+    drawTextCentered(ctx, m.mark, x + 18, my + 3, 8,
+      enabled ? THEME.outline : THEME.dim);
+    drawText(ctx, m.label, x + 36, y + Math.floor((MENU_H - 16) / 2) + 2, 12,
+      enabled ? THEME.text : THEME.dim);
+    if (m.badge > 0) {
+      // 未処理があることを赤丸で示す（モックアップの ! バッジに相当）
+      const bx = x + w - 26;
+      const by = y + Math.floor(MENU_H / 2) - 8;
+      fillRect(ctx, bx, by, 18, 16, THEME.red);
+      strokeRect1(ctx, bx, by, 18, 16, THEME.outline);
+      drawTextCentered(ctx, String(Math.min(99, m.badge)), bx + 9, by + 2, 8, THEME.text);
+    }
+    if (!enabled) {
+      ctx.fillStyle = 'rgba(26,20,32,0.5)';
+      ctx.fillRect(x, y, w, MENU_H);
     }
   }
 
   pointerDown(px: number, py: number): void {
     const st = this.nav.state;
-
-    // 未確認レポート
-    if (st.data.inbox.length > 0 && inRect(px, py, 0, 30, VW, 22)) {
-      const id = st.data.inbox[0];
-      if (id) { sfx('confirm'); this.nav.goReport(id); return; }
+    const top = this.menuTop();
+    const items = this.menu();
+    for (let i = 0; i < items.length; i++) {
+      const m = items[i];
+      if (!m) continue;
+      if (!inRect(px, py, 8, top + i * (MENU_H + MENU_GAP), VW - 16, MENU_H)) continue;
+      switch (m.action) {
+        case 'report': {
+          const id = st.data.inbox[0];
+          if (id) { sfx('confirm'); this.nav.goReport(id); }
+          else sfx('deny');
+          return;
+        }
+        case 'open':
+          if (st.data.pending.length > 0) { sfx('confirm'); this.nav.goOpening(st.data.pending); }
+          else sfx('deny');
+          return;
+        case 'dispatch': sfx('tap'); this.nav.goDispatch(); return;
+        case 'inventory': sfx('tap'); this.nav.goInventory(); return;
+        case 'compendium': sfx('tap'); this.nav.goCompendium(); return;
+      }
     }
-
+    // スロットをタップしても派遣画面へ
     const jobs = this.jobs();
     for (let i = 0; i < jobs.length; i++) {
-      const y = this.slotY + i * (this.slotH + 6);
-      const jobId = jobs[i];
-      if (!jobId) continue;
-      const running = st.data.dispatches.some(d => d.jobId === jobId);
-      if (!running && inRect(px, py, 12, y + 82, VW - 40, 26)) {
-        sfx('tap');
-        this.nav.goDispatch();
-        return;
-      }
-      if (inRect(px, py, 12, y, VW - 24, this.slotH)) {
+      if (inRect(px, py, 8, SLOT_Y + i * (SLOT_H + 4), VW - 16, SLOT_H)) {
         sfx('tap');
         this.nav.goDispatch();
         return;
       }
     }
-
-    if (hitBtn(this.openBtn, px, py)) {
-      sfx('confirm');
-      this.nav.goOpening(st.data.pending);
-      return;
-    }
-    if (hitBtn(this.dispatchBtn, px, py)) { sfx('tap'); this.nav.goDispatch(); return; }
-    if (hitBtn(this.invBtn, px, py)) { sfx('tap'); this.nav.goInventory(); return; }
-    if (hitBtn(this.bookBtn, px, py)) { sfx('tap'); this.nav.goCompendium(); return; }
   }
 }

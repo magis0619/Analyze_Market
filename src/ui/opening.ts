@@ -76,8 +76,8 @@ interface CutTiming {
   out: number;
 }
 
-const RARE_T: CutTiming = { dark: 0.10, charge: 0.46, hold: 0.58, present: 1.70, out: 1.92 };
-const RELIC_T: CutTiming = { dark: 0.26, charge: 1.00, hold: 1.20, present: 3.20, out: 3.50 };
+const RARE_T: CutTiming = { dark: 0.10, charge: 0.52, hold: 0.64, present: 2.22, out: 2.42 };
+const RELIC_T: CutTiming = { dark: 0.26, charge: 1.05, hold: 1.25, present: 3.60, out: 3.90 };
 
 const PARTICLE_CAP = 240;
 
@@ -109,23 +109,187 @@ function drawSpokes(
   }
 }
 
+// ---------------------------------------------------------------- 背景フィールド
+//
+// Balatro の実機フレームでは、パックを開ける間ずっと背景そのものが
+// 緑→黄→橙へ変わり、マーブル模様が流れ続ける。これが「特別なことが
+// 起きている」の主信号になっている。
+//
+// こちらはグラデーション禁止（§9.3）なので、
+//   ・整数周期の正弦を足し合わせた値を 4×4 Bayer でディザして2値化し、
+//   ・濃さの違う3枚のタイル（暗・中・明）に焼き、
+//   ・それぞれ別々の速度でスクロールさせて重ねる
+// という「描いた模様」に翻訳する。明るさは alpha ではなく
+// 「何枚重ねるか」の段階で上げるので、階調オーバーレイにはならない。
+
+/** タイルの一辺。周期を整数にすることで継ぎ目なく並ぶ。 */
+const TILE = 256;
+
+const BAYER = [
+  0, 8, 2, 10,
+  12, 4, 14, 6,
+  3, 11, 1, 9,
+  15, 7, 13, 5
+];
+
+interface FieldStyle {
+  /** 暗→明の3層。手前ほど面積が小さい */
+  colors: [string, string, string];
+  /** 各層のしきい値（大きいほど面積が小さい） */
+  cuts: [number, number, number];
+  /** 各層のスクロール速度 px/秒 */
+  vel: [[number, number], [number, number], [number, number]];
+}
+
+const FIELD_STYLE: Record<'rare' | 'relic', FieldStyle> = {
+  // 稀少：琥珀。暗褐色の地に金が流れる
+  rare: {
+    colors: ['#3a2715', '#5d3d20', '#b5862c'],
+    cuts: [0.50, 0.64, 0.84],
+    vel: [[5, -9], [-13, -20], [17, -31]]
+  },
+  // 遺物：熾火。紫黒の地に赤が脈打つ
+  relic: {
+    colors: ['#281a40', '#7c2418', '#c34433'],
+    cuts: [0.46, 0.62, 0.80],
+    vel: [[-4, 7], [11, 17], [-19, 27]]
+  }
+};
+
+const fieldCache = new Map<string, HTMLCanvasElement[]>();
+
+function fieldNoise(x: number, y: number): number {
+  const k = (2 * Math.PI) / TILE;
+  const n =
+    Math.sin(k * x) * 1.15 +
+    Math.sin(k * 2 * y + 1.7) +
+    Math.sin(k * 3 * (x + y) + 0.4) * 0.8 +
+    Math.sin(k * 2 * (x - y) + 2.3) * 0.9 +
+    Math.sin(k * (x + 3 * y) + 1.1) * 0.7 +
+    Math.sin(k * 5 * (x - 2 * y) + 0.2) * 0.45 +
+    Math.sin(k * 7 * (2 * x + y) + 2.9) * 0.3;
+  return (n / 5.3 + 1) / 2;
+}
+
+/** 3層のタイルを焼く（1回だけ。以降は使い回す）。 */
+function fieldTiles(kind: 'rare' | 'relic'): HTMLCanvasElement[] {
+  const hit = fieldCache.get(kind);
+  if (hit) return hit;
+  const style = FIELD_STYLE[kind];
+  const out: HTMLCanvasElement[] = [];
+  for (let layer = 0; layer < 3; layer++) {
+    const c = document.createElement('canvas');
+    c.width = TILE;
+    c.height = TILE;
+    const cctx = c.getContext('2d');
+    if (!cctx) throw new Error('2d context unavailable');
+    const img = cctx.createImageData(TILE, TILE);
+    const hex = style.colors[layer] ?? '#000000';
+    const v = parseInt(hex.slice(1), 16);
+    const r = (v >> 16) & 0xff;
+    const g = (v >> 8) & 0xff;
+    const b = v & 0xff;
+    const cut = style.cuts[layer] ?? 0.5;
+    // 2×2 のドット単位。1px 単位にするとドット絵の粒より細かくなる
+    for (let by = 0; by < TILE; by += 2) {
+      for (let bx = 0; bx < TILE; bx += 2) {
+        const dither = ((BAYER[(bx >> 1) % 4 + ((by >> 1) % 4) * 4] ?? 8) / 16 - 0.5) * 0.11;
+        if (fieldNoise(bx, by) + dither <= cut) continue;
+        for (let dy = 0; dy < 2; dy++) {
+          for (let dx = 0; dx < 2; dx++) {
+            const i = ((by + dy) * TILE + bx + dx) * 4;
+            img.data[i] = r;
+            img.data[i + 1] = g;
+            img.data[i + 2] = b;
+            img.data[i + 3] = 255;
+          }
+        }
+      }
+    }
+    cctx.putImageData(img, 0, 0);
+    out.push(c);
+  }
+  fieldCache.set(kind, out);
+  return out;
+}
+
 /**
- * 溜め中の「？」。黒地の座布団を敷いてから 12px グリフを整数3倍で描く。
- * （フォントサイズは 8/12 の2種のまま。拡大は整数倍のみ）
+ * 背景フィールドを描く。steps は 1〜3（重ねる層の数）＝明るさの段階。
+ * 座標は必ず整数に丸める（非整数スケーリング・にじみを出さない）。
  */
-function drawBigQuestion(
-  ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string
+function drawField(
+  ctx: CanvasRenderingContext2D, kind: 'rare' | 'relic', t: number, steps: number
 ): void {
-  fillRect(ctx, cx - 20, cy - 22, 40, 44, THEME.outline);
-  strokeRect1(ctx, cx - 20, cy - 22, 40, 44, color);
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.scale(3, 3);
-  drawTextCentered(ctx, '？', 0, -6, 12, color);
-  ctx.restore();
+  fillRect(ctx, -8, -8, VW + 16, VH + 16, kind === 'relic' ? THEME.outline : '#1a1420');
+  const tiles = fieldTiles(kind);
+  const style = FIELD_STYLE[kind];
+  const n = Math.max(0, Math.min(3, steps));
+  for (let layer = 0; layer < n; layer++) {
+    const tile = tiles[layer];
+    const vel = style.vel[layer];
+    if (!tile || !vel) continue;
+    const ox = ((Math.round(t * vel[0]) % TILE) + TILE) % TILE;
+    const oy = ((Math.round(t * vel[1]) % TILE) + TILE) % TILE;
+    for (let y = -TILE + oy; y < VH; y += TILE) {
+      for (let x = -TILE + ox; x < VW; x += TILE) {
+        ctx.drawImage(tile, x, y);
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------- 紙片
+//
+// 実機の破裂は「白い矩形の紙片」が大量に飛ぶ。点のパーティクルでは細かすぎるので、
+// 6〜16px の矩形を別系統で持つ。回転は禁止なので、縦横を入れ替えて“ひらひら”を作る。
+
+interface Shard {
+  x: number; y: number; vx: number; vy: number;
+  w: number; h: number;
+  life: number; max: number;
+  color: string;
+  /** 縦横入れ替えの周期 */
+  flip: number;
+}
+
+const SHARD_CAP = 80;
+
+/** 封の箱。ドット絵の小物を矩形だけで組む（スプライト追加はしない）。 */
+function drawSealBox(
+  ctx: CanvasRenderingContext2D, cx: number, cy: number,
+  accent: string, crack: number, jitter: number
+): void {
+  const S = 2;                       // 整数倍スケール
+  const bw = 26;
+  const bh = 34;
+  const x = Math.round(cx - (bw * S) / 2) + jitter;
+  const y = Math.round(cy - (bh * S) / 2);
+  const r = (px: number, py: number, pw: number, ph: number, color: string): void => {
+    fillRect(ctx, x + px * S, y + py * S, pw * S, ph * S, color);
+  };
+  r(-1, -1, bw + 2, bh + 2, '#1a1420');          // アウトライン
+  r(0, 0, bw, bh, '#5d3d20');                    // 本体
+  r(0, 0, bw, 9, '#8a5f33');                     // 蓋
+  r(0, 9, bw, 1, '#3a2715');                     // 蓋の合わせ目
+  r(0, 0, bw, 1, '#b98a52');                     // 上面のハイライト
+  r(1, 1, 1, 7, '#b98a52');
+  r(bw / 2 - 2, 0, 4, bh, accent);               // 縦の帯
+  r(0, bh / 2 - 2, bw, 4, accent);               // 横の帯
+  r(bw / 2 - 4, bh / 2 - 4, 8, 8, '#7c2418');    // 封蝋
+  r(bw / 2 - 3, bh / 2 - 3, 2, 2, '#c34433');
+  // 割れ目。溜めの終盤に3本まで走る
+  const cracks: Array<[number, number, number, number]> = [
+    [6, 3, 1, 8], [bw - 8, 12, 1, 9], [10, bh - 10, 7, 1]
+  ];
+  for (let i = 0; i < cracks.length; i++) {
+    if (crack <= i / cracks.length) continue;
+    const c = cracks[i];
+    if (c) r(c[0], c[1], c[2], c[3], '#f4f2ec');
+  }
 }
 
 /** 画面外周のマーチング枠（点滅する破線）。遺物専用。 */
+
 function drawMarchingBorder(ctx: CanvasRenderingContext2D, t: number, a: string, b: string): void {
   const off = Math.floor(t * 48) % 16;
   for (let x = -16; x < VW + 16; x += 16) {
@@ -183,6 +347,8 @@ export class OpeningScreen implements GameScreen {
   private burstDone = false;
   private cutTicks = 0;
   private typed = 0;
+  /** 破裂した容れ物の紙片（実機の白い矩形に相当） */
+  private shards: Shard[] = [];
 
   // スキップ
   private fastFlow = false;
@@ -232,6 +398,7 @@ export class OpeningScreen implements GameScreen {
     if (this.flashT > 0) this.flashT = Math.max(0, this.flashT - dt);
     if (this.spokeT > 0) this.spokeT = Math.max(0, this.spokeT - dt);
     if (this.goldPop > 0) this.goldPop = Math.max(0, this.goldPop - dt);
+    this.updateShards(dt);
 
     // 数値のカウントアップ。一気に代入せず追いかけさせる（跳ねの快感）
     if (this.goldShown < this.goldTarget) {
@@ -347,6 +514,8 @@ export class OpeningScreen implements GameScreen {
     // 前作資産の 0.8秒ホールド＋パーティクルをそのまま土台に使い、上に盛る（§1.1）
     this.fx.holdRare(cx, cy);
     if (relic) {
+      // 容れ物が割れて中身が出る。紙片＝割れた箱そのもの
+      this.spawnShards(cx, cy, 60, THEME.red);
       this.emit(cx, cy, 64, [THEME.red, THEME.gold, THEME.text], 150);
       this.emit(cx, cy, 24, [THEME.red, '#7c2418'], 70);
       this.shakeAmp = 6;
@@ -354,19 +523,20 @@ export class OpeningScreen implements GameScreen {
       this.flashT = 0.1;
       this.flashMax = 0.1;
       this.flashColor = THEME.text;
-      this.spokeT = 0.34;
-      this.spokeMax = 0.34;
+      this.spokeT = 0.50;
+      this.spokeMax = 0.50;
       sfx('rare');
       sfx('levelup');
     } else {
+      this.spawnShards(cx, cy, 40, THEME.gold);
       this.emit(cx, cy, 34, [THEME.gold, THEME.text], 110);
       this.shakeAmp = 4;
       this.shakeT = 0.32;
       this.flashT = 0.07;
       this.flashMax = 0.07;
       this.flashColor = THEME.text;
-      this.spokeT = 0.26;
-      this.spokeMax = 0.26;
+      this.spokeT = 0.40;
+      this.spokeMax = 0.40;
       sfx('rare');
     }
   }
@@ -391,6 +561,63 @@ export class OpeningScreen implements GameScreen {
     // 60fps を守るため上限で切る
     const over = this.fx.particles.length - PARTICLE_CAP;
     if (over > 0) this.fx.particles.splice(0, over);
+  }
+
+  /**
+   * 容れ物が割れて飛ぶ紙片。実機は白い矩形が画面のかなりの面積を占めるので、
+   * 点のパーティクルとは別系統で「大きい破片」として持つ（6〜16px）。
+   */
+  private spawnShards(cx: number, cy: number, n: number, accent: string): void {
+    for (let i = 0; i < n; i++) {
+      const ang = (i / n) * Math.PI * 2 + hashF(i * 17 + this.idx) * 0.9;
+      // 実機は2フレームで画面幅の3割まで広がる。初速を高くして強く減速させる
+      const spd = 260 + hashF(i * 5 + 3) * 430;
+      const big = i % 5 === 0;
+      const w = big ? 12 + Math.floor(hashF(i * 11) * 7) : 5 + Math.floor(hashF(i * 23) * 7);
+      const h = big ? 10 + Math.floor(hashF(i * 31) * 8) : 4 + Math.floor(hashF(i * 41) * 7);
+      const roll = hashF(i * 53);
+      this.shards.push({
+        // 箱の面から生まれる（1点から出ると噴水に見える）
+        x: cx + (hashF(i * 83) - 0.5) * 46,
+        y: cy + (hashF(i * 97) - 0.5) * 54,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd - 90,
+        w, h,
+        life: 0.42 + hashF(i * 61) * 0.42,
+        max: 0.84,
+        color: roll < 0.70 ? '#f4f2ec' : roll < 0.88 ? '#c9c9d4' : accent,
+        flip: 7 + Math.floor(hashF(i * 71) * 9)
+      });
+    }
+    const over = this.shards.length - SHARD_CAP;
+    if (over > 0) this.shards.splice(0, over);
+  }
+
+  private updateShards(dt: number): void {
+    if (this.shards.length === 0) return;
+    for (const sh of this.shards) {
+      sh.x += sh.vx * dt;
+      sh.y += sh.vy * dt;
+      // 飛散 → 減速 → 落下
+      const drag = Math.min(1, 4.2 * dt);
+      sh.vx -= sh.vx * drag;
+      sh.vy -= sh.vy * drag;
+      sh.vy += 520 * dt;
+      sh.life -= dt;
+    }
+    this.shards = this.shards.filter(sh => sh.life > 0 && sh.y < VH + 40);
+  }
+
+  private drawShards(ctx: CanvasRenderingContext2D): void {
+    for (const sh of this.shards) {
+      // 消え際は点滅で抜く（アルファのフェードはドット絵に合わない）
+      if (sh.life < 0.22 && Math.floor(sh.life * 24) % 2 === 0) continue;
+      // 回転は禁止なので、縦横を入れ替えて“ひらひら”に見せる
+      const flip = Math.floor(sh.life * sh.flip) % 2 === 0;
+      const w = flip ? sh.w : sh.h;
+      const h = flip ? sh.h : sh.w;
+      fillRect(ctx, Math.round(sh.x - w / 2), Math.round(sh.y - h / 2), w, h, sh.color);
+    }
   }
 
   // -------------------------------------------------------------- 入力
@@ -484,16 +711,24 @@ export class OpeningScreen implements GameScreen {
     const shake = this.shakeOffset();
     ctx.save();
     ctx.translate(shake.x, shake.y);
-    fillRect(ctx, -8, -8, VW + 16, VH + 16, THEME.bg);
 
-    this.drawHeader(ctx);
+    // 1) 地。カットイン中は背景そのものがレアリティ色の流動場に変わる
+    const cut = this.phase === 'cut' ? this.cutItem : null;
+    if (cut) {
+      drawField(ctx, cut.rarity === 'relic' ? 'relic' : 'rare', this.clock, this.fieldSteps());
+    } else {
+      fillRect(ctx, -8, -8, VW + 16, VH + 16, THEME.bg);
+    }
+
+    // 2) 一覧。カットイン中は左右へ退場する（実機ではUIパネルが引っ込む）
     this.drawList(ctx);
     if (this.phase === 'done') this.drawSummary(ctx);
-    this.drawButtons(ctx);
 
-    if (this.phase === 'cut') this.drawCut(ctx);
+    // 3) 箱・破裂・札
+    if (cut) this.drawCut(ctx, cut);
 
     this.fx.drawParticles(ctx);
+    this.drawShards(ctx);
 
     if (this.flashT > 0) {
       // 3段の階段状フラッシュ（グラデーションは使わない）
@@ -501,6 +736,10 @@ export class OpeningScreen implements GameScreen {
       const c = k > 0.66 ? this.flashColor : k > 0.33 ? THEME.gold : THEME.goldDark;
       fillRect(ctx, -8, -8, VW + 16, VH + 16, c);
     }
+
+    // 4) HUD。実機でも開封中ずっと残るので、閃光より上に置く
+    this.drawHeader(ctx);
+    this.drawButtons(ctx);
 
     if (this.detail) {
       ctx.fillStyle = 'rgba(15,11,20,0.82)';
@@ -535,34 +774,63 @@ export class OpeningScreen implements GameScreen {
     fillRect(ctx, LIST_X, 30, LIST_W, 1, THEME.panelLight);
   }
 
+  /**
+   * 一覧の退場量（0=定位置、1=画面外）。
+   *
+   * 実機では、パックを開けると通常のUIパネルが画面外へ引っ込み、
+   * パックと背景だけの場面になる。稀少以上はその1個だけの場面にする。
+   */
+  private exitProgress(): number {
+    if (this.phase !== 'cut' || !this.cutItem) return 0;
+    const T = this.cutItem.rarity === 'relic' ? RELIC_T : RARE_T;
+    if (this.t >= T.present) {
+      // 収束と一緒に戻ってくる
+      return Math.max(0, 1 - (this.t - T.present) / Math.max(0.01, T.out - T.present));
+    }
+    return Math.min(1, this.t / 0.20);
+  }
+
   private drawList(ctx: CanvasRenderingContext2D): void {
+    const ex = this.exitProgress();
+    if (ex >= 1) return;
+    // 加速しながら左右交互に掃ける
+    const slide = Math.round(ex * ex * (VW + 40));
     for (let i = 0; i < this.items.length; i++) {
       const y = rowY(i);
       const it = this.items[i];
       if (!it) continue;
+      const ox = slide === 0 ? 0 : (i % 2 === 0 ? -slide : slide);
+      if (ox !== 0) {
+        ctx.save();
+        ctx.translate(ox, 0);
+      }
       if (i >= this.shown) {
         this.drawClosed(ctx, y);
+        if (ox !== 0) ctx.restore();
         continue;
       }
       const landing = i === this.shown - 1 && this.landT > 0;
       const k = landing ? this.landT / this.landMax : 0;
-      // 右から整数ステップで滑り込む
+      // 右から整数ステップで滑り込む（幅は変えない。欠けて見えないように平行移動）
       const dx = landing ? Math.round(k * 20) : 0;
-      drawItemRow(ctx, it, LIST_X + dx, y, LIST_W - dx, ROW_H);
+      if (dx !== 0) ctx.translate(dx, 0);
+      drawItemRow(ctx, it, LIST_X, y, LIST_W, ROW_H);
       if (landing) {
         // 着地フラッシュ：レアリティ色の帯を2段で被せる
         const c = RARITY_COLOR[this.landRarity];
         if (k > 0.78) {
-          fillRect(ctx, LIST_X + dx, y, LIST_W - dx, ROW_H, c);
+          fillRect(ctx, LIST_X, y, LIST_W, ROW_H, c);
         } else if (k > 0.35) {
-          strokeRect1(ctx, LIST_X + dx, y, LIST_W - dx, ROW_H, c);
-          strokeRect1(ctx, LIST_X + dx + 1, y + 1, LIST_W - dx - 2, ROW_H - 2, c);
+          strokeRect1(ctx, LIST_X, y, LIST_W, ROW_H, c);
+          strokeRect1(ctx, LIST_X + 1, y + 1, LIST_W - 2, ROW_H - 2, c);
         }
       }
+      if (dx !== 0) ctx.translate(-dx, 0);
       // 遺物は一覧の中でも常に自己主張する
       if (it.rarity === 'relic' && Math.floor(this.clock * 3) % 2 === 0) {
         strokeRect1(ctx, LIST_X, y, LIST_W, ROW_H, THEME.gold);
       }
+      if (ox !== 0) ctx.restore();
     }
   }
 
@@ -602,29 +870,43 @@ export class OpeningScreen implements GameScreen {
 
   // -------------------------------------------------------------- カットイン描画
 
-  private drawCut(ctx: CanvasRenderingContext2D): void {
+  /**
+   * 背景フィールドの明るさ段階（1〜3）。
+   * 実機の「緑→黄→橙」の色ランプを、重ねる層の数に翻訳したもの。
+   * 遺物は溜めの間ずっと最低段階＝ほぼ暗転を保つ（§7.4「画面暗転」）。
+   */
+  private fieldSteps(): number {
     const it = this.cutItem;
-    if (!it) return;
+    if (!it) return 1;
+    const relic = it.rarity === 'relic';
+    const T = relic ? RELIC_T : RARE_T;
+    if (this.t >= T.hold) return 3;
+    const p = Math.min(1, Math.max(0, (this.t - T.dark) / (T.charge - T.dark)));
+    if (relic) return p > 0.80 ? 2 : 1;
+    return p > 0.75 ? 3 : p > 0.35 ? 2 : 1;
+  }
+
+  private drawCut(ctx: CanvasRenderingContext2D, it: Item): void {
     const relic = it.rarity === 'relic';
     const T = relic ? RELIC_T : RARE_T;
     const t = this.t;
     const cx = VW / 2;
     const cy = 300;
 
-    // --- 暗転（階段状。3段で落とす）---
-    if (t < T.dark) {
-      const step = Math.min(2, Math.floor((t / T.dark) * 3));
-      ctx.fillStyle = ['rgba(15,11,20,0.45)', 'rgba(15,11,20,0.75)', 'rgba(15,11,20,0.92)'][step] ?? 'rgba(15,11,20,0.92)';
-      ctx.fillRect(-8, -8, VW + 16, VH + 16);
-      return;
-    }
-    fillRect(ctx, -8, -8, VW + 16, VH + 16, THEME.outline);
-
     if (t < T.hold) {
       // --- 溜め。charge を過ぎたら値を固定して「完全に止める」---
-      const p = Math.min(1, (t - T.dark) / (T.charge - T.dark));
-      if (relic) this.drawChargeRelic(ctx, cx, cy, p, t < T.charge);
-      else this.drawChargeRare(ctx, cx, cy, p, t < T.charge);
+      const p = Math.min(1, Math.max(0, (t - T.dark) / (T.charge - T.dark)));
+      const moving = t < T.charge;
+      if (relic) this.drawChargeRelic(ctx, cx, cy, p, moving);
+      else this.drawChargeRare(ctx, cx, cy, p, moving);
+
+      // 封をした小箱。溜めが進むほど激しく鳴り、割れ目が走る
+      const amp = p < 0.25 ? 0 : Math.round(1 + p * 3);
+      const jitter = amp === 0 ? 0
+        : Math.round((hashF(Math.floor(this.clock * (moving ? 30 : 0)) * 7) - 0.5) * 2 * amp);
+      drawSealBox(ctx, cx, cy, relic ? THEME.red : THEME.gold,
+        p < 0.55 ? 0 : (p - 0.55) / 0.45, jitter);
+      this.drawPlaque(ctx, it);
       return;
     }
 
@@ -640,37 +922,50 @@ export class OpeningScreen implements GameScreen {
 
     const since = t - T.hold;
     this.drawCard(ctx, it, since, relic);
+    this.drawPlaque(ctx, it);
 
     // 収束：2フレーム点滅で消える
     if (t > T.present) {
       if (Math.floor((t - T.present) * 30) % 2 === 0) {
-        fillRect(ctx, -8, -8, VW + 16, VH + 16, THEME.outline);
+        fillRect(ctx, cx - 160, cy - 150, 320, 300, THEME.outline);
       }
     }
   }
 
-  /** 稀少の溜め：中央の帯が整数ステップで開き、指示線が寄ってくる。 */
+  /**
+   * 下部の名札。実機は開封中ずっと「パック名／スキップ」が出ている。
+   * こちらは「レアリティ／何個目か」を出し、スキップボタンの相方にする。
+   */
+  private drawPlaque(ctx: CanvasRenderingContext2D, it: Item): void {
+    const x = LIST_X;
+    const y = SKIP_BTN.y;
+    const w = SKIP_BTN.x - LIST_X - 8;
+    fillRect(ctx, x, y, w, SKIP_BTN.h, THEME.outline);
+    strokeRect1(ctx, x, y, w, SKIP_BTN.h, RARITY_COLOR[it.rarity]);
+    drawText(ctx, RARITY_LABEL[it.rarity], x + 8, y + 10, 12, RARITY_COLOR[it.rarity]);
+    drawTextRight(ctx, `${this.idx + 1} / ${this.items.length}`, x + w - 8, y + 12, 8, THEME.dim);
+  }
+
+  /** 稀少の溜め：中央の帯が整数ステップで開き、指示線が箱へ寄ってくる。 */
   private drawChargeRare(
     ctx: CanvasRenderingContext2D, cx: number, cy: number, p: number, moving: boolean
   ): void {
     const bandH = Math.round(p * 88 / 8) * 8;
-    fillRect(ctx, 0, cy - bandH / 2, VW, bandH, THEME.panel);
+    fillRect(ctx, 0, cy - bandH / 2, VW, bandH, 'rgba(15,11,20,0.55)');
     fillRect(ctx, 0, cy - bandH / 2, VW, 1, THEME.goldDark);
     fillRect(ctx, 0, cy + bandH / 2 - 1, VW, 1, THEME.goldDark);
 
-    const dist = Math.round((1 - p) * 140) + 24;
+    const dist = Math.round((1 - p) * 140) + 34;
+    const blink = moving ? Math.floor(this.clock * 16) % 2 === 0 : true;
     for (let i = 0; i < 3; i++) {
       const d = dist + i * 10;
-      fillRect(ctx, cx - d, cy - 3, 6, 6, THEME.gold);
-      fillRect(ctx, cx + d - 6, cy - 3, 6, 6, THEME.gold);
-    }
-    if (p > 0.3) {
-      const blink = moving ? Math.floor(this.clock * 16) % 2 === 0 : true;
-      if (blink) drawBigQuestion(ctx, cx, cy, THEME.gold);
+      const c = i === 0 && blink ? THEME.text : THEME.gold;
+      fillRect(ctx, cx - d, cy - 3, 6, 6, c);
+      fillRect(ctx, cx + d - 6, cy - 3, 6, 6, c);
     }
   }
 
-  /** 遺物の溜め：画面は暗転したまま。赤い柱と亀裂だけが育つ。 */
+  /** 遺物の溜め：ほぼ暗転のまま。赤い柱と亀裂だけが育つ。 */
   private drawChargeRelic(
     ctx: CanvasRenderingContext2D, cx: number, cy: number, p: number, moving: boolean
   ): void {
@@ -679,7 +974,7 @@ export class OpeningScreen implements GameScreen {
     fillRect(ctx, cx - 2 - beat, cy - h / 2, 4 + beat * 2, h, THEME.red);
     fillRect(ctx, cx - 1, cy - h / 2, 2, h, THEME.gold);
 
-    // 四隅から中央へ伸びる亀裂（2×2 の階段。回転ではない）
+    // 四隅から中央へ伸びる亀裂（3×3 の階段。回転ではない）
     const len = Math.round(p * 26);
     const corners: Array<[number, number, number, number]> = [
       [8, 8, 1, 1], [VW - 10, 8, -1, 1], [8, VH - 10, 1, -1], [VW - 10, VH - 10, -1, -1]
@@ -696,11 +991,6 @@ export class OpeningScreen implements GameScreen {
     const scan = Math.round((1 - p) * 200);
     fillRect(ctx, 0, cy - scan, VW, 1, THEME.red);
     fillRect(ctx, 0, cy + scan, VW, 1, THEME.red);
-
-    if (p > 0.5) {
-      const blink = moving ? Math.floor(this.clock * 20) % 2 === 0 : true;
-      if (blink) drawBigQuestion(ctx, cx, cy, THEME.red);
-    }
   }
 
   /**
@@ -725,15 +1015,20 @@ export class OpeningScreen implements GameScreen {
     const cardY = 300 - Math.floor(cardH / 2);
     const cardX = Math.round(cx - cardW / 2);
 
-    // 立ち上がりの3段スケール（整数）。ここで「弾けた」感じを出す
-    if (since < 0.05) {
-      fillRect(ctx, cx - 44, 300 - 14, 88, 28, THEME.text);
-      return;
-    }
-    if (since < 0.10) {
-      const w = Math.round(cardW / 2);
-      const h = Math.round(cardH / 2);
-      fillRect(ctx, cx - w / 2, 300 - h / 2, w, h, color);
+    // 立ち上がり。実機は「紙片が散る → 白紙のカードが立つ → 絵柄が入る」の順で、
+    // 中身が入るまでに1テンポある。そこを3段に分けて再現する。
+    // 破裂直後は紙片だけ。中身はまだ現れない（実機もここは紙吹雪だけの2〜3フレーム）
+    if (since < 0.18) return;
+    if (since < 0.34) {
+      // 白紙。まだレアリティの色すら分からない
+      const k = since < 0.26 ? 0.62 : 1;
+      const w = Math.round(cardW * k);
+      const h = Math.round(cardH * k);
+      const bx = Math.round(cx - w / 2);
+      const by = Math.round(300 - h / 2);
+      // 紙片も白いので、白紙の輪郭は暗色で締める（実機のカードも縁が暗い）
+      fillRect(ctx, bx - 2, by - 2, w + 4, h + 4, THEME.outline);
+      fillRect(ctx, bx, by, w, h, THEME.text);
       return;
     }
 
@@ -754,7 +1049,7 @@ export class OpeningScreen implements GameScreen {
     ctx.translate(cx, bandY + 7);
     ctx.scale(2, 2);
     drawTextCentered(ctx, RARITY_LABEL[it.rarity], 0, 0, 12,
-      relic ? (loud ? THEME.text : THEME.gold) : (since < 0.35 && loud ? THEME.text : color));
+      relic ? (loud ? THEME.text : THEME.gold) : (since < 0.5 && loud ? THEME.text : color));
     ctx.restore();
 
     // --- 札 ---
@@ -763,24 +1058,33 @@ export class OpeningScreen implements GameScreen {
     strokeRect1(ctx, cardX + 1, cardY + 1, cardW - 2, cardH - 2, color);
     strokeRect1(ctx, cardX + 3, cardY + 3, cardW - 6, cardH - 6, THEME.panelLight);
 
-    // アイコン（整数倍スケール）
+    // アイコン（整数倍スケール）。枠だけ先に出て、1テンポ置いて中身が入る
     const ix = Math.round(cx - iconPx / 2);
     const iy = cardY + 14;
     fillRect(ctx, ix - 6, iy - 6, iconPx + 12, iconPx + 12, THEME.panel);
     strokeRect1(ctx, ix - 6, iy - 6, iconPx + 12, iconPx + 12,
       relic && Math.floor(this.clock * 8) % 2 === 0 ? THEME.gold : THEME.outline);
-    drawSprOr(ctx, itemIconName(it), 'icon_W1', ix, iy, iconScale);
+    if (since >= 0.42) {
+      if (since < 0.46) {
+        // 絵柄が入る瞬間の1フレーム白
+        fillRect(ctx, ix, iy, iconPx, iconPx, THEME.text);
+      } else {
+        drawSprOr(ctx, itemIconName(it), 'icon_W1', ix, iy, iconScale);
+      }
+    }
 
     // 名前
     const nameY = iy + iconPx + 12;
-    drawTextCentered(ctx, itemName(it), cx, nameY, 12, relic ? THEME.gold : color);
+    if (since >= 0.50) {
+      drawTextCentered(ctx, itemName(it), cx, nameY, 12, relic ? THEME.gold : color);
+    }
 
     let ly = nameY + 22;
     if (u) {
-      drawTextCentered(ctx, `《${u.name}》`, cx, ly, 12, THEME.red);
+      if (since >= 0.58) drawTextCentered(ctx, `《${u.name}》`, cx, ly, 12, THEME.red);
       ly += 19;
       // ユニーク効果の1行を1文字ずつ出す（§7.4 ユニーク効果のテキスト表示）
-      const chars = Math.max(0, Math.floor((since - 0.35) / 0.035));
+      const chars = Math.max(0, Math.floor((since - 0.66) / 0.032));
       if (chars > this.typed) {
         if (chars % 4 === 0) sfx('tap');
         this.typed = chars;
@@ -798,7 +1102,7 @@ export class OpeningScreen implements GameScreen {
     } else {
       // アフィックスを1行ずつ、間を置いて出す
       it.affixes.forEach((a, i) => {
-        if (since < 0.18 + i * 0.13) return;
+        if (since < 0.58 + i * 0.11) return;
         drawText(ctx, affixLine(a), cardX + 16, ly + i * 17, 12, THEME.text);
         drawTextRight(ctx, tierStars(a.tier), cardX + cardW - 16, ly + i * 17, 12,
           a.tier >= 4 ? THEME.gold : THEME.dim);
@@ -807,8 +1111,8 @@ export class OpeningScreen implements GameScreen {
     }
 
     // 増える売却額。数値が跳ねる瞬間を札の中にも置く
-    if (since > 0.28) {
-      const pop = since < 0.42 && Math.floor(this.clock * 20) % 2 === 0;
+    if (since > 0.56) {
+      const pop = since < 0.72 && Math.floor(this.clock * 20) % 2 === 0;
       drawTextRight(ctx, `+${sellValue(it)}G`, cardX + cardW - 16, cardY + cardH - 18, 12,
         pop ? THEME.text : THEME.goldDark);
     }
