@@ -385,5 +385,57 @@ console.log('回帰: 批評R1で検出した破綻');
   check(`踏破時の戦利品が10個に届く（実測最大 ${maxLoot}）`, maxLoot >= 10);
 }
 
+// ---------------------------------------------------------------- 回帰（R2）
+// 批評ラウンド2への修正の再発防止。
+console.log('回帰: 批評R2で検出した破綻');
+{
+  // ベースタイプに構造的な最下位が固定されていないか。
+  // 修正前は両手剣が全ステージで最下位だった（超過ダメージが死体に吸われるため）。
+  const job = jobDef('swordsman');
+  const rank: Record<string, number[]> = {};
+  for (const stageId of [1, 4, 7, 10]) {
+    const p = itemPowerFor(stageId, 1);
+    const stage = stageDef(stageId);
+    let armor: Item | null = null;
+    const rngA = new Prng(0x4100 + stageId);
+    for (let k = 0; k < 400 && !armor; k++) {
+      const it = generateItem(rngA, { itemPower: p, slot: 'armor', stageId, rarityBonus: 0, id: 'ra' });
+      if (it.slot === 'armor' && it.affixes.length === 0) armor = it;
+    }
+    if (!armor) continue;
+    const scores: [string, number][] = [];
+    for (const b of BASE_TYPES.filter(x => x.slot === 'weapon')) {
+      // アフィックスの当たり外れを消し、ベースの形だけを比べる
+      const w: Item = {
+        id: 'rw', slot: 'weapon', baseId: b.id, rarity: 'common',
+        power: Math.round(p * b.mul), speed: b.speed,
+        crit: (b.critMin + b.critMax) / 2,
+        element: { physical: 1 }, affixes: [], unique: null, locked: false, identified: true, fromStage: stageId
+      };
+      let depth = 0;
+      const N = 60;
+      for (let i = 0; i < N; i++) {
+        const r = simulateRun({
+          seed: (0x4200 + i * 104729) >>> 0, job, weapon: w, armor,
+          rule: retreatRuleDef('standard'), stage, tier: 1
+        });
+        depth += r.depth / r.encountersTotal;
+      }
+      scores.push([b.id, depth / N]);
+    }
+    scores.sort((x, y) => y[1] - x[1]);
+    scores.forEach(([id], i) => { (rank[id] ??= []).push(i); });
+  }
+  const alwaysLast = Object.entries(rank)
+    .filter(([, rs]) => rs.length > 0 && rs.every(r => r === 5))
+    .map(([id]) => id);
+  check(`どのベースも全ステージ最下位に固定されていない（該当: ${alwaysLast.join('/') || 'なし'}）`,
+    alwaysLast.length === 0);
+
+  // 派遣枠は踏破しただけでは増えず、金を払って初めて増える（§7.5）
+  const seen = new Set(Object.keys(rank));
+  check(`ベース比較が6種すべてを回した（${seen.size}種）`, seen.size === 6);
+}
+
 console.log(failures === 0 ? '\nALL TESTS PASSED' : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

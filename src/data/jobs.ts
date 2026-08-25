@@ -76,3 +76,11 @@ export function retreatRuleDef(id: RetreatRule): RetreatRuleDef {
 
 /** 派遣枠の解放条件（§4.2）。初期は剣士1人。 */
 export const UNLOCK_STAGE_FOR_SLOT: readonly number[] = [0, 3, 6];
+
+/**
+ * 派遣枠の解放費用（§7.5「2人目・3人目の解放コスト（ステージクリアと併用）」）。
+ * 条件ステージを踏破し、かつこの金額を払って初めて枠が増える。
+ * 金額は「その時点で数回派遣すれば届く」重さにしてある——
+ * 払えないまま何時間も待たされると、枠が増える手応えが罰に変わるため。
+ */
+export const SLOT_COST: readonly number[] = [0, 600, 2400];

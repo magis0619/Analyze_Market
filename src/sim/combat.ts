@@ -246,6 +246,9 @@ export function simulateRun(input: SimulateInput): RunResult {
   let hp = maxHp;
   const hpCurve: number[] = [1];
 
+  // 大振りの武器は薙ぎ払う（下の攻撃処理を参照）
+  const cleaves = baseDef(weapon.baseId).tags.includes('heavy');
+
   const greedy = weapon.unique === 'greedyGlass' || armor.unique === 'greedyGlass';
   const takenMul = job.damageTakenMul * (greedy ? 1.25 : 1);
 
@@ -359,6 +362,25 @@ export function simulateRun(input: SimulateInput): RunResult {
             if (e.hp <= 0) continue;
             e.hp -= dmg;
             if (e.hp <= 0) onKill();
+          }
+        } else if (cleaves) {
+          // 大振りの武器（heavy タグ）は、倒しきって余った分を次の敵へ薙ぎ払う。
+          //
+          // これが無いと大振り型は構造的に必ず最下位になる。敵1体のHPは46で、
+          // 両手剣の一撃は90前後——毎回ほぼ半分が死体に吸われて捨てられる。
+          // 一方で被ダメージは実時間で入るので、遅い武器ほど倒しきるまでに
+          // 余計に殴られ、撤退ラインに早く落ちる。実測でも両手剣は全ステージで
+          // 最下位（ステージ4で踏破率49.9%、短剣は72.5%）だった。
+          // 余剰を繰り越すことで「1体ずつなら普通、群れには滅法強い」という
+          // 大振り型の取り柄が生まれ、手数型とのトレードオフが成立する。
+          let carry = dmg;
+          for (const e of enemies) {
+            if (carry <= 0) break;
+            if (e.hp <= 0) continue;
+            const applied = Math.min(e.hp, carry);
+            e.hp -= applied;
+            carry -= applied;
+            if (e.hp <= 0) onKill(); else break;
           }
         } else {
           target.hp -= dmg;

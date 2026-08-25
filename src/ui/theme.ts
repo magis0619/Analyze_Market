@@ -1,16 +1,25 @@
-// UI 配色。render/palette.ts の32色パレットと同じ値を使うこと
-// （批評ループで palette.ts と突き合わせて統一する）。
+import { COLORS } from '../render/palette';
+
+// UI 配色。色そのものは持たず、render/palette.ts の COLORS に意味名を付けるだけ。
+// 「UIとドット絵で微妙に違う黒が2種類ある」といった破綻を構造的に起こせなくする。
 export const THEME = {
-  bg: '#1a1420',
-  panel: '#2b2138',
-  panelLight: '#3e3450',
-  text: '#f2ede4',
-  dim: '#b8b0a8',
-  faint: '#6e6660',
-  gold: '#e8c84c',
-  goldDark: '#a08030',
-  red: '#c83c3c',
-  green: '#6aa04a',
-  blue: '#4a72b0',
-  outline: '#0f0b14'
+  bg: COLORS.bg,
+  panel: COLORS.panel,
+  panelLight: COLORS.panel2,
+  text: COLORS.white,
+  dim: COLORS.gray,
+  faint: COLORS.grayDark,
+  gold: COLORS.gold,
+  goldDark: COLORS.goldDark,
+  red: COLORS.red,
+  redDark: COLORS.redDark,
+  green: COLORS.green,
+  greenDark: COLORS.greenDark,
+  blue: COLORS.blue,
+  blueDark: COLORS.blueDark,
+  purple: COLORS.purple,
+  purpleDark: COLORS.purpleDark,
+  orange: COLORS.orange,
+  teal: COLORS.teal,
+  outline: COLORS.black
 } as const;

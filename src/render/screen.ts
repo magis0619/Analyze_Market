@@ -1,35 +1,31 @@
 // 内部解像度 360×640 に描画し、整数倍スケールで表示キャンバスへ拡大する。
-// imageSmoothingEnabled は必ず false（仕様 §5.3）。
+// imageSmoothingEnabled は必ず false（仕様 §9.3）。
 //
-// スケーリング方式（重要・C1対策・3回目の改訂）:
+// スケーリング方式（C1対策・4回目の改訂）:
 //
-// 試行1（R1）: バッキングストアをデバイスピクセル基準にし、CSS px 側を
+// 試行1: バッキングストアをデバイスピクセル基準にし、CSS px 側を
 // devicePixelRatio で割り戻す方式 → 除算の丸め誤差でにじみが残った。
 //
-// 試行2（R2）: ゲームピクセル:CSS px を整数比に固定し、CSS px→デバイスpx
-// の変換をブラウザの transform:scale(整数) に委ねる方式 →
-// 実機スマートフォンの CSS 幅（390〜430px 程度）は VW(360) の2倍
-// （720px）に届かないため、k は常に1に固定され、この仕組み自体が
-// 実機では一度も作動していなかった（批評ラウンド3で判明）。k=1 では
-// canvas は CSS 上も 360×640 の等倍表示になり、結局ブラウザが
-// devicePixelRatio 倍（非整数）でデバイスピクセルへ変換する以外の
-// 経路がなく、試行1とほぼ同じ状況に逆戻りしていた。
+// 試行2: ゲームピクセル:CSS px を整数比に固定し、CSS px→デバイスpx の
+// 変換をブラウザの transform:scale(整数) に委ねる方式 → 実機スマートフォンの
+// CSS 幅（390〜430px 程度）は VW(360) の2倍に届かないため k が常に1に固定され、
+// 仕組み自体が実機で一度も作動していなかった。
 //
-// 試行3（今回）: k は「デバイスピクセル」基準で計算する（window.innerWidth
-// に devicePixelRatio を掛けた実効デバイスピクセル数に対して整数倍を
-// 選ぶ）ため、実機でも k=2〜3 程度になる。バッキングストアは VW*k×VH*k
-// （デバイスピクセル数に一致する整数）。CSS 側のサイズは devicePixelRatio
-// で「割った」値ではなく、バッキングストアと同じ数値をそのまま CSS px の
-// サイズとして指定する（この時点では画面に収まらない大きさになる）。
-// 最後に transform: scale(1/devicePixelRatio) で必要な分だけ縮小する。
+// 試行3: k を「デバイスピクセル」基準で計算し（innerWidth × dpr に対して
+// 整数倍を選ぶ）、バッキングストアを VW*k×VH*k、CSS サイズも同じ数値にして、
+// transform: scale(1/dpr) で縮める方式。拡大率そのものは
+// (VW*k) × (1/dpr) × dpr = VW*k で厳密に打ち消し合う——のだが、
+// **中央寄せを style.left / style.top（CSS px の整数）で行っていた**。
+// dpr が非整数（2.625 など）だと CSS px の整数はデバイスピクセルの整数に
+// ならず、レイヤ全体が半ピクセルずれた位置に着地して端の列が隣と混色する。
+// 批評で「境界2列がブレンドされている」と指摘されたのはこれ。
 //
-// この方式が試行1と本質的に異なる点: 「CSS px を求める割り算」と
-// 「ブラウザが内部で行う CSS→デバイスpx の掛け算」という2段階の丸めが
-// 発生しない。CSS の transform 行列とブラウザの devicePixelRatio 拡大は
-// 合成時に1つの浮動小数点演算としてまとめて適用され、算術的には
-// (VW*k) * (1/dpr) * dpr = VW*k に厳密に一致する（掛け算と割り算が
-// 打ち消し合う）。width/height プロパティによるレイアウトのように
-// 整数デバイスピクセルへスナップする中間ステップを挟まない。
+// 試行4（今回）: 拡大率は試行3のままにして、**平行移動も transform に入れる**。
+// translate はスケールより前に適用されるので、最終的なデバイス座標は
+//   device = dpr × (tx + (1/dpr) × p) = dpr × tx + p
+// になる。tx = round(希望デバイスオフセット) / dpr と置けば dpr × tx は整数に
+// なり、レイヤは必ずデバイスピクセルの格子へ乗る。レイアウト側の丸めを
+// 一切経由しないので、非整数 dpr でも境界に混色列が出ない。
 
 export const VW = 360;
 export const VH = 640;
@@ -71,16 +67,25 @@ export class Screen {
     // そのまま使う。実際の見かけサイズへは transform で縮小する。
     this.display.style.width = `${VW * k}px`;
     this.display.style.height = `${VH * k}px`;
-    this.display.style.transform = `scale(${1 / dpr})`;
 
-    // 中央寄せ（CSS px、縮小後の見かけサイズ基準）。位置ずれは端の1px未満の
-    // 縁取りにしか影響せず、内部コンテンツの再サンプリングとは無関係。
-    const shownW = (VW * k) / dpr;
-    const shownH = (VH * k) / dpr;
-    const left = Math.floor((window.innerWidth - shownW) / 2);
-    const top = Math.floor((window.innerHeight - shownH) / 2);
-    this.display.style.left = `${left}px`;
-    this.display.style.top = `${top}px`;
+    // 中央寄せ。ここが C1 の本体だった。
+    //
+    // 以前は style.left / style.top に CSS px を入れていた。CSS px の整数は
+    // dpr が非整数（2.625 など）のときデバイスピクセルの整数にならないので、
+    // レイヤ全体が半ピクセルずれた位置に着地し、右端と左端の2列が隣と
+    // 混色していた（批評で「境界2列がブレンドされている」と指摘された症状）。
+    //
+    // 代わりに平行移動も transform に入れる。translate はスケールより前に
+    // 適用されるので、最終的なデバイス座標は
+    //   device = dpr * (tx + (1/dpr) * p) = dpr * tx + p
+    // となる。よって tx = round(希望デバイスオフセット) / dpr と置けば、
+    // レイヤは必ずデバイスピクセルの格子に乗る。
+    const offX = Math.round((window.innerWidth * dpr - VW * k) / 2);
+    const offY = Math.round((window.innerHeight * dpr - VH * k) / 2);
+    this.display.style.left = '0px';
+    this.display.style.top = '0px';
+    this.display.style.transform =
+      `translate(${offX / dpr}px, ${offY / dpr}px) scale(${1 / dpr})`;
 
     this.ctx.imageSmoothingEnabled = false;
   }

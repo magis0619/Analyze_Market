@@ -2,7 +2,7 @@ import type { GameScreen, Nav } from '../game/app';
 import type { Item, JobId, Slot } from '../sim/types';
 import { VW, VH } from '../render/screen';
 import { drawText, drawTextCentered, drawTextRight, textWidth } from '../render/font';
-import { drawSpr, fillRect, strokeRect1 } from '../render/draw';
+import { drawSpr, fillRect, fillScrim, strokeRect1 } from '../render/draw';
 import { sellValue } from '../sim/items';
 import { Prng } from '../sim/prng';
 import { jobDef } from '../data/jobs';
@@ -455,8 +455,7 @@ export class InventoryScreen implements GameScreen {
     const item = this.selected();
     if (!item) return;
     const top = this.sheetTop;
-    ctx.fillStyle = 'rgba(15,11,20,0.66)';
-    ctx.fillRect(0, 0, VW, top);
+    fillScrim(ctx, 0, 0, VW, top, THEME.outline, 0.66);
     fillRect(ctx, 0, top, VW, VH - top, THEME.panel);
     fillRect(ctx, 0, top, VW, 1, THEME.gold);
 
@@ -505,8 +504,7 @@ export class InventoryScreen implements GameScreen {
   private drawConfirm(ctx: CanvasRenderingContext2D): void {
     const c = this.confirm;
     if (!c) return;
-    ctx.fillStyle = 'rgba(15,11,20,0.72)';
-    ctx.fillRect(0, 0, VW, VH);
+    fillScrim(ctx, 0, 0, VW, VH, THEME.outline, 0.72);
     const x = 30, y = 246, w = 300, h = 140;
     fillRect(ctx, x, y, w, h, THEME.panel);
     strokeRect1(ctx, x, y, w, h, THEME.gold);

@@ -1,4 +1,4 @@
-import { drawNineSlice, fillRect } from '../render/draw';
+import { drawNineSlice, fillRect, fillScrim } from '../render/draw';
 import { drawTextCentered } from '../render/font';
 import { THEME } from './theme';
 
@@ -31,8 +31,7 @@ export function drawBtn(
   const color = b.disabled ? THEME.dim : THEME.text;
   drawTextCentered(ctx, b.label, b.x + Math.floor(b.w / 2), b.y + Math.floor((b.h - size) / 2), size, color);
   if (b.disabled) {
-    ctx.fillStyle = 'rgba(26,20,32,0.45)';
-    ctx.fillRect(b.x, b.y, b.w, b.h);
+    fillScrim(ctx, b.x, b.y, b.w, b.h, THEME.bg, 0.45);
   }
 }
 

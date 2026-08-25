@@ -3,17 +3,19 @@ import { baseDef } from '../data/bases';
 import { affixDef } from '../data/affixes';
 import { uniqueDef } from '../data/uniques';
 import { dominantElement, sellValue } from '../sim/items';
-import { drawNineSlice, drawSpr, drawSprOr, fillRect, hasSpr, strokeRect1 } from '../render/draw';
+import { drawNineSlice, drawSpr, drawSprOr, fillRect, fillScrim, hasSpr, strokeRect1 } from '../render/draw';
 import { drawText, drawTextRight, textWidth, wrapText } from '../render/font';
 import { THEME } from './theme';
 
 // 全画面で共有するアイテム表示。装備は画面のどこに出ても同じ見え方であること。
 
+// モックアップ⑧の配色。並=灰 / 上質=青 / 稀少=紫 / 遺物=金。
+// ARPG の慣習とも一致するので、初見でも順序が推測できる。
 export const RARITY_COLOR: Record<Rarity, string> = {
   common: THEME.dim,
   fine: THEME.blue,
-  rare: THEME.gold,
-  relic: THEME.red
+  rare: THEME.purple,
+  relic: THEME.gold
 };
 
 export const RARITY_LABEL: Record<Rarity, string> = {
@@ -121,7 +123,7 @@ export function drawItemRow(
     fillRect(ctx, px, y + h - 11, 3, 3, a.tier >= 4 ? THEME.gold : THEME.dim);
     px += 5;
   }
-  if (item.unique) drawText(ctx, '遺', px + 1, y + h - 13, 8, THEME.red);
+  if (item.unique) drawText(ctx, '遺', px + 1, y + h - 13, 8, THEME.gold);
 
   // 装備中との比較（§10 担当5の観点）
   if (opts.compareTo) {
@@ -139,8 +141,7 @@ export function drawItemRow(
     drawSprOr(ctx, 'icon_lock', 'icon_A3', x + w - 20, y + Math.floor((h - 16) / 2));
   }
   if (opts.dim) {
-    ctx.fillStyle = 'rgba(26,20,32,0.55)';
-    ctx.fillRect(x, y, w, h);
+    fillScrim(ctx, x, y, w, h, THEME.bg, 0.55);
   }
 }
 
@@ -199,11 +200,11 @@ export function drawItemDetail(
   }
   if (item.unique) {
     const u = uniqueDef(item.unique);
-    drawText(ctx, `《${u.name}》`, x + 8, ly, 8, THEME.red);
+    drawText(ctx, `《${u.name}》`, x + 8, ly, 8, THEME.gold);
     ly += 12;
     // ユニーク効果は1行に収まらないことがあるので必ず折り返す
     for (const ln of wrapText(u.text, w - 16, 8)) {
-      drawText(ctx, ln, x + 8, ly, 8, THEME.gold);
+      drawText(ctx, ln, x + 8, ly, 8, THEME.text);
       ly += 12;
     }
   }

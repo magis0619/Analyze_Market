@@ -1,47 +1,87 @@
-// OUTFITTER — global pixel-art palette.
-// One char per color; every sprite row in sprites.ts references these keys.
-// Hard budget: max 32 entries. Current count: 30.
+// DELVERS — 唯一のカラーパレット（仕様書 §9.3「同時に使う色は32色まで」）。
+//
+// 以前は sprites 用の PALETTE と UI 用の THEME が別々の色を持っていて、
+// ソース上47色／画面上61色まで膨らんでいた。ここを唯一の出所にして、
+// スプライトの1文字キーも UI の意味名も同じ COLORS を指すようにする。
+//
+// COLORS を増やすときは必ず数えること。scripts/static-checks.mjs が 32 を超えたら落とす。
 
-export const OUTLINE = '#1a1420';
+export const COLORS = {
+  black:     '#0f0b14', // 1px アウトライン／最暗
+  bg:        '#1a1420', // 画面背景
+  panel:     '#2b2138', // パネル
+  panel2:    '#3e3450', // パネル（明）
+  white:     '#f2ede4', // 本文
+  gray:      '#b8b0a8', // 副文
+  grayDark:  '#6e6660', // 無効・かすみ
+  gold:      '#e8c84c', // 金／遺物
+  goldDark:  '#a08030',
+  red:       '#c83c3c', // 危険・戦死・炎
+  redDark:   '#7c2418', // 封蝋・炎の影
+  green:     '#6aa04a', // 安全・毒
+  greenDark: '#2f6b33',
+  blue:      '#4a72b0', // 上質・水
+  blueDark:  '#253c6a',
+  purple:    '#9a68c8', // 稀少
+  purpleDark:'#5d4380',
+  orange:    '#de7b2f', // 灯り・雷
+  teal:      '#6fe3c5', // 魔力の輝き
+  skin:      '#eaa87c',
+  skinDark:  '#b5714a',
+  stone:     '#8e93a0',
+  stoneMid:  '#5f6472',
+  stoneDark: '#3d4050',
+  wood:      '#b98a52',
+  woodMid:   '#8a5f33',
+  woodDark:  '#5d3d20',
+  sky:       '#9fd4ea', // 夜明けの空／氷
+  abyss:     '#1f3560'
+} as const;
 
+export type ColorName = keyof typeof COLORS;
+
+export const OUTLINE = COLORS.black;
+
+// スプライト1文字キー → 色。sprites.ts の全ドットがここを参照する。
+// キー名は v1 から変えていない（2500行の点データを壊さないため）が、
+// 指す先はすべて上の COLORS に寄せてある。
 export const PALETTE: Record<string, string> = {
-  // core
-  o: '#1a1420', // universal 1px outline / near-black
-  w: '#f4f2ec', // white (UI text, highlights, bone)
-  l: '#c9c9d4', // light gray (silver metal, UI edge light)
-  // stone grays (stratum 1)
-  g: '#8e93a0', // stone light
-  G: '#5f6472', // stone mid
-  s: '#3d4050', // stone dark
-  S: '#282a36', // stone background (shaft wall)
-  // dirt browns (stratum 0, wood, leather)
-  B: '#b98a52', // dirt light / pale wood
-  b: '#8a5f33', // dirt mid / wood
-  n: '#5d3d20', // dirt dark / dark wood
-  N: '#3a2715', // dirt background (shaft wall)
-  // deep purples (stratum 2)
-  p: '#8a68b0', // purple light
-  P: '#5d4380', // purple mid
-  q: '#3f2b5c', // purple dark
-  Q: '#281a40', // purple background (shaft wall)
-  // abyssal blues (stratum 3)
-  c: '#4f80c0', // blue light
-  C: '#31558e', // blue mid
-  u: '#1f3560', // blue dark
-  U: '#131d3d', // abyss background (shaft wall)
-  // sky
-  k: '#9fd4ea', // surface sky
-  // figures
-  f: '#eaa87c', // skin
-  F: '#b5714a', // skin shade
-  r: '#c34433', // cloth red
-  R: '#7c2418', // cloth red dark / wax seal
-  e: '#5ca84e', // cloth green / goblin skin
-  E: '#2f6b33', // green dark
-  y: '#f2c94c', // gold / treasure
-  Y: '#b5862c', // gold dark / brass
-  t: '#de7b2f', // orange (copper, lantern flame)
-  v: '#6fe3c5', // glow teal (moss, crystal, magic)
+  o: COLORS.black,
+  w: COLORS.white,
+  l: COLORS.gray,
+  // 石
+  g: COLORS.stone,
+  G: COLORS.stoneMid,
+  s: COLORS.stoneDark,
+  S: COLORS.panel,
+  // 土・木・革
+  B: COLORS.wood,
+  b: COLORS.woodMid,
+  n: COLORS.woodDark,
+  N: COLORS.bg,
+  // 紫（稀少・深層）
+  p: COLORS.purple,
+  P: COLORS.purpleDark,
+  q: COLORS.panel2,
+  Q: COLORS.panel,
+  // 青（上質・深淵）
+  c: COLORS.blue,
+  C: COLORS.blueDark,
+  u: COLORS.abyss,
+  U: COLORS.bg,
+  // 空・氷
+  k: COLORS.sky,
+  // 人物
+  f: COLORS.skin,
+  F: COLORS.skinDark,
+  r: COLORS.red,
+  R: COLORS.redDark,
+  e: COLORS.green,
+  E: COLORS.greenDark,
+  y: COLORS.gold,
+  Y: COLORS.goldDark,
+  t: COLORS.orange,
+  v: COLORS.teal
 };
 
 export interface StratumTheme {
@@ -53,36 +93,14 @@ export interface StratumTheme {
   accent: string;
 }
 
-// 4 strata, top to bottom: 表土 (dirt) / 岩盤 (stone) / 深層 (purple rock) / 深淵 (abyss).
-// Every color is drawn from PALETTE above; each theme stays well under 8 distinct colors.
+// 深度グラフと拠点の地面で使う4層。すべて COLORS の中から選ぶ。
 export const STRATA: readonly StratumTheme[] = [
-  {
-    sky: PALETTE['k'] ?? OUTLINE,
-    bgDark: PALETTE['N'] ?? OUTLINE,
-    bgLight: PALETTE['n'] ?? OUTLINE,
-    earth: PALETTE['b'] ?? OUTLINE,
-    earthDark: PALETTE['n'] ?? OUTLINE,
-    accent: PALETTE['B'] ?? OUTLINE,
-  },
-  {
-    bgDark: PALETTE['S'] ?? OUTLINE,
-    bgLight: PALETTE['s'] ?? OUTLINE,
-    earth: PALETTE['G'] ?? OUTLINE,
-    earthDark: PALETTE['s'] ?? OUTLINE,
-    accent: PALETTE['g'] ?? OUTLINE,
-  },
-  {
-    bgDark: PALETTE['Q'] ?? OUTLINE,
-    bgLight: PALETTE['q'] ?? OUTLINE,
-    earth: PALETTE['P'] ?? OUTLINE,
-    earthDark: PALETTE['q'] ?? OUTLINE,
-    accent: PALETTE['p'] ?? OUTLINE,
-  },
-  {
-    bgDark: PALETTE['U'] ?? OUTLINE,
-    bgLight: PALETTE['u'] ?? OUTLINE,
-    earth: PALETTE['C'] ?? OUTLINE,
-    earthDark: PALETTE['u'] ?? OUTLINE,
-    accent: PALETTE['c'] ?? OUTLINE,
-  },
+  { sky: COLORS.sky, bgDark: COLORS.bg, bgLight: COLORS.woodDark,
+    earth: COLORS.woodMid, earthDark: COLORS.woodDark, accent: COLORS.wood },
+  { bgDark: COLORS.panel, bgLight: COLORS.stoneDark,
+    earth: COLORS.stoneMid, earthDark: COLORS.stoneDark, accent: COLORS.stone },
+  { bgDark: COLORS.panel, bgLight: COLORS.panel2,
+    earth: COLORS.purpleDark, earthDark: COLORS.panel2, accent: COLORS.purple },
+  { bgDark: COLORS.bg, bgLight: COLORS.abyss,
+    earth: COLORS.blueDark, earthDark: COLORS.abyss, accent: COLORS.blue }
 ];

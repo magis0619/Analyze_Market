@@ -1,7 +1,7 @@
 import type { GameScreen, Nav } from '../game/app';
 import type { Element, Item, JobId, RetreatRule } from '../sim/types';
 import { VW, VH } from '../render/screen';
-import { drawNineSlice, drawSprOr, fillRect, hasSpr, strokeRect1 } from '../render/draw';
+import { drawNineSlice, drawSprOr, fillRect, fillScrim, hasSpr, strokeRect1 } from '../render/draw';
 import { drawText, drawTextCentered, drawTextRight, drawTextWrapped } from '../render/font';
 import { THEME } from './theme';
 import { drawBtn, hitBtn, inRect, type Btn } from './widgets';
@@ -193,7 +193,14 @@ export class DispatchScreen implements GameScreen {
     return parts.join('　');
   }
 
-  /** 撤退ルールは3枚のカード。色で危険度を示す。 */
+  /**
+   * 撤退ルールは3枚のカード。
+   *
+   * 以前は3枚とも同じ見た目で、選択中のときだけ枠の色が変わっていた。
+   * つまり「選ぶ前」——まさに選ぼうとしている瞬間——には3枚の区別が付かず、
+   * 色分けが機能していなかった。選択に関係なく常に色と HP ゲージを出し、
+   * 「どこで引き返すか」を目盛りで見せる。
+   */
   private drawRules(ctx: CanvasRenderingContext2D, y: number): void {
     drawText(ctx, '撤退ルール', 10, y - 13, 8, THEME.dim);
     const w = Math.floor((VW - 20) / 3);
@@ -201,13 +208,27 @@ export class DispatchScreen implements GameScreen {
       const x = 8 + i * (w + 2);
       const sel = this.rule === r.id;
       const color = RULE_COLOR[r.id];
+
       fillRect(ctx, x, y, w, RULE_H, sel ? THEME.panelLight : THEME.panel);
       strokeRect1(ctx, x, y, w, RULE_H, sel ? color : THEME.outline);
-      if (sel) fillRect(ctx, x, y, w, 2, color);
-      drawSprOr(ctx, 'heart', 'star', x + 5, y + 6);
-      drawText(ctx, r.name, x + 18, y + 5, 8, sel ? color : THEME.text);
-      drawTextWrapped(ctx, RULE_COND[r.id], x + 5, y + 22, w - 10, 8,
-        sel ? THEME.text : THEME.dim, 2);
+      // 危険度の帯は選択に関係なく常に出す（選ぶ前に比べられないと意味がない）
+      fillRect(ctx, x, y, w, sel ? 3 : 2, color);
+      drawText(ctx, r.name, x + 5, y + 5, 8, color);
+      if (sel) drawTextRight(ctx, '◆', x + w - 5, y + 5, 8, color);
+
+      // HP ゲージ。撤退線より下（＝引き返す領域）を赤のディザで塗り、
+      // 線より上（＝戦い続ける領域）をルールの色で塗る。
+      const bx = x + 5, by = y + 19, bw = w - 10, bh = 10;
+      const cut = Math.round(bw * r.threshold);
+      fillRect(ctx, bx, by, bw, bh, THEME.outline);
+      fillRect(ctx, bx + cut, by + 1, bw - cut - 1, bh - 2, color);
+      if (cut > 1) fillScrim(ctx, bx + 1, by + 1, cut - 1, bh - 2, THEME.red, 0.55);
+      if (cut > 0) fillRect(ctx, bx + cut, by - 2, 1, bh + 4, THEME.text);
+
+      // 説明は2行固定。行送りを詰めてカード高（58px）に収める
+      RULE_COND[r.id].split('\n').forEach((ln, k) => {
+        drawText(ctx, ln, x + 5, y + 32 + k * 12, 8, sel ? THEME.text : THEME.dim);
+      });
     });
   }
 
@@ -349,8 +370,7 @@ export class DispatchScreen implements GameScreen {
     const jobId = this.job();
     const eq = st.data.equipped[jobId];
     const current = st.itemById(this.picking === 'weapon' ? eq.weapon : eq.armor);
-    ctx.fillStyle = 'rgba(13,10,18,0.88)';
-    ctx.fillRect(0, 0, VW, VH);
+    fillScrim(ctx, 0, 0, VW, VH, THEME.outline, 0.88);
     drawNineSlice(ctx, 'frame', 6, 36, VW - 12, VH - 92);
     drawTextCentered(ctx, this.picking === 'weapon' ? '武器を選択' : '防具を選択',
       VW / 2, 46, 12, THEME.gold);

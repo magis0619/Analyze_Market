@@ -1,14 +1,17 @@
 import type { GameScreen, Nav } from '../game/app';
 import type { JobId } from '../sim/types';
 import { VW, VH } from '../render/screen';
-import { drawNineSlice, drawSpr, drawSprOr, fillRect, strokeRect1 } from '../render/draw';
+import { drawNineSlice, drawSpr, drawSprOr, fillRect, fillScrim, hasSpr, strokeRect1 } from '../render/draw';
 import { drawText, drawTextCentered, drawTextRight } from '../render/font';
 import { THEME } from './theme';
+import { COLORS } from '../render/palette';
 import { inRect } from './widgets';
 import { jobDef } from '../data/jobs';
 import { stageDef } from '../data/stages';
 import { sfx } from '../render/audio';
 import { itemIconName } from './itemview';
+import { drawBtn, hitBtn, type Btn } from './widgets';
+import { STAGES } from '../data/stages';
 
 // 拠点（§4.1）。プレイヤーが操作する唯一の場所。
 // 平常時のUIは徹底して淡々と作る（§9.4）。派手にするのは開封だけ。
@@ -50,6 +53,9 @@ const MENU_GAP = 4;
 
 export class BaseScreen implements GameScreen {
   private t = 0;
+  /** 派遣枠を買うボタン。位置は毎フレーム描画時に決まる */
+  private slotBtn: Btn = { x: 0, y: 0, w: 0, h: 0, label: '', accent: true };
+  private slotBtnVisible = false;
 
   constructor(private nav: Nav) {}
 
@@ -105,52 +111,149 @@ export class BaseScreen implements GameScreen {
       this.drawMenu(ctx, m, 8, top + i * (MENU_H + MENU_GAP));
     });
 
+    // メニューの下に残る空きを、進捗と次の派遣枠で埋める。
+    // 以前はここが画面の半分ほど何も無いまま余っていた
+    const restTop = top + this.menu().length * (MENU_H + MENU_GAP) + 8;
+    this.drawProgress(ctx, restTop, VH - 20 - restTop);
+
     drawTextRight(ctx, `所持 ${st.data.inventory.length}点`, VW - 8, VH - 14, 8, THEME.dim);
     if (this.nav.timeScale !== 1) {
       drawText(ctx, `時間×${this.nav.timeScale}`, 8, VH - 14, 8, THEME.red);
     }
   }
 
-  /** 拠点の情景。夜空の下に建つ小屋と、待機中の冒険者たち。 */
+  /**
+   * 画面下の余白を使って「今どこまで来たか」と「次に何が買えるか」を出す。
+   * 拠点は毎回必ず通る画面なので、進み具合はここで分かるべき。
+   */
+  private drawProgress(ctx: CanvasRenderingContext2D, y: number, h: number): void {
+    this.slotBtnVisible = false;
+    if (h < 56) return;
+    const st = this.nav.state;
+    const w = VW - 16;
+
+    // --- 次の派遣枠（§7.5） ---
+    const next = st.nextSlot();
+    if (next && h >= 108) {
+      const ph = 52;
+      drawNineSlice(ctx, 'frame', 8, y, w, ph);
+      drawText(ctx, `${next.index + 1}人目の冒険者`, 16, y + 6, 8, THEME.text);
+      if (!next.stageDone) {
+        drawText(ctx, `ステージ${next.needStage}を踏破すると雇えるようになる`,
+          16, y + 22, 8, THEME.dim);
+        drawTextRight(ctx, `${next.cost}G`, VW - 16, y + 22, 8, THEME.faint);
+      } else {
+        drawText(ctx, next.affordable ? '雇う準備ができている' : '金が足りない',
+          16, y + 22, 8, next.affordable ? THEME.green : THEME.red);
+        drawTextRight(ctx, `${next.cost}G`, VW - 16, y + 6, 8,
+          next.affordable ? THEME.gold : THEME.red);
+        this.slotBtn = {
+          x: VW - 96, y: y + 20, w: 80, h: 24,
+          label: '雇う', accent: true, disabled: !next.affordable
+        };
+        this.slotBtnVisible = true;
+        drawBtn(ctx, this.slotBtn, 8);
+      }
+      y += ph + 6;
+      h -= ph + 6;
+    }
+
+    // --- 進捗 ---
+    if (h < 44) return;
+    drawNineSlice(ctx, 'frame', 8, y, w, 40);
+    const cleared = st.data.clearedStages.length;
+    const found = Object.keys(st.data.compendium).length;
+    const cols: [string, string, string][] = [
+      ['踏破', `${cleared}/${STAGES.length}`, THEME.green],
+      ['図鑑', `${found}`, THEME.blue],
+      ['難易度', `+${st.data.tier - 1}`, st.data.tier > 1 ? THEME.red : THEME.dim]
+    ];
+    cols.forEach(([label, value, color], i) => {
+      const cx = 8 + Math.floor(w / 3) * i + Math.floor(w / 6);
+      drawTextCentered(ctx, label, cx, y + 6, 8, THEME.dim);
+      drawTextCentered(ctx, value, cx, y + 20, 12, color);
+    });
+  }
+
+  /**
+   * 拠点の情景。夜空の下に建つ小屋と、待機中の冒険者たち。
+   *
+   * 以前は小屋を矩形4枚で描いていて、絵として成立していなかった（批評A-1）。
+   * 建物・木・柵・小物はスプライトに移し、ここは配置だけを持つ。
+   * 色は必ず COLORS から取る（画面上の色数を数えられなくなるため直書き禁止）。
+   */
   private drawScene(ctx: CanvasRenderingContext2D): void {
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, SCENE_Y, VW, SCENE_H);
     ctx.clip();
 
-    fillRect(ctx, 0, SCENE_Y, VW, SCENE_H, '#0c0810');
-    // 星
+    fillRect(ctx, 0, SCENE_Y, VW, SCENE_H, COLORS.bg);
+    // 星。ハッシュで決めるので毎フレーム同じ位置に出る
     for (let i = 0; i < 60; i++) {
       const h = ((i * 2654435761) >>> 0);
       const x = h % VW;
       const y = SCENE_Y + ((h >> 9) % (SCENE_H - 46));
       if ((h >> 20) % 3 === 0) fillRect(ctx, x, y, 1, 1, THEME.dim);
     }
-    // 地面
+
     const groundY = SCENE_Y + SCENE_H - 34;
+
+    // 遠景の木立。小屋より先に描いて奥行きを作る
+    if (hasSpr('tree_pine')) {
+      for (const tx of [4, 150, 300, 336]) {
+        drawSpr(ctx, 'tree_pine', tx, groundY - 34);
+      }
+    }
+
+    // 地面
     for (let col = 0; col < Math.ceil(VW / 16); col++) {
       drawSpr(ctx, `tile_s0_${col % 2 === 0 ? 'a' : 'b'}`, col * 16, groundY + 18);
     }
-    fillRect(ctx, 0, groundY + 14, VW, 4, '#3c6430');
+    fillRect(ctx, 0, groundY + 14, VW, 4, COLORS.greenDark);
 
-    // 小屋（拠点）
-    const hx = 24;
-    fillRect(ctx, hx, groundY - 40, 96, 54, '#5a3c22');
-    fillRect(ctx, hx - 6, groundY - 52, 108, 12, '#802828');
-    fillRect(ctx, hx - 4, groundY - 41, 104, 2, THEME.outline);
-    // 窓と扉
-    fillRect(ctx, hx + 12, groundY - 30, 20, 16, '#e8c84c');
-    fillRect(ctx, hx + 60, groundY - 30, 20, 16, '#e8c84c');
-    fillRect(ctx, hx + 38, groundY - 22, 18, 36, '#0c0810');
-    // 看板
-    fillRect(ctx, hx + 104, groundY - 26, 4, 40, '#5a3c22');
-    fillRect(ctx, hx + 90, groundY - 34, 34, 12, '#3e3450');
-    drawText(ctx, 'DELVERS', hx + 92, groundY - 32, 8, THEME.gold);
+    // 柵
+    if (hasSpr('fence')) {
+      for (let col = 0; col < Math.ceil(VW / 16); col++) {
+        drawSpr(ctx, 'fence', col * 16, groundY + 2);
+      }
+    }
+
+    // 小屋
+    const hx = 20;
+    if (hasSpr('lodge')) {
+      drawSpr(ctx, 'lodge', hx, groundY - 58);
+    } else {
+      // スプライトが無い環境でも「建物がある」ことだけは分かるようにしておく
+      fillRect(ctx, hx, groundY - 40, 96, 54, COLORS.woodMid);
+      fillRect(ctx, hx - 6, groundY - 52, 108, 12, COLORS.redDark);
+      fillRect(ctx, hx + 12, groundY - 30, 20, 16, COLORS.gold);
+      fillRect(ctx, hx + 60, groundY - 30, 20, 16, COLORS.gold);
+      fillRect(ctx, hx + 38, groundY - 22, 18, 36, COLORS.black);
+    }
+
+    // 看板。板はスプライト、文字はフォントで重ねる
+    const sx0 = hx + 100;
+    if (hasSpr('lodge_sign')) {
+      drawSpr(ctx, 'lodge_sign', sx0, groundY - 34);
+      drawTextCentered(ctx, 'DELVERS', sx0 + 20, groundY - 27, 8, THEME.gold);
+    } else {
+      fillRect(ctx, sx0, groundY - 34, 40, 16, COLORS.panel2);
+      drawTextCentered(ctx, 'DELVERS', sx0 + 20, groundY - 31, 8, THEME.gold);
+    }
+
+    // 小物
+    if (hasSpr('barrel')) drawSpr(ctx, 'barrel', hx + 88, groundY + 2);
+    if (hasSpr('crate')) drawSpr(ctx, 'crate', hx + 102, groundY + 4);
+
+    // 焚き火（2コマ）
+    if (hasSpr('campfire_0')) {
+      drawSpr(ctx, `campfire_${Math.floor(this.t * 4) % 2}`, 168, groundY);
+    }
 
     // 待機中の冒険者だけを小屋の前に立たせる
-    const jobs = this.jobs();
-    let sx = 200;
-    for (const jobId of jobs) {
+    let sx = 208;
+    for (const jobId of this.jobs()) {
       if (this.nav.state.isBusy(jobId)) continue;
       const bob = Math.floor(this.t * 2 + sx) % 2;
       drawSprOr(ctx, JOB_SPRITE[jobId], 'portrait', sx, groundY - 2 - bob, 2);
@@ -218,13 +321,16 @@ export class BaseScreen implements GameScreen {
       drawTextCentered(ctx, String(Math.min(99, m.badge)), bx + 9, by + 2, 8, THEME.text);
     }
     if (!enabled) {
-      ctx.fillStyle = 'rgba(26,20,32,0.5)';
-      ctx.fillRect(x, y, w, MENU_H);
+      fillScrim(ctx, x, y, w, MENU_H, THEME.bg, 0.5);
     }
   }
 
   pointerDown(px: number, py: number): void {
     const st = this.nav.state;
+    if (this.slotBtnVisible && hitBtn(this.slotBtn, px, py)) {
+      if (st.unlockSlot()) sfx('confirm'); else sfx('deny');
+      return;
+    }
     const top = this.menuTop();
     const items = this.menu();
     for (let i = 0; i < items.length; i++) {

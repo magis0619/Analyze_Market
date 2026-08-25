@@ -5,14 +5,15 @@ import { Prng } from '../sim/prng';
 import { simulateRun } from '../sim/combat';
 import { generateItem, starterItem } from '../sim/items';
 import { advanceClock, dispatchProgress, OFFLINE_CAP_SEC, type ClockState } from '../sim/offline';
-import { jobDef, retreatRuleDef, UNLOCK_STAGE_FOR_SLOT } from '../data/jobs';
+import { jobDef, retreatRuleDef, SLOT_COST, UNLOCK_STAGE_FOR_SLOT } from '../data/jobs';
 import { stageDef, STAGES, itemPowerFor } from '../data/stages';
 import { AFFIXES } from '../data/affixes';
+import { notifyReturn, requestNotifyPermission } from './notify';
 
 // 拠点の状態とセーブ。サーバなし、ローカル永続化のみ（§3）。
 
 const SAVE_KEY = 'delvers.save.v1';
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2;
 
 export interface CompendiumEntry {
   /** 初めて入手したステージ（§7.4） */
@@ -33,6 +34,8 @@ export interface SaveData {
   tier: number;
   clearedStages: number[];
   unlockedStages: number[];
+  /** 金を払って解放済みの派遣枠数（§7.5）。初期は1 */
+  unlockedSlots: number;
   inventory: Item[];
   /** 帰還済み・未開封の戦利品 */
   pending: Item[];
@@ -44,6 +47,8 @@ export interface SaveData {
   history: Record<string, Dispatch>;
   /** 帰還済みで未確認のレポート */
   inbox: string[];
+  /** dispatchId -> 戦死で失った装備2点。レポートで「何を失ったか」を見せるため残す */
+  lost: Record<string, Item[]>;
   /** 図鑑。キーは `${baseId}|${rarity}` と `unique:${kind}` */
   compendium: Record<string, CompendiumEntry>;
   lastSeen: number;
@@ -58,6 +63,7 @@ function defaultSave(seed: number, now: number): SaveData {
     tier: 1,
     clearedStages: [],
     unlockedStages: [1],
+    unlockedSlots: 1,
     inventory: [],
     pending: [],
     equipped: {
@@ -69,6 +75,7 @@ function defaultSave(seed: number, now: number): SaveData {
     results: {},
     history: {},
     inbox: [],
+    lost: {},
     compendium: {},
     lastSeen: now,
     nextId: 1
@@ -126,14 +133,33 @@ export class GameState {
     return this.data.dispatches.some(d => d.jobId === jobId);
   }
 
-  /** 解放済みの派遣枠数（§4.2 ステージ3で2人目、6で3人目）。 */
+  /** 解放済みの派遣枠数。金を払った分だけ増える（§7.5）。 */
   slotCount(): number {
-    let n = 1;
-    for (let i = 1; i < UNLOCK_STAGE_FOR_SLOT.length; i++) {
-      const need = UNLOCK_STAGE_FOR_SLOT[i] ?? 99;
-      if (this.data.clearedStages.includes(need)) n++;
-    }
-    return n;
+    return Math.max(1, Math.min(UNLOCK_STAGE_FOR_SLOT.length, this.data.unlockedSlots));
+  }
+
+  /**
+   * 次の派遣枠の解放条件（§7.5「ステージクリアと併用」）。
+   * ステージを踏破しただけでは増えず、そこから金を払って初めて増える。
+   * すでに全枠解放済みなら null。
+   */
+  nextSlot(): { index: number; needStage: number; cost: number; stageDone: boolean; affordable: boolean } | null {
+    const i = this.slotCount();
+    if (i >= UNLOCK_STAGE_FOR_SLOT.length) return null;
+    const needStage = UNLOCK_STAGE_FOR_SLOT[i] ?? 99;
+    const cost = SLOT_COST[i] ?? 0;
+    const stageDone = this.data.clearedStages.includes(needStage);
+    return { index: i, needStage, cost, stageDone, affordable: this.data.gold >= cost };
+  }
+
+  /** 派遣枠を1つ買う。条件を満たしていなければ false。 */
+  unlockSlot(): boolean {
+    const n = this.nextSlot();
+    if (!n || !n.stageDone || !n.affordable) return false;
+    this.data.gold -= n.cost;
+    this.data.unlockedSlots++;
+    this.save();
+    return true;
   }
 
   availableJobs(): JobId[] {
@@ -163,6 +189,10 @@ export class GameState {
     const weapon = this.itemById(eq.weapon);
     const armor = this.itemById(eq.armor);
     if (!weapon || !armor) return false;
+
+    // 帰還通知の許可は、初めて派遣を出したこの瞬間にだけ求める（§7.2）。
+    // 起動直後に求めても何のための許可か分からず、まず拒否される。
+    requestNotifyPermission();
 
     const job = jobDef(jobId);
     const stage = stageDef(stageId);
@@ -201,6 +231,11 @@ export class GameState {
 
     if (result.outcome === 'death') {
       // 死亡：戦利品は全ロスト、装備2点が消滅（冒険者本人は無事に帰る §4.1）
+      // 何を失ったのかはレポートで見せる必要があるので、消す前に控えておく。
+      // 「気づいたら手持ちから消えていた」では喪失が伝わらない。
+      this.data.lost[d.id] = this.data.inventory.filter(
+        i => i.id === d.weaponId || i.id === d.armorId
+      ).map(i => ({ ...i }));
       this.data.inventory = this.data.inventory.filter(
         i => i.id !== d.weaponId && i.id !== d.armorId
       );
@@ -227,6 +262,13 @@ export class GameState {
       }
     }
     this.data.inbox.push(d.id);
+
+    // §7.2「帰還時にローカル通知を送る」。画面を見ていないときだけ鳴らす
+    notifyReturn(
+      jobDef(d.jobId).name,
+      stageDef(d.stageId).name,
+      result.outcome === 'death' ? '戦死' : result.outcome === 'clear' ? '踏破' : '撤退'
+    );
   }
 
   /** 装備を失ったら最低性能の初期装備を無限に支給する（§4.4）。 */
@@ -351,9 +393,22 @@ function loadSave(): SaveData | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as SaveData;
+    const parsed = JSON.parse(raw) as Partial<SaveData> & { version: number };
+    // v1 → v2: 派遣枠に金の費用が付いた（§7.5）。
+    // すでに条件ステージを踏破していた分は、支払い済みとみなして解放したまま渡す。
+    // 遊んでいた人から枠を取り上げないため。
+    if (parsed.version === 1) {
+      let n = 1;
+      for (let i = 1; i < UNLOCK_STAGE_FOR_SLOT.length; i++) {
+        if ((parsed.clearedStages ?? []).includes(UNLOCK_STAGE_FOR_SLOT[i] ?? 99)) n++;
+      }
+      parsed.unlockedSlots = n;
+      parsed.version = SAVE_VERSION;
+    }
     if (parsed.version !== SAVE_VERSION) return null;
-    return parsed;
+    if (typeof parsed.unlockedSlots !== 'number') parsed.unlockedSlots = 1;
+    if (!parsed.lost) parsed.lost = {};
+    return parsed as SaveData;
   } catch {
     return null;
   }

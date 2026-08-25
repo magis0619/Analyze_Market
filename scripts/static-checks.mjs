@@ -104,6 +104,41 @@ for (const f of allSrc) {
   }
 }
 
+// ---------------------------------------------------------------- §9.3 色数
+// 「同時に使う色は32色まで」。数え上げを人任せにすると必ず膨らむので、
+// (1) パレットの定義が32色以内か、(2) パレットの外で色リテラルを
+// 書いていないか、の2点を機械的に見る。
+{
+  const palettePath = join(root, 'src/render/palette.ts');
+  const paletteSrc = readFileSync(palettePath, 'utf8');
+  const colorsBlock = paletteSrc.slice(
+    paletteSrc.indexOf('export const COLORS'),
+    paletteSrc.indexOf('} as const;')
+  );
+  const defined = new Set((colorsBlock.match(/#[0-9a-fA-F]{6}/g) ?? []).map(c => c.toLowerCase()));
+  if (defined.size === 0) fail('[§9.3] FAIL: COLORS から色を1つも読み取れなかった');
+  if (defined.size > 32) {
+    fail(`[§9.3] FAIL: パレットが ${defined.size} 色ある（上限32）`);
+  }
+
+  // パレット以外のファイルに直書きされた色。混色を生む rgba() も禁止する
+  const stray = [];
+  for (const f of allSrc) {
+    if (f.endsWith('render/palette.ts')) continue;
+    const body = codeOf(f);
+    for (const lit of body.match(/#[0-9a-fA-F]{6}/g) ?? []) {
+      if (!defined.has(lit.toLowerCase())) stray.push(`${lit} @ ${f}`);
+    }
+    if (/rgba\s*\(/.test(body)) {
+      fail(`[§9.3] FAIL: rgba() による混色が ${f} にある（fillScrim を使うこと）`);
+    }
+  }
+  if (stray.length > 0) {
+    fail(`[§9.3] FAIL: パレット外の色が ${stray.length} 件ある\n  ${stray.join('\n  ')}`);
+  }
+  console.log(`  palette: ${defined.size} colors`);
+}
+
 if (failures > 0) {
   console.error(`static checks: ${failures} failure(s)`);
   process.exit(1);
