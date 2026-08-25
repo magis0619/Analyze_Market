@@ -285,5 +285,105 @@ console.log('装備: ドロップ1個1個に個性があるか（§10 担当3の
   check('10個開封の7割以上で「嬉しいもの」が出る（§14）', joyRate >= 0.7, `${(joyRate * 100).toFixed(0)}%`);
 }
 
+// ---------------------------------------------------------------- 回帰
+// 批評ラウンド1で見つかった破綻の再発防止。
+console.log('回帰: 批評R1で検出した破綻');
+{
+  // (1) 撤退ルールが遭遇の途中で発火するか（§4.3「切った時点で帰還」）
+  //     修正前はステージ6以降で 8/8 が深度0のまま死亡していた
+  let deaths = 0, runs = 0, depthSum = 0;
+  for (const stageId of [6, 10]) {
+    for (let i = 0; i < 16; i++) {
+      const rng = new Prng(0x3100 + i * 997 + stageId);
+      const job = jobDef('swordsman');
+      let w: Item | null = null, a: Item | null = null;
+      for (let k = 0; k < 200 && (!w || !a); k++) {
+        const it = generateItem(rng, {
+          itemPower: itemPowerFor(stageId, 1), slot: k % 2 === 0 ? 'weapon' : 'armor',
+          stageId, rarityBonus: 1, id: `rg${k}`
+        });
+        if (it.slot === 'weapon' && !w) w = it;
+        if (it.slot === 'armor' && !a && canEquipArmor(job, baseDef(it.baseId).tags)) a = it;
+      }
+      if (!w || !a) continue;
+      const r = simulateRun({
+        seed: (0x3200 + i * 10007) >>> 0, job, weapon: w, armor: a,
+        rule: retreatRuleDef('cautious'), stage: stageDef(stageId), tier: 1
+      });
+      if (r.outcome === 'death') deaths++;
+      depthSum += r.depth;
+      runs++;
+    }
+  }
+  check(`慎重で深いステージでも死ににくい（死亡 ${deaths}/${runs}）`, deaths <= runs * 0.15);
+  check(`慎重でも深度0で終わらない（平均 ${(depthSum / runs).toFixed(1)}）`, depthSum / runs >= 1.5);
+
+  // (2) 見どころ3行が日本語として壊れていないか
+  const bad: string[] = [];
+  for (let i = 0; i < 120; i++) {
+    const rng = new Prng(0x3300 + i * 131);
+    const stageId = 1 + (i % 10);
+    const job = jobDef((['swordsman', 'guardian', 'skirmisher'] as const)[i % 3] ?? 'swordsman');
+    let w: Item | null = null, a: Item | null = null;
+    for (let k = 0; k < 200 && (!w || !a); k++) {
+      const it = generateItem(rng, {
+        itemPower: itemPowerFor(stageId, 1), slot: k % 2 === 0 ? 'weapon' : 'armor',
+        stageId, rarityBonus: 1, id: `hl${k}`
+      });
+      if (it.slot === 'weapon' && !w) w = it;
+      if (it.slot === 'armor' && !a && canEquipArmor(job, baseDef(it.baseId).tags)) a = it;
+    }
+    if (!w || !a) continue;
+    const rule = (['cautious', 'standard', 'reckless'] as const)[i % 3] ?? 'standard';
+    const r = simulateRun({
+      seed: (0x3400 + i * 7919) >>> 0, job, weapon: w, armor: a,
+      rule: retreatRuleDef(rule), stage: stageDef(stageId), tier: 1
+    });
+    for (const line of r.highlights) {
+      if (/の群れの群れ/.test(line)) bad.push(`二重の「の群れ」: ${line}`);
+      // 名詞で終わる文（述語が無い）を弾く
+      if (/[のにが、]$/.test(line)) bad.push(`文が途中で終わっている: ${line}`);
+      if (/、[^。]*の群れ$/.test(line)) bad.push(`述語が無い: ${line}`);
+    }
+    if (r.highlights.length !== 3) bad.push(`3行でない: ${r.highlights.length}`);
+  }
+  check(`見どころが日本語として壊れていない（不正 ${bad.length}件）`, bad.length === 0,
+    bad.slice(0, 3).join(' / '));
+
+  // (3) 派遣の所要がオフライン上限を超えない（超えると永久に完了しない）
+  let worst = 0;
+  for (const jobId of ['swordsman', 'guardian', 'skirmisher'] as const) {
+    const job = jobDef(jobId);
+    for (const stage of STAGES) {
+      worst = Math.max(worst, stage.minutes * 60 * job.timeMul);
+    }
+  }
+  check(`最長の派遣 ${Math.round(worst)}s は state 側で ${OFFLINE_CAP_SEC}s にクランプされる`,
+    Math.min(worst, OFFLINE_CAP_SEC) <= OFFLINE_CAP_SEC);
+
+  // (4) 満踏破で戦利品が10個に届くか（§7.3）
+  let maxLoot = 0;
+  for (let i = 0; i < 60; i++) {
+    const rng = new Prng(0x3500 + i * 313);
+    const job = jobDef('swordsman');
+    let w: Item | null = null, a: Item | null = null;
+    for (let k = 0; k < 200 && (!w || !a); k++) {
+      const it = generateItem(rng, {
+        itemPower: itemPowerFor(3, 3), slot: k % 2 === 0 ? 'weapon' : 'armor',
+        stageId: 1, rarityBonus: 1, id: `lt${k}`
+      });
+      if (it.slot === 'weapon' && !w) w = it;
+      if (it.slot === 'armor' && !a) a = it;
+    }
+    if (!w || !a) continue;
+    const r = simulateRun({
+      seed: (0x3600 + i * 6151) >>> 0, job, weapon: w, armor: a,
+      rule: retreatRuleDef('reckless'), stage: stageDef(1), tier: 1
+    });
+    maxLoot = Math.max(maxLoot, r.loot.length);
+  }
+  check(`踏破時の戦利品が10個に届く（実測最大 ${maxLoot}）`, maxLoot >= 10);
+}
+
 console.log(failures === 0 ? '\nALL TESTS PASSED' : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

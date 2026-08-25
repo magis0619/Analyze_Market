@@ -258,6 +258,9 @@ export function simulateRun(input: SimulateInput): RunResult {
   // 属性係数を先に確定しておく（表示・見どころ用にも使う）
   const splitMuls = lo.split.map(([e, p]) => ({ e, p, mul: elementMul(stage, e) }));
 
+  // 遭遇の途中で撤退ラインを割ったかどうか
+  let bailedMidEncounter = false;
+
   for (let encIdx = 0; encIdx < stage.encounters; encIdx++) {
     const isBossFight = encIdx === stage.encounters - 1;
     const enemies = makeEnemies(rng, stage, tier, encIdx, isBossFight);
@@ -269,6 +272,14 @@ export function simulateRun(input: SimulateInput): RunResult {
     while (t < ENCOUNTER_TIMEOUT) {
       if (enemies.every(e => e.hp <= 0)) break;
       if (hp <= 0) break;
+      // §4.3 は「HPが閾値を切った時点で帰還」と定めている。遭遇と遭遇の間で
+      // しか見ないと、1回の遭遇で押し切られたときに撤退ルールが一切効かない
+      // （実測でステージ6以降は8/8が深度0で死亡していた）。
+      // ボス戦だけは途中離脱させない（勝ち切るか死ぬかの局面のため）。
+      if (rule.threshold > 0 && !isBossFight && hp / maxHp < rule.threshold) {
+        bailedMidEncounter = true;
+        break;
+      }
 
       // --- プレイヤーの攻撃 ---
       const comboMul = 1 + (Math.min(5, combo) * lo.comboSpeedPct) / 100;
@@ -382,7 +393,7 @@ export function simulateRun(input: SimulateInput): RunResult {
           tm.totalTaken += taken;
           tm.takenByElement[elem] = (tm.takenByElement[elem] ?? 0) + taken;
           if (hp <= 0) {
-            deathCause = e.isBoss ? `${e.name}の一撃` : `${e.name}の群れ`;
+            deathCause = e.name;
             break;
           }
         }
@@ -400,6 +411,14 @@ export function simulateRun(input: SimulateInput): RunResult {
         hp = Math.min(maxHp, hp + lo.killHeal);
         tm.healed += hp - before;
       }
+    }
+
+    if (bailedMidEncounter) {
+      // その遭遇は踏破していないので深度は encIdx のまま
+      outcome = 'retreat';
+      depth = encIdx;
+      hpCurve.push(Math.max(0, hp / maxHp));
+      break;
     }
 
     if (hp <= 0) {
@@ -428,7 +447,9 @@ export function simulateRun(input: SimulateInput): RunResult {
   // --- 戦利品（§7.3 未鑑定品を最大10個）---
   const loot: Item[] = [];
   if (outcome !== 'death') {
-    let count = Math.round(2 + (depth / stage.encounters) * 6);
+    // 満踏破で MAX_LOOT に届く配分にする（§7.3「未鑑定品を最大10個」）。
+    // 職・ユニークの加算は上限未満のときに効く。
+    let count = Math.round(2 + (depth / stage.encounters) * (MAX_LOOT - 2));
     count += job.bonusDrops;
     if (greedy) count = Math.round(count * 1.5);
     count = Math.max(0, Math.min(MAX_LOOT, count));
@@ -461,7 +482,8 @@ export function simulateRun(input: SimulateInput): RunResult {
     loot,
     gold,
     headline: buildHeadline(outcome, depth, stage, bossDefeated, deathCause),
-    highlights: buildHighlights(tm, weapon, outcome, splitMuls, deathCause),
+    highlights: buildHighlights(tm, weapon, armor, outcome, splitMuls, deathCause,
+      depth, stage.encounters),
     hpCurve,
     durationSec: Math.max(1, durationSec)
   };
@@ -499,69 +521,80 @@ const ELEM_NAME: Record<Element, string> = {
  * 「最も大きなダメージ要因」「最も効いたアフィックス」「敗因」を出す。
  */
 function buildHighlights(
-  tm: Telemetry, weapon: Item,
+  tm: Telemetry, weapon: Item, armor: Item,
   outcome: RunResult['outcome'],
   splitMuls: { e: Element; p: number; mul: number }[],
-  deathCause: string
+  deathCause: string, depth: number, total: number
 ): string[] {
   const lines: string[] = [];
+  const dealt = Math.max(1, tm.totalDealt);
+  const taken = Math.max(1, tm.totalTaken);
 
-  // 1) 属性の噛み合い（装備選択の答え合わせ）
+  // --- 1行目: 属性の噛み合い（＝武器選択の答え合わせ）---
   const resisted = splitMuls.filter(s => s.mul < 1);
   const weak = splitMuls.filter(s => s.mul > 1);
-  if (resisted.length > 0 && tm.resistedLoss > tm.totalDealt * 0.12) {
+  if (resisted.length > 0 && tm.resistedLoss > dealt * 0.10) {
     const names = resisted.map(s => ELEM_NAME[s.e]).join('と');
-    lines.push(`${names}耐性の敵に${names}武器で挑み、火力が約${Math.round(
-      (tm.resistedLoss / (tm.totalDealt + tm.resistedLoss)) * 100
-    )}%削られていた`);
-  } else if (weak.length > 0) {
+    const lost = Math.round((tm.resistedLoss / (dealt + tm.resistedLoss)) * 100);
+    lines.push(`${names}が効かない敵に${names}武器で挑み、火力を約${lost}%捨てていた`);
+  } else if (weak.length > 0 && tm.weaknessGain > dealt * 0.05) {
     const names = weak.map(s => ELEM_NAME[s.e]).join('と');
-    lines.push(`${names}が弱点を突き、火力が約${Math.round(
-      (tm.weaknessGain / Math.max(1, tm.totalDealt - tm.weaknessGain)) * 100
-    )}%上乗せされた`);
+    const gain = Math.round((tm.weaknessGain / Math.max(1, dealt - tm.weaknessGain)) * 100);
+    lines.push(`${names}が弱点を突き、火力を約${gain}%上乗せできた`);
+  } else if (resisted.length > 0) {
+    const names = resisted.map(s => ELEM_NAME[s.e]).join('と');
+    lines.push(`${names}は半減される相手だったが、配分が小さく実害は軽かった`);
   } else {
-    const top = topEntry(tm.damageByElement);
-    if (top) {
-      lines.push(`ダメージの${Math.round((top[1] / Math.max(1, tm.totalDealt)) * 100)}%は${ELEM_NAME[top[0] as Element]}によるもの`);
-    }
+    lines.push('属性は等倍。相性で得も損もしていない');
   }
 
-  // 2) 最も効いたアフィックス／ユニーク
+  // --- 2行目: 効いた装備（アフィックス／ユニーク）---
   if (weapon.unique) {
-    lines.push(`遺物の効果が働き、${tm.hits}回の攻撃を支えた`);
+    lines.push(`遺物の効果が乗り、${tm.hits}回の攻撃を支えた`);
   } else {
     const topAffix = topEntry(tm.damageByAffix);
-    if (topAffix && topAffix[1] > tm.totalDealt * 0.05) {
+    if (topAffix && topAffix[1] > dealt * 0.05) {
       const def = affixDef(topAffix[0] as AffixKind);
-      lines.push(`「${def.name}」が総ダメージの${Math.round(
-        (topAffix[1] / Math.max(1, tm.totalDealt)) * 100
-      )}%を稼いだ`);
-    } else if (tm.crits > 0) {
-      lines.push(`${tm.hits}回中${tm.crits}回が会心。会心率が結果を左右した`);
+      lines.push(`「${def.name}」が総ダメージの${Math.round((topAffix[1] / dealt) * 100)}%を稼いだ`);
+    } else if (weapon.affixes.length === 0) {
+      lines.push('武器にアフィックスが無く、素の攻撃力だけで押していた');
     } else {
-      lines.push(`アフィックスの支援はほぼ無く、素の攻撃力だけで戦った`);
+      // 会心は「発生率が低い＝結果を左右していない」ことまで含めて正直に書く。
+      // 4〜9%の会心を「結果を左右した」と断ずるのは虚偽になる。
+      const rate = tm.hits > 0 ? Math.round((tm.crits / tm.hits) * 100) : 0;
+      lines.push(rate >= 20
+        ? `${tm.hits}回中${tm.crits}回が会心。会心が火力の柱だった`
+        : `会心は${tm.hits}回中${tm.crits}回（${rate}%）で、勝敗にはほぼ関与していない`);
     }
   }
 
-  // 3) 生存側の要因／敗因
+  // --- 3行目: 生存の要因／敗因 ---
   if (outcome === 'death') {
-    if (tm.resistSaved < tm.totalTaken * 0.05) {
-      const e = topEntry(tm.takenByElement);
-      const en = e ? ELEM_NAME[e[0] as Element] : '敵';
-      lines.push(`${en}属性の被弾に耐性がなく、${deathCause || '押し切られた'}`);
+    const e = topEntry(tm.takenByElement);
+    const en = e ? ELEM_NAME[e[0] as Element] : '敵';
+    const hasResist = armor.affixes.some(a => a.kind === 'resistPct' && a.element === e?.[0]);
+    if (!hasResist && tm.resistSaved < taken * 0.05) {
+      lines.push(`${en}属性の攻撃に耐性が無く、${deathCause || '数に押し切られて'}倒れた`);
+    } else if (tm.hits > 0 && dealt / Math.max(1, tm.kills) > 0) {
+      lines.push(`防具は仕事をしたが、火力が足りず長期戦になって削り切られた`);
     } else {
-      lines.push(`防具は仕事をしたが、火力不足で長期戦になり削り切られた`);
+      lines.push(`${deathCause || '敵'}に押し切られた`);
     }
-  } else if (tm.healed > 0) {
-    lines.push(`撃破時回復が計${Math.round(tm.healed)}回復し、撤退ラインを遠ざけた`);
-  } else if (tm.resistSaved > tm.totalTaken * 0.1) {
-    lines.push(`属性耐性が被弾を約${Math.round(
-      (tm.resistSaved / (tm.totalTaken + tm.resistSaved)) * 100
-    )}%軽減した`);
-  } else if (tm.evaded > 0) {
-    lines.push(`回避が${tm.evaded}回発生し、被弾を抑えた`);
+  } else if (outcome === 'retreat') {
+    const reason = tm.healed > 0
+      ? `撃破時回復が計${Math.round(tm.healed)}を戻したが追いつかなかった`
+      : tm.resistSaved > taken * 0.10
+        ? `属性耐性が被弾を約${Math.round((tm.resistSaved / (taken + tm.resistSaved)) * 100)}%減らした`
+        : tm.evaded > 0
+          ? `回避が${tm.evaded}回。被弾は抑えたが決め手に欠けた`
+          : '防御の支えが無く、HPの残量だけが頼りだった';
+    lines.push(`${depth}/${total}で撤退ラインに触れた。${reason}`);
   } else {
-    lines.push(`防御の支援は薄く、HPの余裕だけで持ちこたえた`);
+    lines.push(tm.healed > 0
+      ? `撃破時回復が計${Math.round(tm.healed)}を戻し、最後まで余力を保った`
+      : tm.resistSaved > taken * 0.10
+        ? `属性耐性が被弾を約${Math.round((tm.resistSaved / (taken + tm.resistSaved)) * 100)}%減らし、踏破を支えた`
+        : '被弾を正面から受け切って踏破した');
   }
 
   return lines.slice(0, 3);

@@ -4,7 +4,7 @@ import type {
 import { Prng } from '../sim/prng';
 import { simulateRun } from '../sim/combat';
 import { generateItem, starterItem } from '../sim/items';
-import { advanceClock, dispatchProgress, type ClockState } from '../sim/offline';
+import { advanceClock, dispatchProgress, OFFLINE_CAP_SEC, type ClockState } from '../sim/offline';
 import { jobDef, retreatRuleDef, UNLOCK_STAGE_FOR_SLOT } from '../data/jobs';
 import { stageDef, STAGES, itemPowerFor } from '../data/stages';
 import { AFFIXES } from '../data/affixes';
@@ -181,7 +181,12 @@ export class GameState {
       weaponId: weapon.id, armorId: armor.id,
       retreatRule: rule, seed,
       startedAt: now,
-      durationSec: result.durationSec
+      // オフライン進行は8時間で頭打ちになる（§7.2）。深淵(480分)を重装兵
+      // (所要+15%)で踏破すると 33,120秒となり、上限28,800秒を超えて
+      // 「永久に完了しない派遣」になってしまう。仕様の3つの数値
+      // （480分 / 8時間上限 / +15%）は同時には満たせないため、
+      // 「派遣は必ず上限内に終わる」を優先してクランプする。
+      durationSec: Math.min(result.durationSec, OFFLINE_CAP_SEC)
     };
     this.data.dispatches.push(record);
     this.data.history[id] = record;
@@ -211,10 +216,13 @@ export class GameState {
           this.data.clearedStages.push(d.stageId);
         }
         if (d.stageId === 10) {
-          // 難易度+1、全ステージが再解放される（§7.1 無限ティア）
+          // 難易度+1。§7.1 の「全ステージが再解放される」は、文字どおり
+          // 「全ステージがまた挑戦できるようになる」ことを指す。
+          // clearedStages を消すと slotCount() の根拠が消えて冒険者2人が
+          // ロスターから外れ、解放費用も払い直しになる——踏破の報酬が罰に
+          // 変わってしまうので、消さずに全ステージを開放する。
           this.data.tier++;
-          this.data.clearedStages = [];
-          this.data.unlockedStages = [1];
+          this.data.unlockedStages = STAGES.map(s2 => s2.id);
         }
       }
     }

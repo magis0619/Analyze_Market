@@ -37,6 +37,8 @@ const PANEL_W = VW - PANEL_X - 8;
 const SLOT_X = 106;
 const SLOT_W = 120;
 const SLOT_H = 40;
+/** 装備選択一覧の先頭。スロット矩形（〜102）と重ならない位置に置く */
+const PICK_TOP = 106;
 
 /** 撤退ルールの色（慎重＝緑／標準＝金／深追い＝赤）。 */
 const RULE_COLOR: Record<RetreatRule, string> = {
@@ -59,6 +61,15 @@ export class DispatchScreen implements GameScreen {
   private dragY: number | null = null;
   private dragged = false;
   private picking: 'weapon' | 'armor' | null = null;
+  /**
+   * picker を開いた pointerDown と対になる pointerUp では確定させないための番人。
+   *
+   * スロットの当たり判定 y∈[62,102) と一覧の先頭行 y∈[80,120) は重なっている。
+   * この番人が無いと、スロットをタップした指を離した瞬間に「一覧の0番目を装備して
+   * 閉じる」まで一息に走ってしまい、プレイヤーは一覧を一度も見られない。
+   * （実際そうなっており、装備選択が実質存在しなかった）
+   */
+  private pickerJustOpened = false;
   private pickScroll = 0;
   private pickCache: Item[] = [];
   private readonly pickRowH = 40;
@@ -331,7 +342,7 @@ export class DispatchScreen implements GameScreen {
     ), 'power');
   }
 
-  private pickerViewH(): number { return VH - 148; }
+  private pickerViewH(): number { return VH - PICK_TOP - 68; }
 
   private drawPicker(ctx: CanvasRenderingContext2D): void {
     const st = this.nav.state;
@@ -351,7 +362,7 @@ export class DispatchScreen implements GameScreen {
     }
 
     const list = this.pickCache;
-    const top = 80, viewH = this.pickerViewH();
+    const top = PICK_TOP, viewH = this.pickerViewH();
     ctx.save();
     ctx.beginPath();
     ctx.rect(10, top, VW - 20, viewH);
@@ -394,6 +405,7 @@ export class DispatchScreen implements GameScreen {
         this.picking = i === 0 ? 'weapon' : 'armor';
         this.pickCache = this.pickerItems();
         this.pickScroll = 0;
+        this.pickerJustOpened = true;
         sfx('tap');
         return;
       }
@@ -436,7 +448,12 @@ export class DispatchScreen implements GameScreen {
     if (wasDragging) return;
 
     if (this.picking) {
-      const top = 80, viewH = this.pickerViewH();
+      // 開いた直後の指離しでは何もしない（この pointerUp は開く操作の一部）
+      if (this.pickerJustOpened) {
+        this.pickerJustOpened = false;
+        return;
+      }
+      const top = PICK_TOP, viewH = this.pickerViewH();
       if (py >= top && py < top + viewH && px >= 12 && px < VW - 12) {
         const idx = Math.floor((py - top + this.pickScroll) / this.pickRowH);
         const it = this.pickCache[idx];
