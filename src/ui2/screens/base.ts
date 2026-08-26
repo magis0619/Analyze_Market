@@ -1,4 +1,5 @@
 import type { JobId } from '../../sim/types';
+import type { Mood } from '../../world/scenes';
 import type { Nav, Screen } from '../shell';
 import { jobDef } from '../../data/jobs';
 import { stageDef, STAGES } from '../../data/stages';
@@ -6,7 +7,7 @@ import type { GameState } from '../../game/state';
 import { BASE_TYPES } from '../../data/bases';
 import { UNIQUES } from '../../data/uniques';
 import { actionBar, button, itemIcon, panel, progress, ring, toasts, topBar } from '../components';
-import { BEAT_TONE, beatsSoFar, dispatchBeats } from '../expedition';
+import { BEAT_ICON, BEAT_TONE, beatsSoFar, dispatchBeats } from '../expedition';
 import { duration, each, esc, num, when } from '../dom';
 
 // 拠点（docs/UI-SPEC.md §2.2）。
@@ -206,7 +207,8 @@ ${actionBar(button({ label: '閉じる', act: 'detail-close', tier: 'quiet', blo
         ${progress(p.ratio, undefined,
           beats.map(b => ({ at: b.at, kind: b.kind, passed: b.at <= p.ratio + 1e-6 })))}
         ${when(now, `<div class="beat-now" style="color:var(--${BEAT_TONE[now?.kind ?? 'fight']})">
-          <i></i><span>${when(now && now.depth > 0, `${now?.depth}層 ・ `)}${esc(now?.text ?? '')}</span>
+          <span class="bi bi-${now?.kind}">${BEAT_ICON[now?.kind ?? 'fight']}</span>
+          <span>${when(now && now.depth > 0, `${now?.depth}層 ・ `)}${esc(now?.text ?? '')}</span>
         </div>`)}
       `);
     }
@@ -237,6 +239,17 @@ ${actionBar(button({ label: '閉じる', act: 'detail-close', tier: 'quiet', blo
 
   return {
     scene: 'base',
+
+    /**
+     * 3D 側へ渡す状態（改善指示書 §3-1）。
+     * 誰かが潜っていれば家の灯りが落ちる。文字ではなく光で状況を言う。
+     */
+    get mood(): Mood {
+      const st = nav.state;
+      const total = Math.max(1, st.availableJobs().length);
+      const out = st.data.dispatches.length;
+      return { presence: 1 - out / total };
+    },
 
     render() {
       const st = nav.state;

@@ -142,3 +142,17 @@ export const BEAT_TONE: Record<Beat['kind'], string> = {
   fight: 'faint', hurt: 'down', rally: 'up',
   boss: 'gold', retreat: 'dim', fall: 'down'
 };
+
+/**
+ * 場面の記号（改善指示書 §1）。
+ *
+ * 道中は文章だけだったので、読まないと展開が追えなかった。
+ * 行頭に1文字置けば、目で追うだけで「削られた → 立て直した → 討った」が分かる。
+ *
+ * **絵文字は使わない。** ⚔ や 🛡 は環境によって細い線に潰れ、
+ * どの行も同じ見た目になる（一覧のアイコンで一度踏んだ）。漢字1文字は必ず出る。
+ */
+export const BEAT_ICON: Record<Beat['kind'], string> = {
+  fight: '戦', hurt: '傷', rally: '癒',
+  boss: '主', retreat: '退', fall: '死'
+};

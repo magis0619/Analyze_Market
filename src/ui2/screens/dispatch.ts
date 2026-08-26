@@ -1,4 +1,6 @@
-import type { Element, Item, JobId, RetreatRule } from '../../sim/types';
+import type { Element, Item, JobId, Rarity, RetreatRule } from '../../sim/types';
+import type { Mood, SceneName } from '../../world/scenes';
+import type { ModelSpec } from '../../world/models';
 import type { Nav, Screen } from '../shell';
 import { RETREAT_RULES, canEquipArmor, jobDef, retreatRuleDef } from '../../data/jobs';
 import { baseDef } from '../../data/bases';
@@ -19,6 +21,24 @@ import { duration, each, esc, num, when } from '../dom';
 
 const RULE_TONE: Record<RetreatRule, string> = {
   reckless: 'down', standard: 'gold', cautious: 'up'
+};
+
+/**
+ * 派遣先の光の色（§3-2）。ダンジョンの「敵の属性」をそのまま使う。
+ * 灼熱坑なら赤橙、氷結層なら青白——奥から漏れる光でどこへ行くのかが分かる。
+ */
+const GATE_DEFAULT = 0xe9be74;
+const STAGE_LIGHT: Record<string, number> = {
+  physical: 0x9fb0d0, fire: 0xff8348, ice: 0x6fc7ff,
+  lightning: 0xe9be74, poison: 0x7ddc8a, mixed: 0xa77dff
+};
+
+/** 展示台の光（§3-3）。並=白／上質=青白／稀少=紫／遺物=金 */
+const RARITY_LIGHT: Record<Rarity, number> = {
+  common: 0xc8d2e8, fine: 0x5aa9ff, rare: 0xa77dff, relic: 0xffc76b
+};
+const RARITY_AURA: Record<Rarity, number> = {
+  common: 0.16, fine: 0.4, rare: 0.68, relic: 1
 };
 
 export function dispatchScreen(nav: Nav): Screen {
@@ -186,7 +206,7 @@ export function dispatchScreen(nav: Nav): Screen {
     const stage = stageDef(stageId);
     return `
 <div class="sheet-back" data-act="pick-close"></div>
-<div class="sheet">
+<div class="sheet${when(candidate, ' hero')}">
   ${when(candidate, `<div class="sheet-compare">${candidate
         ? compareView(current, candidate, { stage, measured: measure(candidate) }) : ''}</div>`)}
   <div class="sheet-sort">
@@ -216,7 +236,39 @@ ${actionBar(candidate
   }
 
   return {
-    scene: 'dispatch',
+    /** 装備を選んでいる間は展示台へ移る（§3-3） */
+    get scene(): SceneName {
+      return picking ? 'pedestal' : 'dispatch';
+    },
+
+    /** 比較中の候補を台座に載せる */
+    get model(): ModelSpec | null {
+      if (!picking || !candidate) return null;
+      return {
+        baseId: candidate.baseId, rarity: candidate.rarity,
+        element: candidate.slot === 'weapon' ? dominantElement(candidate.element) : 'physical'
+      };
+    },
+
+    /**
+     * 3D 側へ渡す状態（§3-2 / §3-3）。
+     *
+     * 派遣先を選び直せば入口の光の色と塵の密度が変わり、
+     * 装備を選べば展示台の光がレアリティの色になる。
+     * どちらも文字ではなく光で「今どれを見ているか」を言う。
+     */
+    get mood(): Mood {
+      if (picking) {
+        const r = candidate?.rarity ?? 'common';
+        return { accent: RARITY_LIGHT[r], intensity: RARITY_AURA[r] };
+      }
+      const stage = stageDef(stageId);
+      return {
+        accent: STAGE_LIGHT[stage.enemyElement] ?? GATE_DEFAULT,
+        // 深いほど塵を濃くする（§3-2）
+        intensity: Math.min(1, (stageId - 1) / (STAGES.length - 1))
+      };
+    },
 
     render() {
       const st = nav.state;
@@ -244,7 +296,7 @@ ${topBar({
         title: '派遣準備', back: 'back', gold: st.data.gold,
         tier: st.data.tier, running: st.data.dispatches.length
       })}
-<div class="stack">
+<div class="stack hero">
   ${when(jobs.length > 1, panel('', `<div class="tabs">${each(jobs, (j, i) =>
         `<div class="tab ${i === jobIdx ? 'on' : ''}" data-tap data-act="job" data-i="${i}">
            ${esc(jobDef(j).name)}${when(st.isBusy(j), ' <span style="color:var(--down)">●</span>')}

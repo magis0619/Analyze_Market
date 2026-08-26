@@ -1,4 +1,5 @@
 import type { Item, RunResult, StageDef } from '../../sim/types';
+import type { Mood } from '../../world/scenes';
 import type { Nav, Screen } from '../shell';
 import { jobDef, retreatRuleDef } from '../../data/jobs';
 import { bossName, stageDef } from '../../data/stages';
@@ -6,7 +7,7 @@ import { dominantElement } from '../../sim/items';
 import {
   actionBar, button, elementLabel, figures, itemRow, panel, toasts, topBar
 } from '../components';
-import { BEAT_TONE, beatsOf } from '../expedition';
+import { BEAT_ICON, BEAT_TONE, beatsOf } from '../expedition';
 import { each, esc, num, when } from '../dom';
 
 // 帰還レポート（docs/UI-SPEC.md §2.5）。
@@ -14,6 +15,12 @@ import { each, esc, num, when } from '../dom';
 // **見どころ3行がこの画面で最も重要**（仕様書 §7.3）。
 // なぜその結果になったかが分からないと、完全な運ゲーに感じられる。
 // 到達深度は 3D 側（descent シーン）が光の帯で示すので、ここでは数字だけ扱う。
+
+/** 竪坑の光の色。派遣準備の入口と同じ対応（§3-2 と揃える） */
+const STAGE_LIGHT: Record<string, number> = {
+  physical: 0x9fb0d0, fire: 0xff8348, ice: 0x6fc7ff,
+  lightning: 0xe9be74, poison: 0x7ddc8a, mixed: 0xa77dff
+};
 
 export function reportScreen(nav: Nav, dispatchId: string): Screen {
   const st = nav.state;
@@ -67,6 +74,20 @@ export function reportScreen(nav: Nav, dispatchId: string): Screen {
     // 到達深度に応じて松明が灯る。深く潜ったほど下まで光る
     scene: 'report',
 
+    /**
+     * 3D 側へ渡す状態（改善指示書 §3-4）。
+     *
+     * 派遣先の属性で竪坑の光の色が変わり、**追い詰められた回ほど
+     * 松明が不安定に揺れる**。数字を読む前に「どういう回だったか」が伝わる。
+     */
+    get mood(): Mood {
+      const worst = result ? Math.min(...result.hpCurve) : 1;
+      return {
+        accent: STAGE_LIGHT[stage.enemyElement] ?? 0xff8348,
+        intensity: died ? 1 : Math.max(0, Math.min(1, 1 - worst))
+      };
+    },
+
     render() {
       if (!result) {
         return `${topBar({ title: '帰還レポート', gold: st.data.gold })}
@@ -86,7 +107,7 @@ ${actionBar(button({ label: '拠点へ戻る', act: 'done', tier: 'quiet', block
 
       return `
 ${topBar({ title: '帰還レポート', gold: st.data.gold, meta: stage.name })}
-<div class="stack">
+<div class="stack hero">
 
   ${when(died, `<div class="banner">
     <span>戦　死</span>
@@ -106,8 +127,9 @@ ${topBar({ title: '帰還レポート', gold: st.data.gold, meta: stage.name })}
 
   ${when(beats.length > 2, panel('道中', `
     <div class="trail">${each(beats, b =>
-        `<div class="tr" style="color:var(--${BEAT_TONE[b.kind]})"><i></i>
-           <span class="d">${b.depth}</span><span>${esc(b.text)}</span></div>`)}</div>
+        `<div class="tr" style="color:var(--${BEAT_TONE[b.kind]})">
+           <span class="bi bi-${b.kind}">${BEAT_ICON[b.kind]}</span>
+           <span class="d">${b.depth}</span><span class="tx">${esc(b.text)}</span></div>`)}</div>
   `))}
 
   ${panel('この回の数字', figures([

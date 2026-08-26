@@ -178,6 +178,19 @@ button { font: inherit; color: inherit; background: none; border: none; }
   padding: 0 var(--sp-4) var(--sp-3);
 }
 .stack.anchor-bottom { justify-content: flex-end; }
+/**
+ * 画面上部をシーンに明け渡す（改善指示書 §3 共通基盤方針）。
+ *
+ * 3D を作り込んでも、UIカードが上から下まで埋めていたら見えない——
+ * 実際、派遣先ごとに入口の色を変えても、隅にちらつくだけだった。
+ * 上から3〜4割を空け、そこへ入ってくる中身は霞ませる
+ * （スクロールしたときに、板が唐突に途切れないように）。
+ */
+.stack.hero {
+  padding-top: 34vh;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 12%);
+}
 .stack::-webkit-scrollbar { width: 0 }
 
 /* ---------------------------------------------------- ActionBar（親指到達域） */
@@ -392,12 +405,9 @@ button { font: inherit; color: inherit; background: none; border: none; }
 /* 直近の出来事。1行だけ出す（放置して眺めるものなので、積み上げない） */
 .beat-now {
   margin-top: var(--sp-2); font-size: var(--fs-label); line-height: 1.5;
-  display: flex; align-items: baseline; gap: var(--sp-2);
+  display: flex; align-items: center; gap: var(--sp-2);
 }
-.beat-now > i {
-  width: 5px; height: 5px; border-radius: 50%; flex: 0 0 auto;
-  background: currentColor;
-}
+
 
 /* ---------------------------------------------------- Card / EquipCard */
 .card {
@@ -450,7 +460,12 @@ button { font: inherit; color: inherit; background: none; border: none; }
   padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md);
   border: var(--bw) solid var(--line); background: var(--surface);
 }
-.item::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--rc); }
+/* レアリティは**アイコンの縁とグロー**で言う（指示書 §1）。
+   左端の色バーはそれを裏書きする補助——細くして、主役を譲る */
+.item::before {
+  content: ''; position: absolute; inset: 0 auto 0 0; width: 2px;
+  background: var(--rc); opacity: 0.55;
+}
 .item.relic { background: linear-gradient(90deg, rgba(255,199,107,0.11), var(--surface) 45%); }
 .item.on { border-color: var(--line-hi); background: var(--surface-2); }
 .item .ic {
@@ -461,10 +476,28 @@ button { font: inherit; color: inherit; background: none; border: none; }
 }
 /* モデルのサムネが焼けた枠。レアリティの縁を付けて、
    何を持っているかを行を読まずに分かるようにする（指示書 §1） */
+/* レアリティが高いほど縁が濃く、奥が光り、外にもにじむ。
+   「並と遺物が同じ枠に入っている」状態をやめる */
 .item .ic.shot {
-  border: 1px solid color-mix(in srgb, var(--rc) 55%, transparent);
-  background: radial-gradient(70% 70% at 50% 35%,
-    color-mix(in srgb, var(--rc) 22%, transparent), #10141f 78%);
+  border: 1px solid color-mix(in srgb, var(--rc) 62%, transparent);
+  background: radial-gradient(72% 72% at 50% 34%,
+    color-mix(in srgb, var(--rc) 26%, transparent), #10141f 78%);
+}
+.item.fine .ic.shot { box-shadow: 0 0 8px -1px color-mix(in srgb, var(--rc) 45%, transparent); }
+.item.rare .ic.shot {
+  border-color: color-mix(in srgb, var(--rc) 85%, transparent);
+  box-shadow: 0 0 12px -1px color-mix(in srgb, var(--rc) 62%, transparent);
+}
+/* 遺物だけは枠自体をゆっくり脈打たせる。一覧の中で必ず目に留まる */
+.item.relic .ic.shot {
+  border-color: var(--rc);
+  animation: relic-pulse 2.6s ease-in-out infinite;
+}
+@keyframes relic-pulse {
+  0%, 100% { box-shadow: 0 0 14px -2px color-mix(in srgb, var(--rc) 62%, transparent),
+                         inset 0 0 10px color-mix(in srgb, var(--rc) 20%, transparent); }
+  50% { box-shadow: 0 0 20px 0 color-mix(in srgb, var(--rc) 88%, transparent),
+                    inset 0 0 12px color-mix(in srgb, var(--rc) 30%, transparent); }
 }
 .item .ic.shot img { width: 100%; height: 100%; object-fit: contain; display: block; }
 /* 属性で色を変える。耐性・弱点は結果を大きく変えるので一覧でも分かるようにする */
@@ -500,15 +533,24 @@ button { font: inherit; color: inherit; background: none; border: none; }
 /* 道中の足取り（指示書 §4）。派遣中は1行ずつ、帰還後にまとめて見せる */
 .trail { display: flex; flex-direction: column; gap: var(--sp-2); }
 .tr {
-  display: flex; align-items: baseline; gap: var(--sp-2);
+  display: flex; align-items: center; gap: var(--sp-2);
   font-size: var(--fs-label); line-height: 1.5;
 }
-.tr > i { width: 5px; height: 5px; border-radius: 50%; flex: 0 0 auto; background: currentColor; }
 .tr > .d {
   min-width: 22px; text-align: right; font-family: var(--ff-en);
   color: var(--faint); flex: 0 0 auto;
 }
-.tr > span:last-child { color: var(--dim); }
+.tr > .tx { color: var(--dim); }
+
+/* 場面の記号（指示書 §1）。文章を読まなくても展開が追える */
+.bi {
+  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 6px;
+  display: grid; place-items: center;
+  font-size: 12px; line-height: 1;
+  border: 1px solid currentColor; color: inherit;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+.beat-now .bi { width: 20px; height: 20px; font-size: 11px; }
 
 /* ---------------------------------------------------- Beats / Figures */
 .beats { display: flex; flex-direction: column; gap: var(--sp-2); }
@@ -697,6 +739,10 @@ button { font: inherit; color: inherit; background: none; border: none; }
 /* 比較は上（視線が最初に来る位置）、一覧はその下に残す。
    一覧を閉じてしまうと、別の候補に乗り換えるのに毎回「戻る」が要る（§2.4） */
 .sheet-compare { flex: 0 0 auto; }
+/* 装備選択のシートも上を少しだけ空ける（§3-3）。
+   ここは一覧と比較で埋まる決断の画面なので、拠点ほど大きくは取れない。
+   台座の光の色（レアリティ）が見える分だけ譲る */
+.sheet.hero { padding-top: 17vh; }
 .sheet-sort { flex: 0 0 auto; }
 /* 相性は「等倍より良い／悪い」が一目で分かること。
    属性が3倍の開きを生むのに、素の数字しか出ていなかった（指示書 §2） */

@@ -1,6 +1,6 @@
 import type { Item } from '../sim/types';
 import type { GameState } from '../game/state';
-import type { SceneName, Stage } from '../world/scenes';
+import type { Mood, SceneName, Stage } from '../world/scenes';
 import type { ModelSpec } from '../world/models';
 import { createStage } from '../world/scenes';
 import { onThumbReady } from '../world/thumbs';
@@ -26,6 +26,11 @@ export interface Screen {
    * 境目が溶けて、文字が3D側に漏れる道ができる（§6.1）。
    */
   readonly model?: ModelSpec | null;
+  /**
+   * 3D 側へ渡す画面の状態（§3）。持たない画面は undefined。
+   * 文字は渡さない——World層は光と密度でしか喋らない。
+   */
+  readonly mood?: Mood;
   /** 画面の全HTML。状態から一意に決まること（同じ状態なら同じ文字列） */
   render(): string;
   /** data-act のタップ。true を返したら再描画する */
@@ -223,6 +228,8 @@ export class Shell implements Nav {
     // 見せている装備も画面の中で変わる（開封で1個ずつ捲る・一覧で選び直す）。
     // 同じ仕様なら setModel 側が何もしないので、毎フレーム渡してよい
     this.stage.setModel(this.screen.model ?? null);
+    // 状態も同じ。派遣先を選び直せば入口の色が変わる（§3-2）
+    if (this.screen.mood) this.stage.setMood(this.screen.mood);
     if (this.dirty) this.redraw();
     this.stage.renderAt(this.t);
   };
