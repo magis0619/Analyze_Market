@@ -212,6 +212,56 @@ export function tabs(items: readonly string[], selected: number, act: string): s
   )}</div>`;
 }
 
+export interface RingProps {
+  label: string;
+  value: number;
+  /** 上限。null なら「上限のない量」として扱う */
+  max: number | null;
+  /** 中央に出す文字。省略時は value */
+  text?: string;
+  tone?: string;
+  /** 上限のない量で、この値を超えたら警告色にする */
+  warnAt?: number;
+  act?: string;
+}
+
+/**
+ * リング型の進捗（改善指示書 §2）。
+ *
+ * 数字だけの行は、量が「多いのか少ないのか」を言わない。
+ * 3/10 と 21 と 122 が同じ顔で並んでいると、どれも同じ重みに見える。
+ *
+ * SVG の円弧で描く。canvas を使わないのは、**測れる形で残したいから**——
+ * stroke-dasharray は計算後の値を読めるので、
+ * 「表示が実際の割合と合っているか」を表明で確かめられる（§7.1 U17）。
+ *
+ * 上限のない量（所持数）は円を埋めない。埋めてしまうと
+ * 「あと少しで満杯」という嘘になる——所持数に上限は無い。
+ * 代わりに、目安を超えたら色だけ変える。
+ */
+export function ring(p: RingProps): string {
+  const R = 22;
+  const C = 2 * Math.PI * R;
+  const capped = p.max !== null && p.max > 0;
+  const ratio = capped ? Math.max(0, Math.min(1, p.value / (p.max ?? 1))) : 1;
+  const over = !capped && p.warnAt !== undefined && p.value >= p.warnAt;
+  const tone = over ? 'down' : (p.tone ?? 'gold');
+  const dash = capped
+    ? `${(C * ratio).toFixed(1)} ${(C * (1 - ratio) + 0.01).toFixed(1)}`
+    // 上限が無いものは、閉じた輪ではなく破線にして「区切りが無い」ことを見せる
+    : '3 5';
+  return `<div class="ring${when(p.act, ' tapme')}"${when(p.act, ` data-tap data-act="${esc(p.act ?? '')}"`)}
+       data-role="ring" data-ratio="${ratio.toFixed(3)}">
+    <svg viewBox="0 0 56 56" aria-hidden="true">
+      <circle class="trk" cx="28" cy="28" r="${R}"></circle>
+      <circle class="val" cx="28" cy="28" r="${R}"
+              style="stroke:var(--${tone});stroke-dasharray:${dash};stroke-dashoffset:0"></circle>
+    </svg>
+    <div class="rv" style="color:var(--${tone})">${esc(p.text ?? String(p.value))}</div>
+    <div class="micro">${esc(p.label)}${when(p.act, ' ›')}</div>
+  </div>`;
+}
+
 export function figures(cells: ReadonlyArray<[string, string, string?]>): string {
   return `<div class="figs">${each(cells, ([label, value, color]) =>
     `<div class="fig"><div class="micro">${esc(label)}</div>` +

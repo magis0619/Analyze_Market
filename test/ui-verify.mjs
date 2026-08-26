@@ -70,10 +70,24 @@ const PROBE = () => {
       overlaps.push(row.textContent.trim().slice(0, 24));
     }
   }
-  const panels = [...document.querySelectorAll('.panel')].filter(vis).map(box).filter(Boolean);
-  for (let i = 0; i < panels.length; i++) {
-    for (let j = i + 1; j < panels.length; j++) {
-      if (inter(panels[i], panels[j])) overlaps.push(`panel${i}×panel${j}`);
+  // 板同士の重なりは**同じ層の中だけ**を見る。
+  // 引き出しやシートは本文の上に重なるのが設計なので、
+  // 層をまたいで比べると必ず当たる（U8/U11 で踏んだのと同じ穴）。
+  const layerOf = (el) => el.closest('.drawer, .sheet, .modal, .reveal') ?? document.body;
+  const byLayer = new Map();
+  for (const el of document.querySelectorAll('.panel')) {
+    if (!vis(el)) continue;
+    const b = box(el);
+    if (!b) continue;
+    const k = layerOf(el);
+    if (!byLayer.has(k)) byLayer.set(k, []);
+    byLayer.get(k).push(b);
+  }
+  for (const [, group] of byLayer) {
+    for (let i = 0; i < group.length; i++) {
+      for (let j = i + 1; j < group.length; j++) {
+        if (inter(group[i], group[j])) overlaps.push(`panel${i}×panel${j}`);
+      }
     }
   }
 
@@ -151,9 +165,10 @@ const PROBE = () => {
   //   どちらも無い       → 全部
   const modalEl = [...document.querySelectorAll('.modal')].find(vis) ?? null;
   const scrimEl = [...document.querySelectorAll('.sheet-back')].find(vis) ?? null;
+  const drawerEl = [...document.querySelectorAll('.drawer')].find(vis) ?? null;
   const live = el => {
     if (modalEl) return modalEl.contains(el);
-    if (scrimEl) return !!el.closest('.topbar, .sheet, .actionbar, .modal');
+    if (scrimEl) return !!el.closest('.topbar, .sheet, .drawer, .actionbar, .modal');
     return true;
   };
   const blocked = [];
@@ -226,6 +241,29 @@ const PROBE = () => {
     } catch { blown = -1; }
   }
 
+  // U17: リングの円弧が、宣言した割合と実際に一致しているか（指示書 §2）。
+  //
+  // SVG で描くのは canvas と違って**測れる形で残るから**。
+  // stroke-dasharray の実測値から割合を逆算して、data-ratio と突き合わせる。
+  // 「10分の3なのに半分埋まっている」は目で見ても気づけない。
+  const rings = [...document.querySelectorAll('[data-role=ring]')].filter(vis);
+  const ringMismatch = [];
+  for (const r of rings) {
+    const arc = r.querySelector('.val');
+    const want = Number(r.dataset.ratio);
+    if (!arc || !Number.isFinite(want)) continue;
+    const dash = getComputedStyle(arc).strokeDasharray;
+    const parts = dash.split(/[ ,]+/).map(parseFloat).filter(Number.isFinite);
+    if (parts.length < 2) continue;
+    const total = parts[0] + parts[1];
+    // 上限のない量は破線（3 5 の繰り返し）なので割合を持たない
+    if (total < 20) continue;
+    const got = parts[0] / total;
+    if (Math.abs(got - want) > 0.02) {
+      ringMismatch.push(`${r.textContent.trim().slice(0, 8)} ${got.toFixed(2)}≠${want.toFixed(2)}`);
+    }
+  }
+
   const hScroll = document.documentElement.scrollWidth > window.innerWidth + 1;
 
   return {
@@ -237,6 +275,8 @@ const PROBE = () => {
     primaryOutside: primaryOutside.map(el => el.textContent.trim().slice(0, 14)),
     dangerAsPrimary: dangerAsPrimary.map(el => el.textContent.trim().slice(0, 14)),
     tierCount: tiers.length,
+    ringCount: rings.length,
+    ringMismatch,
     blown,
     liveCount,
     toastCount: [...document.querySelectorAll('[data-role=toast]')].filter(vis).length,
@@ -276,6 +316,8 @@ async function probe(page, name, { needsTap = true } = {}) {
   check('U14', name, r.dangerAsPrimary.length === 0,
     `取り消せない操作が primary になっている: ${r.dangerAsPrimary.join(' / ')}`);
   check('U15', name, r.tierCount > 0, '段を宣言したボタンが1つも無い');
+  check('U17', name, r.ringMismatch.length === 0,
+    `リングの円弧が割合と合っていない: ${r.ringMismatch.slice(0, 3).join(' / ')}`);
   // 3% を超えて真っ白なら、光ではなく白飛び
   if (r.blown >= 0) {
     check('U16', name, r.blown <= 0.03,
@@ -472,6 +514,16 @@ await page.click('[data-role=cta]');            // 拠点へ
 await page.waitForTimeout(500);
 
 // --- インベントリ（200件級）
+// 所持品と図鑑は詳細ドロワーの中（§4 情報の折りたたみ）。
+// ドロワー自体も画面の一つなので、開いた状態で測る
+await page.click('[data-act=detail]');
+await page.waitForTimeout(450);
+{
+  const d = await probe(page, 'base');
+  check('T12', 'base', d.ringCount === 3, `リングが ${d.ringCount} 個（3個であるべき）`);
+  check('T13', 'base', d.ringMismatch.length === 0,
+    `リングの表示と割合が食い違っている: ${d.ringMismatch.join(' / ')}`);
+}
 await page.click('[data-act=inventory]');
 await page.waitForTimeout(600);
 const inv = await probe(page, 'inventory');
@@ -558,6 +610,8 @@ await page.click('[data-role=back]');
 await page.waitForTimeout(400);
 
 // --- 図鑑
+await page.click('[data-act=detail]');
+await page.waitForTimeout(450);
 await page.click('[data-act=compendium]');
 await page.waitForTimeout(500);
 await probe(page, 'compendium');

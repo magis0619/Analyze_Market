@@ -523,6 +523,60 @@ button { font: inherit; color: inherit; background: none; border: none; }
 .fig[data-act] .micro { color: var(--gold); }
 .fig .v { font-size: var(--fs-title); margin-top: 3px; font-family: var(--ff-en); }
 
+/* 詳細ドロワー（指示書 §4）。
+ *
+ * 「今すぐ押さないもの」を1箇所にまとめる引き出し。本文と入れ替えずに
+ * 下から重ねる——ここを見るのは「ついでに確認する」動作であって、
+ * 画面を移る動作ではない。 */
+.drawer {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  z-index: calc(var(--z-sheet) + 1);
+  max-height: 72%; overflow-y: auto; overscroll-behavior: contain;
+  padding: var(--sp-2) var(--sp-4) 96px;
+  display: flex; flex-direction: column; gap: var(--sp-3);
+  background: linear-gradient(to bottom, rgba(6,8,14,0.55), rgba(6,8,14,0.94) 22%);
+  border-top: 1px solid var(--line-hi);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  animation: drawer-in var(--d-pop) var(--e-out) both;
+}
+@keyframes drawer-in { from { transform: translateY(24px); opacity: 0 } to { transform: none; opacity: 1 } }
+.drawer .grab {
+  width: 40px; height: 4px; border-radius: 2px; background: var(--line-hi);
+  margin: var(--sp-1) auto var(--sp-2); flex: 0 0 auto;
+}
+.drawer::-webkit-scrollbar { width: 0 }
+
+/* 詳細を開く口。カード枠は付けない——視覚的な重みを最小にする（§4） */
+.moretab {
+  align-self: center; display: flex; align-items: center; gap: var(--sp-2);
+  min-height: var(--tap); padding: 0 var(--sp-3);
+  background: none; border: 0; color: var(--faint);
+  font-size: var(--fs-label); position: relative;
+}
+.moretab .ic { display: inline-block; transform: rotate(90deg); font-size: 10px; }
+.moretab .dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--gold);
+  box-shadow: 0 0 8px var(--gold);
+}
+.hintline {
+  margin-top: var(--sp-2); font-size: var(--fs-label);
+  color: var(--down); text-align: center;
+}
+
+/* リング型の進捗（指示書 §2） */
+.rings { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: var(--sp-2); }
+.ring { position: relative; display: grid; justify-items: center; gap: 2px; padding: var(--sp-1) 0; }
+.ring.tapme { cursor: pointer; }
+.ring svg { width: 60px; height: 60px; transform: rotate(-90deg); display: block; }
+.ring .trk { fill: none; stroke: rgba(255,255,255,0.09); stroke-width: 4; }
+.ring .val { fill: none; stroke-width: 4; stroke-linecap: round; transition: stroke-dasharray var(--d-float) var(--e-out); }
+.ring .rv {
+  position: absolute; top: 0; left: 0; right: 0; height: 60px;
+  display: grid; place-items: center;
+  font-family: var(--ff-en); font-size: var(--fs-title);
+}
+.ring .micro { color: var(--faint); }
+
 /* ---------------------------------------------------- Stage / Rule / Tag */
 .stages { display: flex; flex-direction: column; gap: var(--sp-1); }
 .stage {
@@ -617,12 +671,19 @@ button { font: inherit; color: inherit; background: none; border: none; }
   background: linear-gradient(to bottom,
     rgba(4,6,12,0.10) 0%, rgba(4,6,12,0.18) 42%, rgba(4,6,12,0.80) 100%);
 }
+/* 引き出しの後ろは本文（拠点）なので、しっかり沈める。
+   シートのときと違い、裏に隠すべき中身が実際にある */
+.sheet-back.solid {
+  background: linear-gradient(to bottom, rgba(4,6,12,0.62) 0%, rgba(4,6,12,0.88) 60%);
+}
 /* シートを出している間は ActionBar も暗幕より前に出す。
  * 出さないと、ボタンは見えているのに暗幕がタップを飲み込む——
  * 「見た目は正常なのに押せない」という、スクリーンショットでは
  * 絶対に分からない壊れ方になる（Playwright の到達可能性判定が検出した）。 */
 #ui:has(.sheet) .actionbar,
-#ui:has(.sheet) .topbar { position: relative; z-index: calc(var(--z-sheet) + 2); }
+#ui:has(.sheet) .topbar,
+#ui:has(.drawer) .actionbar,
+#ui:has(.drawer) .topbar { position: relative; z-index: calc(var(--z-sheet) + 2); }
 /* モーダルを出している間は ActionBar を暗幕の後ろへ戻す。
    「売るのをやめる」と言いながら裏の売却ボタンが押せる状態にしない */
 #ui:has(.modal) .actionbar,

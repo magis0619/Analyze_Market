@@ -2,7 +2,10 @@ import type { JobId } from '../../sim/types';
 import type { Nav, Screen } from '../shell';
 import { jobDef } from '../../data/jobs';
 import { stageDef, STAGES } from '../../data/stages';
-import { actionBar, button, itemIcon, panel, progress, toasts, topBar } from '../components';
+import type { GameState } from '../../game/state';
+import { BASE_TYPES } from '../../data/bases';
+import { UNIQUES } from '../../data/uniques';
+import { actionBar, button, itemIcon, panel, progress, ring, toasts, topBar } from '../components';
 import { BEAT_TONE, beatsSoFar, dispatchBeats } from '../expedition';
 import { duration, each, esc, num, when } from '../dom';
 
@@ -39,16 +42,74 @@ interface Tile {
  * 残りは枠を消して沈める。4枚が同じ顔で並んでいると、
  * どれを押せばいいかを毎回プレイヤーが考えることになる。
  */
+/**
+ * 拠点に出すのは**今すぐ操作するものだけ**（改善指示書 §4）。
+ *
+ * 所持品・図鑑・次の冒険者は「見ておきたいが今すぐ押すものではない」ので、
+ * 詳細ドロワーへ移した。常時フル表示していると、
+ * 今やるべきことが3つの中に埋もれる。
+ */
 const TILES: readonly Tile[] = [
   { act: 'dispatch', en: 'Dispatch', label: '派遣準備', wide: '派遣の準備をする' },
   { act: 'open', en: 'Unopened', label: '開封', wide: '未鑑定品を開封する',
     count: n => n.state.data.pending.length },
   { act: 'report', en: 'Report', label: 'レポート', wide: '帰還レポートを読む',
-    count: n => n.state.data.inbox.length },
-  { act: 'inventory', en: 'Inventory', label: '所持品', wide: '所持品を整理する' }
+    count: n => n.state.data.inbox.length }
 ];
 
 export function baseScreen(nav: Nav): Screen {
+  /** 詳細ドロワーを開いているか（§4） */
+  let detail = false;
+
+  /**
+   * 詳細ドロワー（§4）。今すぐ押さないものを1箇所にまとめる。
+   *
+   * 拠点の本文と入れ替えず、**上に重ねる**——ここを見るのは
+   * 「ついでに確認する」動作であって、画面を移る動作ではない。
+   */
+  function drawer(hire: ReturnType<GameState['nextSlot']>): string {
+    const st = nav.state;
+    const kinds = BASE_TYPES.length + UNIQUES.length;
+    const found = new Set<string>();
+    for (const k of Object.keys(st.data.compendium)) {
+      found.add(k.startsWith('unique:') ? k : (k.split('|')[0] ?? k));
+    }
+    return `
+<div class="sheet-back solid" data-act="detail-close"></div>
+<div class="drawer">
+  <div class="grab"></div>
+  ${panel('進み具合', `<div class="rings">
+    ${ring({ label: '踏破', value: st.data.clearedStages.length, max: STAGES.length,
+             text: `${st.data.clearedStages.length}/${STAGES.length}`, tone: 'up' })}
+    ${ring({ label: '図鑑', value: found.size, max: kinds,
+             text: `${found.size}`, tone: 'r-rare', act: 'compendium' })}
+    ${ring({ label: '所持', value: st.data.inventory.length, max: null,
+             warnAt: 150, tone: 'def', act: 'inventory' })}
+  </div>
+  ${when(st.data.inventory.length >= 150,
+    `<div class="hintline">所持品が増えすぎている。売ると金になる</div>`)}`)}
+
+  ${when(hire !== null, panel('次の冒険者', `
+    <div class="slot">
+      <div class="who">
+        <div class="n">${hire ? hire.index + 1 : 0}人目の冒険者</div>
+        <div class="s ${hire?.stageDone ? (hire.affordable ? 'idle' : 'lack') : 'warn'}">${
+          hire?.stageDone
+            ? (hire.affordable ? '雇う準備ができている' : '金が足りない')
+            : `ステージ${hire?.needStage}を踏破すると雇える`
+        }</div>
+      </div>
+      <div class="rt"><b>${num(hire?.cost ?? 0)}G</b></div>
+    </div>
+    ${when(hire?.stageDone, button({
+        label: '雇う', act: 'hire', tier: 'secondary', block: true,
+        disabled: !hire?.affordable
+      }))}
+  `))}
+</div>
+${actionBar(button({ label: '閉じる', act: 'detail-close', tier: 'quiet', block: true }))}`;
+  }
+
   /** 1枚ぶん。ActionBar が指しているものだけ段を1つ上げる */
   function tile(t: Tile, cta: string): string {
     const n = t.count ? t.count(nav) : -1;
@@ -200,34 +261,15 @@ ${topBar({
     ${each(TILES, t => tile(t, next.act))}
   </div>
 
-  ${when(hire !== null, panel('', `
-    <div class="slot">
-      <div class="who">
-        <div class="n">${hire ? hire.index + 1 : 0}人目の冒険者</div>
-        <div class="s ${hire?.stageDone ? (hire.affordable ? 'idle' : 'lack') : 'warn'}">${
-          hire?.stageDone
-            ? (hire.affordable ? '雇う準備ができている' : '金が足りない')
-            : `ステージ${hire?.needStage}を踏破すると雇える`
-        }</div>
-      </div>
-      <div class="rt"><b>${num(hire?.cost ?? 0)}G</b></div>
-    </div>
-    ${when(hire?.stageDone, button({
-        label: '雇う', act: 'hire', tier: 'secondary', block: true,
-        disabled: !hire?.affordable
-      }))}
-  `))}
-
-  ${panel('', `<div class="figs">
-    <div class="fig"><div class="micro">踏破</div>
-      <div class="v" style="color:var(--up)">${st.data.clearedStages.length}/${STAGES.length}</div></div>
-    <div class="fig" data-tap data-act="compendium"><div class="micro">図鑑 ›</div>
-      <div class="v">${Object.keys(st.data.compendium).length}</div></div>
-    <div class="fig" data-tap data-act="inventory"><div class="micro">所持 ›</div>
-      <div class="v">${st.data.inventory.length}</div></div>
-  </div>`)}
+  <button class="moretab" data-tap data-act="detail">
+    <span class="ic">▸</span>詳細${when(hire?.affordable, '<span class="dot"></span>')}
+  </button>
 </div>
-${actionBar(button({ ...next, tier: 'primary', block: true, role: 'cta' }))}
+${detail
+        ? drawer(hire)
+        // ドロワーを出している間は本文の ActionBar を出さない。
+        // 両方出すと引き出しの上に前の主要動線が乗って、二重に見える
+        : actionBar(button({ ...next, tier: 'primary', block: true, role: 'cta' }))}
 ${toasts(notices)}`;
     },
 
@@ -245,6 +287,8 @@ ${toasts(notices)}`;
         case 'dispatch': nav.goDispatch(); return;
         case 'inventory': nav.goInventory(); return;
         case 'compendium': nav.goCompendium(); return;
+        case 'detail': detail = true; return;
+        case 'detail-close': detail = false; return;
         case 'hire':
           if (st.unlockSlot()) notify('冒険者を雇った');
           return;
