@@ -413,3 +413,32 @@ button { font: inherit; color: inherit; background: none; border: none; }
 .title-wrap .logo { font-size: 46px; letter-spacing: 0.16em; color: var(--gold); text-shadow: 0 0 40px rgba(233,190,116,0.35); }
 .title-wrap .sub { font-size: var(--fs-label); color: var(--dim); letter-spacing: 0.3em; margin-top: var(--sp-3); }
 .seed { position: absolute; left: var(--sp-4); bottom: var(--sp-2); font-size: var(--fs-micro); color: var(--faint); }
+
+/* ---------------------------------------------------- Sheet（L3・§4.6 z-sheet） */
+.sheet-back {
+  position: absolute; inset: 0; z-index: var(--z-sheet);
+  background: rgba(4, 6, 12, 0.86);
+}
+/* シートを出している間は ActionBar も暗幕より前に出す。
+ * 出さないと、ボタンは見えているのに暗幕がタップを飲み込む——
+ * 「見た目は正常なのに押せない」という、スクリーンショットでは
+ * 絶対に分からない壊れ方になる（Playwright の到達可能性判定が検出した）。 */
+#ui:has(.sheet) .actionbar { position: relative; z-index: calc(var(--z-sheet) + 2); }
+.sheet {
+  position: relative; z-index: calc(var(--z-sheet) + 1);
+  flex: 1 1 auto; min-height: 0;
+  display: flex; flex-direction: column; gap: var(--sp-3);
+  padding: 0 var(--sp-4) var(--sp-3);
+}
+/* 比較は上（視線が最初に来る位置）、一覧はその下に残す。
+   一覧を閉じてしまうと、別の候補に乗り換えるのに毎回「戻る」が要る（§2.4） */
+.sheet-compare { flex: 0 0 auto; }
+.sheet-list {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: var(--sp-1);
+}
+.sheet-list::-webkit-scrollbar { width: 0 }
+.empty {
+  text-align: center; color: var(--faint);
+  font-size: var(--fs-label); padding: var(--sp-6) 0;
+}

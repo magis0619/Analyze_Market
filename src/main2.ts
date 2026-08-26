@@ -3,6 +3,7 @@ import { GameState, debugLoot } from './game/state';
 import { Shell } from './ui2/shell';
 import { titleScreen } from './ui2/screens/title';
 import { baseScreen } from './ui2/screens/base';
+import { dispatchScreen } from './ui2/screens/dispatch';
 
 // 移行中の入口。全画面が揃うまでは main.ts（canvas版）と併存させる。
 
@@ -40,7 +41,7 @@ const notYet = (nav: import('./ui2/shell').Nav): import('./ui2/shell').Screen =>
 const shell = new Shell(root, state, {
   title: titleScreen,
   base: baseScreen,
-  dispatch: notYet,
+  dispatch: dispatchScreen,
   inventory: notYet,
   compendium: notYet,
   opening: notYet,
