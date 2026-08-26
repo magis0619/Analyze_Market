@@ -9,6 +9,8 @@ import { openingScreen } from './ui2/screens/opening';
 import { inventoryScreen } from './ui2/screens/inventory';
 import { compendiumScreen } from './ui2/screens/compendium';
 import { modelbookScreen } from './ui2/screens/modelbook';
+import { gardenScreen } from './ui2/screens/garden';
+import { alchemyScreen } from './ui2/screens/alchemy';
 import { thumbCount } from './world/thumbs';
 
 // 入口。
@@ -54,6 +56,8 @@ const shell = new Shell(root, state, {
   dispatch: dispatchScreen,
   inventory: inventoryScreen,
   compendium: compendiumScreen,
+  garden: gardenScreen,
+  alchemy: alchemyScreen,
   opening: openingScreen,
   report: reportScreen
 }, params.get('s') === 'base' ? 'base' : 'title');

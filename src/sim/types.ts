@@ -202,6 +202,8 @@ export interface RunResult {
     crits: number;
     biggestHit: number;
     evaded: number;
+    /** 持たせた薬が肩代わりした被ダメージ（薬草園） */
+    potionSaved: number;
   };
 }
 
@@ -220,4 +222,6 @@ export interface Dispatch {
   startedAt: number;
   /** 完了までの実時間（秒） */
   durationSec: number;
+  /** 持たせた薬（薬草園）。持たせなければ null */
+  potionId?: string | null;
 }

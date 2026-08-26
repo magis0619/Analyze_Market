@@ -20,6 +20,21 @@ export function num(n: number): string {
 }
 
 /** 秒を「1時間20分」の形に。 */
+/**
+ * ざっくりした残り時間。
+ *
+ * 1分を超えているうちは分だけ出す。14分育つ作物に「13分42秒」と
+ * 出すのは**嘘の細かさ**で、しかもこの作りでは表示が変わるたびに
+ * 画面を作り直すので、秒まで出すと毎秒 DOM を丸ごと入れ替えることになる。
+ * 残り1分を切ってから秒に切り替える。
+ */
+export function coarseDuration(sec: number): string {
+  const s = Math.max(0, Math.ceil(sec));
+  if (s >= 3600) return `${Math.floor(s / 3600)}時間${Math.floor((s % 3600) / 60)}分`;
+  if (s >= 60) return `${Math.ceil(s / 60)}分`;
+  return `${s}秒`;
+}
+
 export function duration(sec: number): string {
   const s = Math.max(0, Math.ceil(sec));
   if (s >= 3600) {

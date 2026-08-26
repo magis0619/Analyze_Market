@@ -2,6 +2,7 @@ import type { Item, Rarity, Slot, StageDef } from '../../sim/types';
 import type { Nav, Screen } from '../shell';
 import type { ModelSpec } from '../../world/models';
 import { stageDef } from '../../data/stages';
+import { HERBS, POTIONS } from '../../data/garden';
 import { effectiveScore } from '../affinity';
 import { Prng } from '../../sim/prng';
 import { dominantElement, sellValue } from '../../sim/items';
@@ -15,6 +16,11 @@ import { each, esc, num, when } from '../dom';
 // 200個持っていても操作が1フレーム（16.7ms）を超えないこと（U9）。
 // 全件を DOM に出すと innerHTML の書き換えだけで予算を食うので、
 // 見えている範囲＋前後の余白だけを描く（仮想スクロール）。
+
+// 上段は**持ち物の種類**。装備は1点ずつ違う個体だが、種・収穫物・薬は
+// 「何がいくつ」しかない別物なので、同じ並べ替え・同じ売却を当てると嘘になる。
+// タブで面ごと切り替えて、それぞれに合う操作だけを出す（新機能指示書「所持品」）。
+const CATS = ['装備', '種', '収穫物', '薬'] as const;
 
 const SORTS = ['相性', '強さ', 'レア', '種別'] as const;
 const SLOTS: Array<Slot | 'all'> = ['all', 'weapon', 'armor'];
@@ -31,6 +37,7 @@ export function inventoryScreen(nav: Nav): Screen {
   const st = nav.state;
   // 既定は「相性」——どこへ送るつもりかが分かっているなら、
   // 素の強さで並べた一覧は嘘をつく（指示書 §2）。分からなければ強さに落とす
+  let cat = 0;
   let sort = nav.stageContext === null ? 1 : 0;
   let slotF = 0;
   let rarF = 0;
@@ -92,6 +99,26 @@ export function inventoryScreen(nav: Nav): Screen {
       case 3: xs.sort((a, b) => a.slot.localeCompare(b.slot) || itemScore(b) - itemScore(a)); break;
     }
     return xs;
+  }
+
+  /** 種・収穫物・薬の在庫。個体ではなく数なので、1種類1行にまとめる。 */
+  function stock(): Array<{ el: string; glyph: string; name: string; note: string; n: number }> {
+    const g = st.data.garden;
+    if (cat === 3) {
+      return POTIONS.filter(p => (g.potions[p.id] ?? 0) > 0).map(p => ({
+        el: p.element, glyph: '薬', name: p.name, note: p.text, n: g.potions[p.id] ?? 0
+      }));
+    }
+    const bag = cat === 1 ? g.seeds : g.herbs;
+    return HERBS.filter(h => (bag[h.id] ?? 0) > 0).map(h => ({
+      el: h.element, glyph: h.glyph, name: h.name,
+      // 種は「植えたらどうなるか」、収穫物は「何になるか」。
+      // 手持ちの数だけ出しても、次に何をすればよいかが分からない
+      note: cat === 1
+        ? `${Math.round(h.growSec / 60)}分で ${h.yield}個`
+        : `${POTIONS.find(p => p.main === h.id)?.name ?? '薬'}の主材料`,
+      n: bag[h.id] ?? 0
+    }));
   }
 
   /** 表示中のうち、実際に売れるもの（ロック品と装備中は除く）。 */
@@ -168,6 +195,31 @@ ${modal}
 ${toasts(notices)}`;
       }
 
+      if (cat !== 0) {
+        const xs = stock();
+        const total = xs.reduce((a, b) => a + b.n, 0);
+        // 面ごとに**次の行き先**を出す。数を眺めるだけの画面にしない
+        const go = cat === 1
+          ? { label: '薬草園で植える', act: 'garden' }
+          : cat === 2
+            ? { label: '錬金工房で薬にする', act: 'alchemy' }
+            : { label: '派遣に持たせる', act: 'dispatch' };
+        return `
+${topBar({ title: '所持品', back: 'back', gold: st.data.gold, meta: `${total}個` })}
+<div class="stack" data-role="list" data-scroll>
+  ${panel('', tabs([...CATS], cat, 'cat'))}
+  ${panel(CATS[cat] ?? '', xs.length === 0
+          ? `<div class="empty">${cat === 1 ? '薬草園で種を買える' : cat === 2 ? '薬草園で育てて収穫する' : '錬金工房で作れる'}</div>`
+          : `<div class="list">${each(xs, x => `<div class="item">
+              <div class="ic ${x.el}">${esc(x.glyph)}</div>
+              <div class="tx"><div class="n">${esc(x.name)}</div><div class="m">${esc(x.note)}</div></div>
+              <div class="rr">×${x.n}</div>
+            </div>`)}</div>`)}
+</div>
+${actionBar(button({ label: go.label, act: go.act, tier: 'primary', block: true, role: 'cta' }))}
+${toasts(notices)}`;
+      }
+
       return `
 ${topBar({
         title: '所持品', back: 'back', gold: st.data.gold,
@@ -176,6 +228,8 @@ ${topBar({
       })}
 <div class="stack" data-role="list" data-scroll>
   ${panel('', `
+    ${tabs([...CATS], cat, 'cat')}
+    <div style="height:var(--sp-2)"></div>
     ${tabs(sortLabels(), sort, 'sort')}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-2);margin-top:var(--sp-2)">
       ${tabs(SLOT_LABEL, slotF, 'slotf')}
@@ -206,6 +260,16 @@ ${toasts(notices)}`;
     act(action, el) {
       switch (action) {
         case 'back': nav.goBase(); return;
+        case 'cat':
+          cat = Number(el.dataset.i ?? 0);
+          // 面を変えたら明細も畳む。装備の明細が種の面に残ると意味が通らない
+          selectedId = null;
+          confirm = null;
+          scrollTop = 0;
+          return;
+        case 'garden': nav.goGarden(); return;
+        case 'alchemy': nav.goAlchemy(); return;
+        case 'dispatch': nav.goDispatch(); return;
         case 'sort': sort = Number(el.dataset.i ?? 0); scrollTop = 0; return;
         case 'slotf': slotF = Number(el.dataset.i ?? 0); scrollTop = 0; return;
         case 'rarf': rarF = Number(el.dataset.i ?? 0); scrollTop = 0; return;

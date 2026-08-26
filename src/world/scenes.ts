@@ -236,7 +236,9 @@ interface SceneDef {
 function buildBase(): SceneDef {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x070910);
-  scene.fog = new THREE.FogExp2(0x0a0d18, 0.055);
+  // 霧を薄くする。0.055 だと 30m 先のカメラから見た小屋まで曇り、
+  // 形は出ているのに何も見えない画面になっていた
+  scene.fog = new THREE.FogExp2(0x0a0d18, 0.026);
 
   // 縦画面は水平画角が極端に狭くなる（垂直FOV×アスペクト0.46）。
   // 17m まで寄ると小屋だけで横幅が埋まり、屋根を見下ろす絵になっていた。
@@ -246,10 +248,16 @@ function buildBase(): SceneDef {
   cam.position.set(0.8, 4.6, 30);
   cam.lookAt(0, -2.0, 0);
 
-  scene.add(new THREE.AmbientLight(0x2a3355, 1.15));
-  const moon = new THREE.DirectionalLight(0x9fb6ff, 0.85);
+  // 夜の静けさは保ちつつ、置いたものが見える程度には照らす。
+  // 「暗い」と「何も見えない」は別で、後者はただの黒い画面
+  scene.add(new THREE.AmbientLight(0x36436c, 1.62));
+  const moon = new THREE.DirectionalLight(0xb2c2ff, 1.45);
   moon.position.set(-7, 11, 4);
   scene.add(moon);
+  // 手前からの返し。小屋の正面が真っ黒に落ちるのを防ぐ
+  const bounce = new THREE.DirectionalLight(0x6b7fb8, 0.7);
+  bounce.position.set(4, 3, 12);
+  scene.add(bounce);
 
   // ---- Layer A: 星空（§3 共通基盤方針）。最も遠く、最もゆっくり
   const stars = makeStars(280, 3);
@@ -294,14 +302,14 @@ function buildBase(): SceneDef {
   // 地面
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(90, 90),
-    new THREE.MeshStandardMaterial({ color: 0x1b2033, roughness: 1 })
+    new THREE.MeshStandardMaterial({ color: 0x27304a, roughness: 1 })
   );
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
 
   // 小屋。切妻屋根＋石の基礎＋煙突
   const lodge = new THREE.Group();
-  const wall = rock(5.2, 2.6, 4.0, 0x4a3a2c, 11);
+  const wall = rock(5.2, 2.6, 4.0, 0x5e4a38, 11);
   wall.position.y = 1.3;
   lodge.add(wall);
   const base = rock(5.6, 0.5, 4.4, 0x2b3040, 12);
@@ -309,7 +317,7 @@ function buildBase(): SceneDef {
   lodge.add(base);
   const roof = new THREE.Mesh(
     new THREE.ConeGeometry(4.3, 1.9, 4),
-    new THREE.MeshStandardMaterial({ color: 0x5c2b2b, roughness: 0.88, flatShading: true })
+    new THREE.MeshStandardMaterial({ color: 0x67332f, roughness: 0.88, flatShading: true })
   );
   roof.position.y = 3.55;
   roof.rotation.y = Math.PI / 4;
@@ -353,6 +361,48 @@ function buildBase(): SceneDef {
   lodge.position.set(-2.2, 0, 0);
   scene.add(lodge);
 
+  // 温室（薬草園）。小屋の右手に建てる。
+  // 夜の紺の中でここだけ緑に灯り、「命が育っている」対比を作る
+  const green = new THREE.Group();
+  const gGlass = new THREE.MeshStandardMaterial({
+    color: 0x9fd8c0, transparent: true, opacity: 0.13,
+    roughness: 0.25, metalness: 0.1, side: THREE.DoubleSide
+  });
+  const gBody = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.9, 2.6), gGlass);
+  gBody.position.y = 0.95;
+  green.add(gBody);
+  const gRoof = new THREE.Mesh(new THREE.ConeGeometry(2.5, 0.9, 4), gGlass);
+  gRoof.position.y = 2.3;
+  gRoof.rotation.y = Math.PI / 4;
+  green.add(gRoof);
+  const gFrame = new THREE.MeshStandardMaterial({ color: 0x3b4a3f, roughness: 0.9, flatShading: true });
+  for (const gx of [-1.7, 1.7]) {
+    for (const gz of [-1.3, 1.3]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.9, 0.12), gFrame);
+      post.position.set(gx, 0.95, gz);
+      green.add(post);
+    }
+  }
+  // 中の株。育ち具合は拠点からは見せない（畑の画面の仕事）が、
+  // 「何かが育っている」ことだけは分かるようにする
+  const gLeaf = new THREE.MeshStandardMaterial({
+    color: 0x9be08a, roughness: 0.8, flatShading: true,
+    emissive: 0x9be08a, emissiveIntensity: 0.25
+  });
+  for (let i = 0; i < 6; i++) {
+    const sprout = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.62, 5), gLeaf);
+    sprout.position.set(-1.2 + (i % 3) * 1.2, 0.4, i < 3 ? -0.6 : 0.6);
+    green.add(sprout);
+  }
+  const gGlow = glowSprite(0x9be08a, 2.6, 0.5);
+  gGlow.position.y = 1.0;
+  green.add(gGlow);
+  const gLight = new THREE.PointLight(0x9be08a, 5.5, 9, 2);
+  gLight.position.set(0, 1.2, 1.2);
+  green.add(gLight);
+  green.position.set(5.4, 0, 1.2);
+  scene.add(green);
+
   // 焚き火
   const fire = new THREE.Group();
   for (let i = 0; i < 5; i++) {
@@ -379,7 +429,7 @@ function buildBase(): SceneDef {
     const h = 2.6 + r() * 2.4;
     const t = new THREE.Mesh(
       new THREE.ConeGeometry(0.75 + r() * 0.3, h, 5),
-      new THREE.MeshStandardMaterial({ color: 0x16241f, roughness: 1, flatShading: true })
+      new THREE.MeshStandardMaterial({ color: 0x22392f, roughness: 1, flatShading: true })
     );
     const ang = -0.6 + r() * 2.6;
     const dist = 11 + r() * 20;
@@ -416,6 +466,9 @@ function buildBase(): SceneDef {
         w.glow.scale.setScalar(3.2 * flick * lit + 0.4);
       }
       hearth.intensity = (7.5 + Math.sin(t * 5.3) * 1.2) * (0.4 + presence * 0.6);
+      // 温室は在宅と無関係にずっと灯っている。植物は待たない
+      gLight.intensity = 5 + Math.sin(t * 0.9) * 0.8;
+      gGlow.scale.setScalar(2.4 + Math.sin(t * 1.3) * 0.2);
 
       cam.position.x = 0.8 + Math.sin(t * 0.16) * 1.1;
       cam.position.y = 4.6 + Math.sin(t * 0.11) * 0.3;
@@ -636,6 +689,245 @@ function buildGate(): SceneDef {
   };
 }
 
+
+// ---------------------------------------------------------------- 薬草園・錬金
+
+const LEAF = 0x9be08a;
+
+/**
+ * 薬草園（新機能指示書「3Dオブジェクト定義」）。
+ *
+ * **拠点の夜に対する対比を作る。** 紺の夜空の中で、ここだけ緑〜黄緑に
+ * ほんのり明るい——「命が育っている」場所として温度差を付ける。
+ *
+ * 収穫できるものがあるほど蛍が増えて明るくなる。
+ * 何もせず眺めているだけで「そろそろ採り頃だ」が分かる。
+ */
+function buildGarden(): SceneDef {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x070c10);
+  scene.fog = new THREE.FogExp2(0x0a1410, 0.03);
+
+  // 温室の全体が入る距離まで引く。近すぎると株だけが画面を埋めて、
+  // 「ガラスの箱の中で育っている」という肝心の絵が消える
+  const cam = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
+  cam.position.set(0, 8.5, 30);
+  cam.lookAt(0, -3.4, 0);
+
+  scene.add(new THREE.AmbientLight(0x3d5a44, 1.9));
+  const moon = new THREE.DirectionalLight(0xbfe8c8, 1.1);
+  moon.position.set(-6, 10, 5);
+  scene.add(moon);
+
+  const stars = makeStars(160, 8);
+  scene.add(stars);
+
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(70, 70),
+    new THREE.MeshStandardMaterial({ color: 0x1e2a22, roughness: 1 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.4;
+  scene.add(ground);
+
+  // 温室。骨組みと半透明のガラス
+  const house = new THREE.Group();
+  const glass = new THREE.Mesh(
+    new THREE.BoxGeometry(11, 5.2, 7),
+    new THREE.MeshStandardMaterial({
+      color: 0x9fd8c0, transparent: true, opacity: 0.10,
+      roughness: 0.2, metalness: 0.1, side: THREE.DoubleSide
+    })
+  );
+  glass.position.y = 2.6;
+  house.add(glass);
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x3b4a3f, roughness: 0.9, flatShading: true });
+  for (const [x, z] of [[-5.5, -3.5], [5.5, -3.5], [-5.5, 3.5], [5.5, 3.5]] as const) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.24, 5.2, 0.24), frameMat);
+    post.position.set(x, 2.6, z);
+    house.add(post);
+  }
+  const ridge = new THREE.Mesh(new THREE.BoxGeometry(11.4, 0.22, 0.22), frameMat);
+  ridge.position.y = 5.3;
+  house.add(ridge);
+  const roof = new THREE.Mesh(
+    new THREE.ConeGeometry(7.6, 1.6, 4),
+    new THREE.MeshStandardMaterial({
+      color: 0x9fd8c0, transparent: true, opacity: 0.12, side: THREE.DoubleSide
+    })
+  );
+  roof.position.y = 6.0;
+  roof.rotation.y = Math.PI / 4;
+  house.add(roof);
+  scene.add(house);
+
+  // 畑ベッドと株。育ち具合は Mood で受け取り、背の高さで見せる
+  const beds = new THREE.Group();
+  const sprouts: THREE.Mesh[] = [];
+  const soilMat = new THREE.MeshStandardMaterial({ color: 0x33281d, roughness: 1, flatShading: true });
+  for (let i = 0; i < 6; i++) {
+    const col = i % 3, row = (i / 3) | 0;
+    const x = (col - 1) * 3.2;
+    const z = row === 0 ? -1.6 : 1.6;
+    const soil = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.3, 2.2), soilMat);
+    soil.position.set(x, 0.05, z);
+    beds.add(soil);
+    // 株。低ポリの円錐を重ねて「葉の茂み」に見せる
+    const plant = new THREE.Mesh(
+      new THREE.ConeGeometry(0.42, 1.1, 5),
+      new THREE.MeshStandardMaterial({
+        color: LEAF, roughness: 0.75, flatShading: true,
+        emissive: LEAF, emissiveIntensity: 0.12
+      })
+    );
+    plant.position.set(x, 0.75, z);
+    beds.add(plant);
+    sprouts.push(plant);
+  }
+  scene.add(beds);
+
+  // 蛍。収穫できるものがあるほど増やす
+  const fireflies = makeMotes(90, { x: 12, y: 5, z: 7 }, LEAF, 0.085, 71);
+  fireflies.position.y = 1.6;
+  scene.add(fireflies);
+
+  const inner = new THREE.PointLight(LEAF, 16, 20, 2);
+  inner.position.set(0, 2.6, 1);
+  scene.add(inner);
+  const bloom = glowSprite(LEAF, 7, 0.5);
+  bloom.position.set(0, 2.2, 0.5);
+  scene.add(bloom);
+
+  let ready = 0;
+  let wantReady = 0;
+
+  return {
+    scene, cam,
+    setMood(m) {
+      if (m.intensity !== undefined) wantReady = Math.max(0, Math.min(1, m.intensity));
+    },
+    update(t) {
+      ready += (wantReady - ready) * 0.06;
+      twinkle(stars, t);
+      driftMotes(fireflies, t, 0.16);
+      (fireflies.material as THREE.PointsMaterial).opacity = 0.22 + ready * 0.6;
+      inner.intensity = 11 + ready * 16 + Math.sin(t * 1.3) * 1.4;
+      bloom.scale.setScalar(6 + ready * 3 + Math.sin(t * 1.1) * 0.4);
+      for (const [i, p] of sprouts.entries()) {
+        // 揺れ。全部を同じ位相で揺らすと、造花に見える
+        p.rotation.z = Math.sin(t * 0.8 + i * 1.3) * 0.05;
+        const mat = p.material as THREE.MeshStandardMaterial;
+        mat.emissiveIntensity = 0.1 + ready * 0.5;
+      }
+      cam.position.x = Math.sin(t * 0.12) * 0.7;
+      cam.lookAt(0, -3.4, 0);
+    }
+  };
+}
+
+/**
+ * 錬金工房（新機能指示書「錬金工房シーン」）。
+ *
+ * 大鍋ひとつ。選んでいる薬の色が液面に乗り、調合中は泡が立つ。
+ * 完成の見せ方は開封のカットインに寄せて、画面ごとのトーンを揃える。
+ */
+function buildAlchemy(): SceneDef {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x080709);
+  scene.fog = new THREE.FogExp2(0x0b0a0d, 0.04);
+
+  const SUBJECT_Y = 2.2;
+  // 少し上から覗き込む。真横だと液面（色が変わる主役）が線になって消える
+  const cam = new THREE.PerspectiveCamera(40, 1, 0.1, 120);
+  cam.position.set(0, SUBJECT_Y + 4.4, 15);
+  cam.lookAt(0, SUBJECT_Y - 2.6, 0);
+
+  scene.add(new THREE.AmbientLight(0x2c2838, 1.5));
+  const key = new THREE.DirectionalLight(0xd8cfe8, 1.0);
+  key.position.set(3, 6, 6);
+  scene.add(key);
+
+  // 大鍋
+  const pot = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.5, 1.9, 2.2, 14, 1, true),
+    new THREE.MeshStandardMaterial({
+      color: 0x2b2f3c, roughness: 0.7, metalness: 0.55,
+      side: THREE.DoubleSide, flatShading: true
+    })
+  );
+  pot.position.y = SUBJECT_Y;
+  scene.add(pot);
+  const rimRing = new THREE.Mesh(
+    new THREE.TorusGeometry(2.5, 0.14, 6, 16),
+    new THREE.MeshStandardMaterial({ color: 0x4a5163, roughness: 0.5, metalness: 0.7, flatShading: true })
+  );
+  rimRing.rotation.x = Math.PI / 2;
+  rimRing.position.y = SUBJECT_Y + 1.1;
+  scene.add(rimRing);
+
+  // 液面。色は Mood で変わる
+  const brew = new THREE.Mesh(
+    new THREE.CircleGeometry(2.42, 20),
+    new THREE.MeshStandardMaterial({
+      color: 0x6f7f9e, emissive: 0x6f7f9e, emissiveIntensity: 0.7,
+      roughness: 0.25, metalness: 0.1
+    })
+  );
+  brew.rotation.x = -Math.PI / 2;
+  brew.position.y = SUBJECT_Y + 0.72;
+  scene.add(brew);
+
+  // 竈の火
+  const fire = glowSprite(0xff8348, 3.4, 0.9);
+  fire.position.set(0, SUBJECT_Y - 1.4, 0.6);
+  scene.add(fire);
+
+  // 泡。液面から立ちのぼる
+  const bubbles = makeMotes(60, { x: 3.4, y: 5, z: 3.4 }, 0xffffff, 0.075, 88);
+  bubbles.position.set(0, SUBJECT_Y + 0.8, 0);
+  scene.add(bubbles);
+
+  const potLight = new THREE.PointLight(0x6f7f9e, 16, 18, 2);
+  potLight.position.set(0, SUBJECT_Y + 1.4, 0);
+  scene.add(potLight);
+  const halo = glowSprite(0x6f7f9e, 6, 0.55);
+  halo.position.set(0, SUBJECT_Y + 1.0, 0);
+  scene.add(halo);
+
+  const cur = new THREE.Color(0x6f7f9e);
+  const want = new THREE.Color(0x6f7f9e);
+  let heat = 0.15;
+  let wantHeat = 0.15;
+
+  return {
+    scene, cam,
+    setMood(m) {
+      if (m.accent !== undefined) want.setHex(m.accent);
+      if (m.intensity !== undefined) wantHeat = Math.max(0, Math.min(1, m.intensity));
+    },
+    update(t) {
+      cur.lerp(want, 0.12);
+      heat += (wantHeat - heat) * 0.09;
+
+      const bm = brew.material as THREE.MeshStandardMaterial;
+      bm.color.copy(cur);
+      bm.emissive.copy(cur);
+      bm.emissiveIntensity = 0.35 + heat * 1.1 + Math.sin(t * 2.4) * 0.08;
+      potLight.color.copy(cur);
+      potLight.intensity = 8 + heat * 26;
+      (halo.material as THREE.SpriteMaterial).color.copy(cur);
+      halo.scale.setScalar(5 + heat * 3 + Math.sin(t * 1.9) * 0.35);
+      (bubbles.material as THREE.PointsMaterial).color.copy(cur);
+      (bubbles.material as THREE.PointsMaterial).opacity = 0.1 + heat * 0.6;
+      // 煮立つほど泡が速い
+      driftMotes(bubbles, t, 0.3 + heat * 1.4);
+      fire.scale.setScalar(3 + heat * 1.2 + Math.sin(t * 8.1) * 0.25);
+      cam.position.x = Math.sin(t * 0.11) * 0.4;
+      cam.lookAt(0, SUBJECT_Y - 2.6, 0);
+    }
+  };
+}
+
 // ---------------------------------------------------------------- 開封
 
 function buildReveal(opts: { color?: number } = {}): SceneDef {
@@ -850,6 +1142,8 @@ export const SCENES = {
   reveal: () => buildReveal({ color: 0xffc76b }),
   revealRare: () => buildReveal({ color: ARCANE }),
   pedestal: () => buildPedestal({ color: ARCANE }),
+  garden: buildGarden,
+  alchemy: buildAlchemy,
   pedestalFrost: () => buildPedestal({ color: FROST })
 };
 

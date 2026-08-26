@@ -1,3 +1,4 @@
+import type { HerbDef } from '../data/garden';
 import type {
   Dispatch, Item, JobId, RetreatRule, RunResult
 } from '../sim/types';
@@ -7,13 +8,16 @@ import { generateItem, starterItem } from '../sim/items';
 import { advanceClock, dispatchProgress, OFFLINE_CAP_SEC, type ClockState } from '../sim/offline';
 import { jobDef, retreatRuleDef, SLOT_COST, UNLOCK_STAGE_FOR_SLOT } from '../data/jobs';
 import { stageDef, STAGES, itemPowerFor } from '../data/stages';
+import {
+  HERBS, PLOTS_INITIAL, PLOTS_MAX, herbDef, herbForElement, plotCost, potionDef
+} from '../data/garden';
 import { AFFIXES } from '../data/affixes';
 import { notifyReturn, requestNotifyPermission } from './notify';
 
 // 拠点の状態とセーブ。サーバなし、ローカル永続化のみ（§3）。
 
 const SAVE_KEY = 'delvers.save.v1';
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;
 
 export interface CompendiumEntry {
   /** 初めて入手したステージ（§7.4） */
@@ -51,13 +55,48 @@ export interface SaveData {
   lost: Record<string, Item[]>;
   /** 図鑑。キーは `${baseId}|${rarity}` と `unique:${kind}` */
   compendium: Record<string, CompendiumEntry>;
+  /** 薬草園（新機能）。畑・種・収穫物・薬 */
+  garden: GardenData;
   lastSeen: number;
   nextId: number;
+}
+
+/** 畑1枠。null なら空き */
+export interface Plot {
+  herbId: string;
+  /** 植えた時刻（ミリ秒） */
+  plantedAt: number;
+}
+
+export interface GardenData {
+  /** 金を払って開けた畑の数 */
+  plots: number;
+  /** 各枠の中身。長さは plots に合わせる */
+  beds: (Plot | null)[];
+  /** herbId -> 手持ちの種の数 */
+  seeds: Record<string, number>;
+  /** herbId -> 手持ちの収穫物の数 */
+  herbs: Record<string, number>;
+  /** potionId -> 手持ちの薬の数 */
+  potions: Record<string, number>;
+}
+
+function defaultGarden(): GardenData {
+  return {
+    plots: PLOTS_INITIAL,
+    beds: Array.from({ length: PLOTS_INITIAL }, () => null),
+    // 最初の種は配る。畑があるのに植えるものが無いと、
+    // 開幕で「何もできない画面」を見せることになる
+    seeds: { ironleaf: 2, embermoss: 1 },
+    herbs: {},
+    potions: {}
+  };
 }
 
 function defaultSave(seed: number, now: number): SaveData {
   const s: SaveData = {
     version: SAVE_VERSION,
+    garden: defaultGarden(),
     seed,
     gold: 0,
     tier: 1,
@@ -183,12 +222,18 @@ export class GameState {
    * 派遣する。結果はこの時点で確定させ、実時間は「見せるタイミング」だけを決める。
    * これによりオフライン計算が分割しても一括しても一致する（C4）。
    */
-  dispatch(jobId: JobId, stageId: number, rule: RetreatRule, now: number): boolean {
+  dispatch(
+    jobId: JobId, stageId: number, rule: RetreatRule, now: number,
+    potionId: string | null = null
+  ): boolean {
     if (this.isBusy(jobId)) return false;
     const eq = this.data.equipped[jobId];
     const weapon = this.itemById(eq.weapon);
     const armor = this.itemById(eq.armor);
     if (!weapon || !armor) return false;
+    // 薬は**出発の瞬間に消費する**。持たせたのに手元にも残っていると、
+    // 同じ1本を何人にも持たせられてしまう
+    const usable = potionId && (this.data.garden.potions[potionId] ?? 0) > 0 ? potionId : null;
 
     // 帰還通知の許可は、初めて派遣を出したこの瞬間にだけ求める（§7.2）。
     // 起動直後に求めても何のための許可か分からず、まず拒否される。
@@ -197,10 +242,15 @@ export class GameState {
     const job = jobDef(jobId);
     const stage = stageDef(stageId);
     const seed = (this.data.seed ^ (this.data.nextId * 0x9e3779b1)) >>> 0;
+    const p = usable ? potionDef(usable) : null;
     const result = simulateRun({
       seed, job, weapon, armor,
-      rule: retreatRuleDef(rule), stage, tier: this.data.tier
+      rule: retreatRuleDef(rule), stage, tier: this.data.tier,
+      potion: p ? { element: p.element, resist: p.resist, name: p.name } : null
     });
+    if (usable) {
+      this.data.garden.potions[usable] = (this.data.garden.potions[usable] ?? 0) - 1;
+    }
 
     const id = `d${this.data.nextId++}`;
     // 戦利品のIDを一意にし直す（生成側は run 内での連番しか知らないため）
@@ -210,6 +260,7 @@ export class GameState {
       id, jobId, stageId,
       weaponId: weapon.id, armorId: armor.id,
       retreatRule: rule, seed,
+      potionId: usable,
       startedAt: now,
       // オフライン進行は8時間で頭打ちになる（§7.2）。深淵(480分)を重装兵
       // (所要+15%)で踏破すると 33,120秒となり、上限28,800秒を超えて
@@ -261,6 +312,15 @@ export class GameState {
         }
       }
     }
+    // 潜った先の属性の種を持ち帰る（薬草園）。
+    // **乱数は引かない。** 派遣の結果はすでに確定しているので、
+    // そこから決まる数にしておけば、何度読み直しても同じになる。
+    const stage = stageDef(d.stageId);
+    const elem = stage.enemyElement === 'mixed' ? 'physical' : stage.enemyElement;
+    const herb = herbForElement(elem);
+    const got = 1 + Math.floor(result.depth / 4);
+    this.data.garden.seeds[herb.id] = (this.data.garden.seeds[herb.id] ?? 0) + got;
+
     this.data.inbox.push(d.id);
 
     // §7.2「帰還時にローカル通知を送る」。画面を見ていないときだけ鳴らす
@@ -307,6 +367,125 @@ export class GameState {
     this.data.pending = [];
     this.save();
     return opened;
+  }
+
+  // -------------------------------------------------------------- 薬草園
+
+  /**
+   * 畑1枠の育ち具合（0〜1）。
+   *
+   * **オフラインに上限を置かない。** 派遣は8時間で頭打ちにしているが
+   * （SPEC §7.2・見ていない間に全部終わると遊ぶものが無くなるため）、
+   * 畑は逆に「放っておいて構わない」ことが売りなので、
+   * 寝ている間もそのまま育つ。腐りもしない。
+   */
+  plotProgress(index: number): { herb: HerbDef; ratio: number; remainingSec: number } | null {
+    const bed = this.data.garden.beds[index];
+    if (!bed) return null;
+    const herb = herbDef(bed.herbId);
+    const elapsed = Math.max(0, (this.clock().lastSeen - bed.plantedAt) / 1000);
+    const ratio = Math.max(0, Math.min(1, elapsed / herb.growSec));
+    return { herb, ratio, remainingSec: Math.max(0, herb.growSec - elapsed) };
+  }
+
+  /** 収穫できる枠の数。拠点のバッジに出す */
+  readyCount(): number {
+    let n = 0;
+    for (let i = 0; i < this.data.garden.beds.length; i++) {
+      if ((this.plotProgress(i)?.ratio ?? 0) >= 1) n++;
+    }
+    return n;
+  }
+
+  plant(index: number, herbId: string): boolean {
+    const g = this.data.garden;
+    if (index < 0 || index >= g.beds.length || g.beds[index]) return false;
+    if ((g.seeds[herbId] ?? 0) <= 0) return false;
+    g.seeds[herbId] = (g.seeds[herbId] ?? 0) - 1;
+    g.beds[index] = { herbId, plantedAt: this.clock().lastSeen };
+    this.save();
+    return true;
+  }
+
+  /** 育ちきった枠を収穫する。育っていなければ何もしない（早取りはさせない）。 */
+  harvest(index: number): number {
+    const p = this.plotProgress(index);
+    if (!p || p.ratio < 1) return 0;
+    const g = this.data.garden;
+    g.herbs[p.herb.id] = (g.herbs[p.herb.id] ?? 0) + p.herb.yield;
+    g.beds[index] = null;
+    this.save();
+    return p.herb.yield;
+  }
+
+  harvestAll(): number {
+    let n = 0;
+    for (let i = 0; i < this.data.garden.beds.length; i++) n += this.harvest(i);
+    return n;
+  }
+
+  buySeed(herbId: string): boolean {
+    const herb = herbDef(herbId);
+    if (this.data.gold < herb.seedCost) return false;
+    this.data.gold -= herb.seedCost;
+    this.data.garden.seeds[herbId] = (this.data.garden.seeds[herbId] ?? 0) + 1;
+    this.save();
+    return true;
+  }
+
+  nextPlotCost(): number | null {
+    const g = this.data.garden;
+    if (g.plots >= PLOTS_MAX) return null;
+    return plotCost(g.plots);
+  }
+
+  expandGarden(): boolean {
+    const cost = this.nextPlotCost();
+    if (cost === null || this.data.gold < cost) return false;
+    this.data.gold -= cost;
+    this.data.garden.plots++;
+    this.data.garden.beds.push(null);
+    this.save();
+    return true;
+  }
+
+  /** その薬を今すぐ作れるか。主材料2つ＋別の薬草1つ（data/garden.ts）。 */
+  canBrew(potionId: string): boolean {
+    const p = potionDef(potionId);
+    const g = this.data.garden;
+    if ((g.herbs[p.main] ?? 0) < 2) return false;
+    let others = 0;
+    for (const h of HERBS) {
+      if (h.id === p.main) continue;
+      others += g.herbs[h.id] ?? 0;
+    }
+    return others >= p.other;
+  }
+
+  /**
+   * 調合する。主材料以外は**数の多いものから減らす**。
+   *
+   * 少ないほうから使うと、あと1つで別の薬が作れた材料を潰してしまう。
+   * どれを使うか毎回選ばせるのは、この作品の「決めるのは3つだけ」に反する。
+   */
+  brew(potionId: string): boolean {
+    if (!this.canBrew(potionId)) return false;
+    const p = potionDef(potionId);
+    const g = this.data.garden;
+    g.herbs[p.main] = (g.herbs[p.main] ?? 0) - 2;
+    let need = p.other;
+    const pool = HERBS.filter(h => h.id !== p.main)
+      .sort((a, b) => (g.herbs[b.id] ?? 0) - (g.herbs[a.id] ?? 0));
+    for (const h of pool) {
+      while (need > 0 && (g.herbs[h.id] ?? 0) > 0) {
+        g.herbs[h.id] = (g.herbs[h.id] ?? 0) - 1;
+        need--;
+      }
+      if (need === 0) break;
+    }
+    g.potions[potionId] = (g.potions[potionId] ?? 0) + 1;
+    this.save();
+    return true;
   }
 
   // -------------------------------------------------------------- 金
@@ -405,9 +584,16 @@ function loadSave(): SaveData | null {
       parsed.unlockedSlots = n;
       parsed.version = SAVE_VERSION;
     }
+    // v2 → v3: 薬草園が増えた。既存のセーブには畑を初期状態で足すだけで、
+    // 今までの持ち物・進捗には一切触れない
+    if (parsed.version === 2) {
+      parsed.garden = defaultGarden();
+      parsed.version = SAVE_VERSION;
+    }
     if (parsed.version !== SAVE_VERSION) return null;
     if (typeof parsed.unlockedSlots !== 'number') parsed.unlockedSlots = 1;
     if (!parsed.lost) parsed.lost = {};
+    if (!parsed.garden) parsed.garden = defaultGarden();
     return parsed as SaveData;
   } catch {
     return null;

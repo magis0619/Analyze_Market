@@ -5,6 +5,7 @@ import type { Nav, Screen } from '../shell';
 import { RETREAT_RULES, canEquipArmor, jobDef, retreatRuleDef } from '../../data/jobs';
 import { baseDef } from '../../data/bases';
 import { bossName, stageDef, STAGES } from '../../data/stages';
+import { POTIONS, potionForElement } from '../../data/garden';
 import { enemiesForStage } from '../../data/enemies';
 import { simulateRun } from '../../sim/combat';
 import { dominantElement } from '../../sim/items';
@@ -50,6 +51,8 @@ export function dispatchScreen(nav: Nav): Screen {
   let picking: 'weapon' | 'armor' | null = null;
   /** 比較中の候補。null なら一覧のまま */
   let candidate: Item | null = null;
+  /** 持たせる薬。null なら持たせない */
+  let potionId: string | null = null;
 
   /** 所要時間の見積のキャッシュ。条件が変わるまで使い回す */
   let etaKey = '';
@@ -97,6 +100,41 @@ export function dispatchScreen(nav: Nav): Screen {
     etaKey = key;
     etaCache = { min, max, hopeless: zero > N / 2 };
     return etaCache;
+  }
+
+  /**
+   * 薬を持たせる段（新機能：薬草園）。
+   *
+   * **派遣先に効くものを推す。** どれが効くかは既存の属性相性と同じ理屈なので、
+   * 灼熱坑なら耐炎油、という対応をそのまま出す。持たせないのも選べる——
+   * 薬は貴重なので「毎回持つ」を強制すると、育てる楽しみが義務になる。
+   */
+  function potionPanel(): string {
+    const st = nav.state;
+    const stage = stageDef(stageId);
+    const owned = POTIONS.filter(p => (st.data.garden.potions[p.id] ?? 0) > 0);
+    if (owned.length === 0) return '';
+    const best = stage.enemyElement === 'mixed' ? null : potionForElement(stage.enemyElement);
+    return panel('薬を持たせる', `<div class="list">
+      <button class="item ${potionId === null ? 'on' : ''}" data-tap data-act="potion" data-id="">
+        <div class="ic">無</div>
+        <div class="tx"><div class="n">持たせない</div><div class="m">薬は温存する</div></div>
+      </button>
+      ${each(owned, p => {
+        const rec = best?.id === p.id;
+        return `<button class="item ${potionId === p.id ? 'on' : ''}"
+                        data-tap data-act="potion" data-id="${p.id}">
+          <div class="ic ${p.element}">薬</div>
+          <div class="tx">
+            <div class="n">${esc(p.name)} <b style="color:var(--faint)">×${st.data.garden.potions[p.id] ?? 0}</b></div>
+            <div class="m${rec ? ' aff-weak' : ''}">${esc(rec
+              ? `${stage.name}の敵は${elementLabel(stage.enemyElement)}。これが効く`
+              : p.text)}</div>
+          </div>
+          ${when(rec, '<div class="rr" style="color:var(--up)">推奨</div>')}
+        </button>`;
+      })}
+    </div>`);
   }
 
   /** 装備とステージ属性の噛み合い。プレイヤーが装備を選ぶ唯一の手がかり（§6.4）。 */
@@ -321,6 +359,8 @@ ${topBar({
     ${matchupHint()}
   `)}
 
+  ${potionPanel()}
+
   ${panel('撤退ルール', `<div class="rules">${each(RETREAT_RULES, r => `
     <div class="rule ${rule === r.id ? 'on' : ''}" style="--rcol:var(--${RULE_TONE[r.id]})"
          data-tap data-act="rule" data-id="${r.id}">
@@ -409,6 +449,7 @@ ${actionBar(button({
         }
         case 'pick-back': candidate = null; return;
         case 'sortmode': sortByRaw = el.dataset.i === '1'; return;
+        case 'potion': potionId = el.dataset.id || null; return;
         case 'pick-close': picking = null; candidate = null; return;
         case 'equip': {
           if (!candidate || !picking) return;
@@ -421,7 +462,7 @@ ${actionBar(button({
           return;
         }
         case 'go': {
-          if (st.dispatch(job(), stageId, rule, nav.now())) nav.goBase();
+          if (st.dispatch(job(), stageId, rule, nav.now(), potionId)) nav.goBase();
           return;
         }
       }

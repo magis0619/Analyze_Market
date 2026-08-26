@@ -3,6 +3,7 @@ import type { Mood } from '../../world/scenes';
 import type { Nav, Screen } from '../shell';
 import { jobDef, retreatRuleDef } from '../../data/jobs';
 import { bossName, stageDef } from '../../data/stages';
+import { potionDef, potionForElement } from '../../data/garden';
 import { dominantElement } from '../../sim/items';
 import {
   actionBar, button, elementLabel, figures, itemRow, panel, toasts, topBar
@@ -67,6 +68,11 @@ export function reportScreen(nav: Nav, dispatchId: string): Screen {
     if (result.depth / Math.max(1, result.encountersTotal) < 0.35) {
       out.push('装備がこの階層に届いていない。一段浅いステージを回して稼ぐのが近道');
     }
+    // 薬草園。効く薬を持たずに削られた回は、それを言う
+    if (!info?.potionId && stage.enemyElement !== 'mixed') {
+      const p = potionForElement(stage.enemyElement);
+      if (p) out.push(`${elementLabel(stage.enemyElement)}の敵には《${p.name}》が効く。薬草園で作れる`);
+    }
     return out.slice(0, 3);
   }
 
@@ -99,6 +105,7 @@ ${actionBar(button({ label: '拠点へ戻る', act: 'done', tier: 'quiet', block
       // §4「帰還後に見せるだけ」。派遣中に操作は求めないが、
       // どこで何が起きたかは後から辿れるようにする
       const beats = beatsOf(r, stage);
+      const potion = info?.potionId ? potionDef(info.potionId) : null;
       const lost: Item[] = st.data.lost[dispatchId] ?? [];
       const tips = advice();
       // 戦利品があるなら開封が次の一手。無ければ帰るだけなので段を落とす
@@ -130,6 +137,18 @@ ${topBar({ title: '帰還レポート', gold: st.data.gold, meta: stage.name })}
         `<div class="tr" style="color:var(--${BEAT_TONE[b.kind]})">
            <span class="bi bi-${b.kind}">${BEAT_ICON[b.kind]}</span>
            <span class="d">${b.depth}</span><span class="tx">${esc(b.text)}</span></div>`)}</div>
+  `))}
+
+  ${when(potion !== null, panel('持たせた薬', `
+    <div class="item">
+      <div class="ic ${potion?.element}">薬</div>
+      <div class="tx">
+        <div class="n">${esc(potion?.name ?? '')}</div>
+        <div class="m">${esc(potion?.text ?? '')}</div>
+      </div>
+      <div class="rr" style="color:var(--${(r.stats.potionSaved ?? 0) > 0 ? 'up' : 'faint'})">${
+        (r.stats.potionSaved ?? 0) > 0 ? `-${num(r.stats.potionSaved)}` : '出番なし'}</div>
+    </div>
   `))}
 
   ${panel('この回の数字', figures([

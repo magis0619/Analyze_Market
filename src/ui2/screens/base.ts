@@ -32,6 +32,8 @@ interface Tile {
   wide: string;
   /** 未処理の件数。0 なら押せない */
   count?: (nav: Nav) => number;
+  /** 件数が0でも押せる（薬草園は「何も無くても行ける場所」） */
+  idleOk?: boolean;
 }
 
 /**
@@ -55,7 +57,11 @@ const TILES: readonly Tile[] = [
   { act: 'open', en: 'Unopened', label: '開封', wide: '未鑑定品を開封する',
     count: n => n.state.data.pending.length },
   { act: 'report', en: 'Report', label: 'レポート', wide: '帰還レポートを読む',
-    count: n => n.state.data.inbox.length }
+    count: n => n.state.data.inbox.length },
+  // 薬草園。**バッジは未開封と同じ文法**——「そこに未処理がある」を
+  // 同じ形で言えば、新しい読み方を覚えずに済む（指示書「既存画面への影響」）
+  { act: 'garden', en: 'Garden', label: '薬草園', wide: '薬草園を見る',
+    count: n => n.state.readyCount(), idleOk: true }
 ];
 
 export function baseScreen(nav: Nav): Screen {
@@ -114,7 +120,7 @@ ${actionBar(button({ label: '閉じる', act: 'detail-close', tier: 'quiet', blo
   /** 1枚ぶん。ActionBar が指しているものだけ段を1つ上げる */
   function tile(t: Tile, cta: string): string {
     const n = t.count ? t.count(nav) : -1;
-    const off = n === 0;
+    const off = n === 0 && !t.idleOk;
     const main = t.act === cta;
     return `<button class="action ${main ? 'secondary' : ''}"
                     data-tap data-act="${t.act}"${off ? ' disabled' : ''}>
@@ -171,6 +177,13 @@ ${actionBar(button({ label: '閉じる', act: 'detail-close', tier: 'quiet', blo
       return {
         label: '帰還レポートを読む', act: 'report',
         why: `未読のレポートが ${st.data.inbox.length}件。次の装備の手がかりが書いてある`
+      };
+    }
+    const ready = st.readyCount();
+    if (ready > 0) {
+      return {
+        label: `薬草を ${ready}枠ぶん収穫する`, act: 'garden',
+        why: `${ready}枠が育ちきっている。採るまで次を植えられない`
       };
     }
     return {
@@ -300,6 +313,7 @@ ${toasts(notices)}`;
         case 'dispatch': nav.goDispatch(); return;
         case 'inventory': nav.goInventory(); return;
         case 'compendium': nav.goCompendium(); return;
+        case 'garden': nav.goGarden(); return;
         case 'detail': detail = true; return;
         case 'detail-close': detail = false; return;
         case 'hire':

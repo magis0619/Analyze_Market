@@ -161,7 +161,9 @@ interface Loadout {
   armorUnique: Item['unique'];
 }
 
-function buildLoadout(weapon: Item, armor: Item): Loadout {
+function buildLoadout(
+  weapon: Item, armor: Item, potion?: { element: Element; resist: number } | null
+): Loadout {
   const wBase = baseDef(weapon.baseId);
   const lo: Loadout = {
     attack: weapon.power,
@@ -207,6 +209,12 @@ function buildLoadout(weapon: Item, armor: Item): Loadout {
       default: break;
     }
   }
+
+  // 薬は防具の耐性と同じ場所に足す。上限（0.75）も共通なので、
+  // 「耐性防具＋同属性の薬」で無敵にはならない
+  if (potion) {
+    lo.resist[potion.element] = (lo.resist[potion.element] ?? 0) + potion.resist;
+  }
   // L4 ユニーク（§5.5）
   if (weapon.unique === 'noCritFlatPower') {
     lo.critRate = 0;
@@ -230,6 +238,8 @@ interface Telemetry {
   totalTaken: number;
   takenByElement: Partial<Record<Element, number>>;
   resistSaved: number;
+  /** そのうち薬が減らしたぶん */
+  potionSaved: number;
   /** 防具ユニーク『背水の鎧』が肩代わりした被弾量 */
   lastStandSaved: number;
   /** 防具ユニーク『棘の外套』が返したダメージ量 */
@@ -246,7 +256,7 @@ function newTelemetry(): Telemetry {
   return {
     damageByElement: {}, damageByAffix: {},
     resistedLoss: 0, weaknessGain: 0, totalDealt: 0,
-    totalTaken: 0, takenByElement: {}, resistSaved: 0,
+    totalTaken: 0, takenByElement: {}, resistSaved: 0, potionSaved: 0,
     lastStandSaved: 0, thornsDealt: 0,
     healed: 0, crits: 0, hits: 0, kills: 0, biggestHit: 0, evaded: 0
   };
@@ -263,12 +273,22 @@ export interface SimulateInput {
   stage: StageDef;
   /** 難易度ティア（1始まり。ステージ10クリアで+1） */
   tier: number;
+  /**
+   * 持たせた薬（薬草園）。無ければ持たせていない。
+   *
+   * **乱数は一切引かない。** 決まった属性の被ダメージを決まった率で
+   * 減らすだけなので、同じ seed・同じ薬なら結果は完全に同じになる。
+   * 決定性（§7.2）はここでも崩れない。
+   */
+  potion?: { element: Element; resist: number; name: string } | null;
 }
 
 export function simulateRun(input: SimulateInput): RunResult {
   const { job, weapon, armor, rule, stage, tier } = input;
   const rng = new Prng(input.seed);
-  const lo = buildLoadout(weapon, armor);
+  const lo = buildLoadout(weapon, armor, input.potion);
+  const potionElem = input.potion?.element ?? null;
+  const potionRate = input.potion?.resist ?? 0;
   const tm = newTelemetry();
 
   const maxHp = job.hp;
@@ -456,6 +476,12 @@ export function simulateRun(input: SimulateInput): RunResult {
           );
           const res = Math.min(0.75, lo.resist[elem] ?? 0);
           const beforeRes = e.attack * (1 - defRate) * takenMul;
+          // 薬のぶんだけ別に数える。装備の耐性と混ぜると
+          // 「薬のおかげでどれだけ減ったか」が言えなくなる
+          if (potionElem === elem && potionRate > 0) {
+            const withoutPotion = Math.min(0.75, Math.max(0, (lo.resist[elem] ?? 0) - potionRate));
+            tm.potionSaved += beforeRes * ((1 - withoutPotion) - (1 - res));
+          }
           // 『背水の鎧』：HP25%以下で被ダメージ半減
           const lastStandMul = lastStand && hp / maxHp <= 0.25 ? 0.5 : 1;
           const taken = beforeRes * (1 - res) * lastStandMul;
@@ -594,7 +620,7 @@ export function simulateRun(input: SimulateInput): RunResult {
     gold,
     headline: buildHeadline(outcome, depth, stage, bossDefeated, deathCause),
     highlights: buildHighlights(tm, weapon, armor, outcome, splitMuls, deathCause,
-      depth, stage.encounters),
+      depth, stage.encounters, stage, input.potion?.name ?? null),
     hpCurve,
     durationSec: Math.max(1, durationSec),
     stats: {
@@ -604,7 +630,8 @@ export function simulateRun(input: SimulateInput): RunResult {
       hits: tm.hits,
       crits: tm.crits,
       biggestHit: Math.round(tm.biggestHit),
-      evaded: tm.evaded
+      evaded: tm.evaded,
+      potionSaved: Math.round(tm.potionSaved)
     }
   };
 }
@@ -644,7 +671,8 @@ function buildHighlights(
   tm: Telemetry, weapon: Item, armor: Item,
   outcome: RunResult['outcome'],
   splitMuls: { e: Element; p: number; mul: number }[],
-  deathCause: string, depth: number, total: number
+  deathCause: string, depth: number, total: number,
+  stage: StageDef, potionName: string | null
 ): string[] {
   const lines: string[] = [];
   const dealt = Math.max(1, tm.totalDealt);
@@ -704,6 +732,19 @@ function buildHighlights(
         ? `${tm.hits}回中${tm.crits}回が会心。会心が火力の柱だった`
         : `会心は${tm.hits}回中${tm.crits}回（${rate}%）で、勝敗にはほぼ関与していない`);
     }
+  }
+
+  // --- 薬を持たせていたら、その働きを必ず1行にする（薬草園）。
+  // 効いていないのに「持った」とだけ書くのは何も言っていないのと同じなので、
+  // 実測で肩代わりした量が意味のある大きさのときだけ言う。
+  // 逆に、**効いたはずの薬を持っていなかった**ことも言う——
+  // 次に何をすればいいかが分かるのは、そちらの行のほうである。
+  if (tm.potionSaved > taken * 0.04 && potionName) {
+    lines.push(`《${potionName}》が被弾を${Math.round(tm.potionSaved)}肩代わりした`
+      + `（受けた分の${Math.round((tm.potionSaved / (taken + tm.potionSaved)) * 100)}%）`);
+  } else if (!potionName && stage.enemyElement !== 'mixed' && taken > 0) {
+    const en = ELEM_NAME[stage.enemyElement];
+    lines.push(`${en}耐性の薬を持たせていれば、被弾を1割ほど抑えられたかもしれない`);
   }
 
   // --- 3行目: 生存の要因／敗因 ---

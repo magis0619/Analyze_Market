@@ -9,6 +9,7 @@ import { uniqueDef } from '../src/data/uniques';
 import { BASE_TYPES, baseDef } from '../src/data/bases';
 import { JOBS, RETREAT_RULES, canEquipArmor, jobDef, retreatRuleDef } from '../src/data/jobs';
 import { STAGES, itemPowerFor, stageDef } from '../src/data/stages';
+import { HERBS, POTIONS } from '../src/data/garden';
 import type { Dispatch, Item } from '../src/sim/types';
 
 let failures = 0;
@@ -388,6 +389,63 @@ console.log('回帰: 批評R1で検出した破綻');
 
 // ---------------------------------------------------------------- 回帰（R2）
 // 批評ラウンド2への修正の再発防止。
+// ---------------------------------------------------------------- 薬草園
+console.log('薬草園');
+{
+  const rng = new Prng(0xA11CE);
+  const w = makeItem(rng, 'sword', 100);
+  const a = makeItem(rng, 'medium', 100);
+  const stage = stageDef(3);   // 灼熱坑（敵は炎）
+  const run = (potion: { element: 'fire'; resist: number; name: string } | null) =>
+    simulateRun({
+      seed: 0x1234, job: jobDef('swordsman'), weapon: w, armor: a,
+      rule: retreatRuleDef('standard'), stage, tier: 1, potion
+    });
+
+  // 決定性。薬を足しても「同じ種・同じ入力なら同じ結果」は崩れない
+  const a1 = run(null), a2 = run(null);
+  check('薬なしで同じ種なら同じ結果', JSON.stringify(a1) === JSON.stringify(a2));
+  const p = { element: 'fire' as const, resist: 0.32, name: '耐炎油' };
+  const b1 = run(p), b2 = run(p);
+  check('薬ありで同じ種なら同じ結果', JSON.stringify(b1) === JSON.stringify(b2));
+
+  // 効果。
+  //
+  // **累計の被弾では測れない。** 被害が減ると長く生き延びるので、
+  // 受けた総量はむしろ増える（実測 73 → 82）。測るべきは
+  // 「どこまで行けたか」と「1遭遇あたりどれだけ削られたか」。
+  const perEnc = (r: typeof a1) => r.stats.taken / Math.max(1, r.depth);
+  check('薬が到達深度を伸ばす', b1.depth >= a1.depth,
+    `薬なし ${a1.depth} → 薬あり ${b1.depth}`);
+  check('薬が1遭遇あたりの被弾を減らす', perEnc(b1) < perEnc(a1),
+    `薬なし ${perEnc(a1).toFixed(1)} → 薬あり ${perEnc(b1).toFixed(1)}`);
+  check('薬の肩代わり分が記録される', b1.stats.potionSaved > 0 && a1.stats.potionSaved === 0,
+    `${a1.stats.potionSaved} / ${b1.stats.potionSaved}`);
+
+  // 上限。耐性は装備と合算しても 75% を超えない
+  const strong = run({ element: 'fire', resist: 0.9, name: '試験' });
+  check('耐性の上限を超えない', strong.stats.taken > 0,
+    '被弾が0になっている（上限が効いていない）');
+
+  // 見どころ。持たせなかった回は「薬があれば」を必ず言う
+  check('薬を持たない回に助言が出る',
+    a1.highlights.some(h => h.includes('薬')),
+    a1.highlights.join(' / '));
+  check('薬を持った回はその働きを言う',
+    b1.highlights.some(h => h.includes('耐炎油')),
+    b1.highlights.join(' / '));
+
+  // レシピ。1種類だけ育てても作れない（畑を1色に染めさせない）
+  for (const pot of POTIONS) {
+    check(`${pot.name} は別の薬草も要る`, pot.other >= 1);
+    check(`${pot.name} の主材料が実在する`, HERBS.some(h => h.id === pot.main));
+    check(`${pot.name} の属性に対応する薬草がある`,
+      HERBS.some(h => h.element === pot.element));
+  }
+  check('薬草は5属性すべてを覆う',
+    new Set(HERBS.map(h => h.element)).size === 5);
+}
+
 console.log('回帰: 批評R2で検出した破綻');
 {
   // ベースタイプに構造的な最下位が固定されていないか。

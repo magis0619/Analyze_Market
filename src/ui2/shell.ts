@@ -58,6 +58,8 @@ export interface Nav {
   goDispatch(): void;
   goInventory(): void;
   goCompendium(): void;
+  goGarden(): void;
+  goAlchemy(): void;
   goOpening(items: Item[]): void;
   goReport(dispatchId: string): void;
 }
@@ -68,6 +70,8 @@ export interface ScreenFactories {
   dispatch: (nav: Nav) => Screen;
   inventory: (nav: Nav) => Screen;
   compendium: (nav: Nav) => Screen;
+  garden: (nav: Nav) => Screen;
+  alchemy: (nav: Nav) => Screen;
   opening: (nav: Nav, items: Item[]) => Screen;
   report: (nav: Nav, dispatchId: string) => Screen;
 }
@@ -158,6 +162,8 @@ export class Shell implements Nav {
   goDispatch(): void { this.go('dispatch', this.factories.dispatch(this)); }
   goInventory(): void { this.go('inventory', this.factories.inventory(this)); }
   goCompendium(): void { this.go('compendium', this.factories.compendium(this)); }
+  goGarden(): void { this.go('garden', this.factories.garden(this)); }
+  goAlchemy(): void { this.go('alchemy', this.factories.alchemy(this)); }
   goOpening(items: Item[]): void { this.go('opening', this.factories.opening(this, items)); }
   goReport(id: string): void { this.go('report', this.factories.report(this, id)); }
 

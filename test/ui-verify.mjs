@@ -624,6 +624,126 @@ if (await page.$('.cell.found')) {
   await probe(page, 'compendium');
 }
 
+// --- 薬草園と錬金工房（新機能）
+//
+// 新しい画面は「押せる・読める」を一度も測らないまま出ていた。
+// 拠点から実際に歩いて辿り着き、育てて・収穫して・調合するところまで通す。
+// **状態は state の API で作らない**——買う・植える・作るは画面のボタンで押す。
+// ボタン越しに動くことまで含めて確かめたいので、近道すると測る意味が薄れる。
+// 時間だけは早送りできないので、植えた時刻を過去へずらして育ちきらせる。
+for (let i = 0; i < 4; i++) {
+  if (await page.evaluate(() => document.documentElement.dataset.screen) === 'base') break;
+  await page.click('[data-role=back]').catch(() => {});
+  await page.waitForTimeout(350);
+}
+await page.evaluate(() => {
+  window.__delvers.state.data.gold = 99999;
+  window.__delvers.shell.invalidate();
+});
+await page.click('[data-act=garden]');
+await page.waitForTimeout(600);
+await probe(page, 'garden');
+
+// 種を買う
+await page.click('[data-act=tab][data-i="1"]');
+await page.waitForTimeout(400);
+await probe(page, 'garden');
+check('G1', 'garden', (await page.$('[data-act=buy][data-id=ironleaf]')) !== null, '種を買うボタンが無い');
+await page.click('[data-act=buy][data-id=ironleaf]');
+await page.waitForTimeout(350);
+check('G2', 'garden',
+  await page.evaluate(() => (window.__delvers.state.data.garden.seeds.ironleaf ?? 0) > 0),
+  '種を買っても手持ちが増えていない');
+
+// 植える
+await page.click('[data-act=tab][data-i="0"]');
+await page.waitForTimeout(400);
+check('G3', 'garden', (await page.$('.bed.empty')) !== null, '空きの畑が1枠も無い');
+await page.click('.bed.empty');
+await page.waitForTimeout(450);
+check('G4', 'garden', (await page.$('.sheet-list .item:not([disabled])')) !== null,
+  '種を持っているのに植えられる薬草が出ていない');
+await probe(page, 'garden');                    // 植え付けシート
+await page.click('.sheet-list .item:not([disabled])');
+await page.waitForTimeout(450);
+check('G5', 'garden',
+  await page.evaluate(() => window.__delvers.state.data.garden.beds.some(b => b !== null)),
+  '植えたのに畑が空のまま');
+const gplant = await probe(page, 'garden');
+check('G6', 'garden', gplant.ringCount > 0, '育成中の畑に進捗リングが出ていない');
+
+// 育ちきらせる（実時間は待てないので、植えた時刻を過去へ）
+await page.evaluate(() => {
+  for (const b of window.__delvers.state.data.garden.beds) if (b) b.plantedAt -= 60 * 60 * 1000;
+  window.__delvers.shell.invalidate();
+});
+await page.waitForTimeout(450);
+check('G7', 'garden', await page.evaluate(() => window.__delvers.state.readyCount() > 0),
+  '時間が経っても育ちきらない');
+await probe(page, 'garden');
+await page.click('[data-role=cta]');            // まとめて収穫
+await page.waitForTimeout(450);
+check('G8', 'garden',
+  await page.evaluate(() =>
+    Object.values(window.__delvers.state.data.garden.herbs).reduce((a, b) => a + b, 0) > 0),
+  '収穫しても薬草が増えていない');
+await probe(page, 'garden');                    // 通知が出ている状態
+
+// 錬金工房。材料が1回分では足りないので、畑を回した結果に足して整える
+await page.evaluate(() => {
+  const g = window.__delvers.state.data.garden;
+  g.herbs.ironleaf = (g.herbs.ironleaf ?? 0) + 2;
+  g.herbs.embermoss = (g.herbs.embermoss ?? 0) + 2;
+  g.seeds.frostbloom = (g.seeds.frostbloom ?? 0) + 3;
+  window.__delvers.state.save();
+  window.__delvers.shell.invalidate();
+});
+await page.click('[data-act=tab][data-i="1"]');
+await page.waitForTimeout(400);
+await page.click('[data-act=alchemy]');
+await page.waitForTimeout(600);
+await probe(page, 'alchemy');
+await page.click('[data-act=sel][data-id=ironblood]');
+await page.waitForTimeout(400);
+await probe(page, 'alchemy');                   // 材料の内訳が開いた状態
+check('G9', 'alchemy', await page.evaluate(() => window.__delvers.state.canBrew('ironblood')),
+  '材料が揃っているのに作れない判定になっている');
+await page.click('[data-role=cta]');
+await page.waitForTimeout(2300);                // 調合の演出（1.6秒）が終わるまで
+check('G10', 'alchemy',
+  await page.evaluate(() => (window.__delvers.state.data.garden.potions.ironblood ?? 0) > 0),
+  '調合しても薬が増えていない');
+await probe(page, 'alchemy');
+
+// --- 所持品の「種／収穫物／薬」タブ（新機能指示書「所持品」）
+await page.click('[data-role=back]');           // 薬草園
+await page.waitForTimeout(450);
+await page.click('[data-role=back]');           // 拠点
+await page.waitForTimeout(450);
+await page.click('[data-act=detail]');
+await page.waitForTimeout(450);
+await page.click('[data-act=inventory]');
+await page.waitForTimeout(600);
+for (const [i, label] of [[1, '種'], [2, '収穫物'], [3, '薬']]) {
+  await page.click(`[data-act=cat][data-i="${i}"]`);
+  await page.waitForTimeout(450);
+  await probe(page, 'inventory');
+  check('G11', 'inventory',
+    await page.evaluate(() => document.querySelectorAll('.stack .list .item').length) > 0,
+    `${label}の面に1行も出ていない`);
+  // 装備の面の操作（並べ替え・一括売却）が残っていたら、面を分けた意味が無い
+  check('G12', 'inventory',
+    await page.evaluate(() => document.querySelector('[data-act=bulk]') === null),
+    `${label}の面に装備用の一括売却が残っている`);
+}
+await page.click('[data-act=cat][data-i="0"]');
+await page.waitForTimeout(400);
+const backToGear = await probe(page, 'inventory');
+check('G13', 'inventory', backToGear.ringCount >= 0 && (await page.$('[data-act=bulk]')) !== null,
+  '装備の面に戻っても一括売却が出ていない');
+await page.click('[data-role=back]');
+await page.waitForTimeout(450);
+
 // --- U5: 所持金の位置が全画面で一致するか
 {
   const rs = Object.entries(goldRects);
