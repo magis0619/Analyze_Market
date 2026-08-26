@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - claude/game-creation-bcoyzz
+      - claude/beach-image-matching-lu3qo3
   workflow_dispatch:
 
 permissions:
@@ -27,6 +28,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - run: npm run island:build
+      # 島歩きは DELVERS とは別アプリなので /island/ 配下にまとめて置く
+      - run: mkdir -p dist/island && cp -r dist-island/. dist/island/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
