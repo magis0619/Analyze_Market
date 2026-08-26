@@ -23,46 +23,36 @@ const JOB_ICON: Record<JobId, string> = {
   swordsman: '剣', guardian: '守', skirmisher: '遊'
 };
 
-interface Tile {
-  act: string;
-  en: string;
-  /** 3枚並びのときの短い名前 */
-  label: string;
-  /** 幅いっぱいのときの名前。狭い枠に合わせて全部を縮めると、
-      主役の1枚まで素っ気なくなる */
-  wide: string;
-  /** 未処理の件数。0 なら押せない */
-  count?: (nav: Nav) => number;
-  /** 件数が0でも押せる（薬草園は「何も無くても行ける場所」） */
-  idleOk?: boolean;
-}
 
 /**
- * 拠点のタイル（UI-SPEC §3.3）。
+ * 拠点に置いた**物**の名札（カード脱却指示書 §2）。
  *
- * 段は「重要度」で決まり、バッジは「件数」を言う——別の軸である。
- * ActionBar が指している行き先のタイルだけを secondary にして、
- * 「下のボタンはこれのことだ」と分かるようにする。
- * 残りは枠を消して沈める。4枚が同じ顔で並んでいると、
- * どれを押せばいいかを毎回プレイヤーが考えることになる。
- */
-/**
- * 拠点に出すのは**今すぐ操作するものだけ**（改善指示書 §4）。
+ * 以前は同じ大きさ・同じ角丸のタイルが4枚並んでいた。押す先が4つあることは
+ * 分かっても、そこに何があるかは文字を読むまで分からない。
+ * 看板・郵便受け・宝箱・棚・温室に置き換えると、絵を見た時点で
+ * 「送り出す／読む／開ける／しまう／育てる」が分かる。
  *
- * 所持品・図鑑・次の冒険者は「見ておきたいが今すぐ押すものではない」ので、
- * 詳細ドロワーへ移した。常時フル表示していると、
- * 今やるべきことが3つの中に埋もれる。
+ * **押されるのはこの名札**（§6.2）。3D を Raycaster で叩かせると、
+ * 「押せるものが押せるか」を DOM から測れなくなり、
+ * U3（44px 以上）も U11 もこの5つの動線をまるごと素通りする。
+ * 3D からは位置だけを受け取る（`data-hotspot`）。
  */
-const TILES: readonly Tile[] = [
-  { act: 'dispatch', en: 'Dispatch', label: '派遣準備', wide: '派遣の準備をする' },
-  { act: 'open', en: 'Unopened', label: '開封', wide: '未鑑定品を開封する',
-    count: n => n.state.data.pending.length },
-  { act: 'report', en: 'Report', label: 'レポート', wide: '帰還レポートを読む',
-    count: n => n.state.data.inbox.length },
+interface Prop {
+  id: string;
+  act: string;
+  label: string;
+  /** 名札に出す件数。0 なら出さない */
+  count?: (n: Nav) => number;
+}
+
+const PROPS: readonly Prop[] = [
+  { id: 'sign', act: 'dispatch', label: '派遣' },
+  { id: 'mail', act: 'report', label: 'レポート', count: n => n.state.data.inbox.length },
+  { id: 'chest', act: 'open', label: '開封', count: n => n.state.data.pending.length },
+  { id: 'shelf', act: 'inventory', label: '所持品' },
   // 薬草園。**バッジは未開封と同じ文法**——「そこに未処理がある」を
-  // 同じ形で言えば、新しい読み方を覚えずに済む（指示書「既存画面への影響」）
-  { act: 'garden', en: 'Garden', label: '薬草園', wide: '薬草園を見る',
-    count: n => n.state.readyCount(), idleOk: true }
+  // 同じ形で言えば、新しい読み方を覚えずに済む
+  { id: 'garden', act: 'garden', label: '薬草園', count: n => n.state.readyCount() }
 ];
 
 export function baseScreen(nav: Nav): Screen {
@@ -116,18 +106,6 @@ export function baseScreen(nav: Nav): Screen {
   `))}
 </div>
 ${actionBar(button({ label: '閉じる', act: 'detail-close', tier: 'quiet', block: true }))}`;
-  }
-
-  /** 1枚ぶん。ActionBar が指しているものだけ段を1つ上げる */
-  function tile(t: Tile, cta: string): string {
-    const n = t.count ? t.count(nav) : -1;
-    const off = n === 0 && !t.idleOk;
-    const main = t.act === cta;
-    return `<button class="action ${main ? 'secondary' : ''}"
-                    data-tap data-act="${t.act}"${off ? ' disabled' : ''}>
-      <span class="micro">${t.en}</span>${esc(main ? t.wide : t.label)}
-      ${when(n > 0, `<span class="badge">${n}</span>`)}
-    </button>`;
   }
 
   const notices: string[] = [];
@@ -268,6 +246,13 @@ ${actionBar(button({ label: '閉じる', act: 'detail-close', tier: 'quiet', blo
       // 何も植えていない拠点と満作の拠点が同じ絵だった
       return {
         presence: 1 - out / total,
+        // 用がある物だけ光る（カード脱却指示書 §2）。件数は名札のバッジが言う
+        props: {
+          chest: st.data.pending.length > 0 ? 1 : 0,
+          mail: st.data.inbox.length > 0 ? 1 : 0,
+          sign: st.availableJobs().some(j => !st.isBusy(j)) ? 1 : 0,
+          shelf: st.data.inventory.length >= 150 ? 1 : 0
+        },
         intensity: g.beds.length === 0 ? 0 : Math.min(1, st.readyCount() / g.beds.length),
         slots: g.beds.map((_, i) => {
           const pr = st.plotProgress(i);
@@ -289,6 +274,15 @@ ${topBar({
         title: '拠点', gold: st.data.gold, tier: st.data.tier,
         running: st.data.dispatches.length
       })}
+${each(PROPS, pr => {
+        const c = pr.count?.(nav) ?? 0;
+        return `<button class="prop ${next.act === pr.act ? 'on' : ''}"
+                        data-hotspot="${pr.id}" data-tap data-act="${pr.act}"
+                        style="visibility:hidden">
+          <span class="l">${esc(pr.label)}</span>
+          ${when(c > 0, `<span class="b">${c}</span>`)}
+        </button>`;
+      })}
 <div class="stack anchor-bottom">
   <div class="nextbanner" data-role="next-why">
     <span class="micro">次にやること</span>
@@ -297,9 +291,6 @@ ${topBar({
 
   ${each(jobs, slot)}
 
-  <div class="actiongrid">
-    ${each(TILES, t => tile(t, next.act))}
-  </div>
 
   <button class="moretab" data-tap data-act="detail">
     <span class="ic">▸</span>詳細${when(hire?.affordable, '<span class="dot"></span>')}

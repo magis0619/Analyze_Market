@@ -192,7 +192,7 @@ const PROBE = () => {
   // U8 は通知だけを見ていたので、タイトルの種表示が CTA に踏まれていたのを
   // 見逃していた。position:absolute の文字はすべて同じ目で見る。
   const floated = [];
-  for (const el of document.querySelectorAll('.seed, .float, .charge-hint, .banner')) {
+  for (const el of document.querySelectorAll('.seed, .float, .charge-hint, .banner, .mapnode')) {
     if (!vis(el) || !el.textContent.trim()) continue;
     const fb = box(el);
     for (const other of document.querySelectorAll('.n, .nm, .l, .v, .m, h1, .btn, .action, .tab, .cell')) {
@@ -357,12 +357,89 @@ await probe(page, 'title');
 
 // --- 拠点
 await page.click('[data-role=cta]');
-await page.waitForTimeout(500);
+await page.waitForTimeout(900);
 await probe(page, 'base');
+
+// 拠点の行き先は**物**になった（カード脱却指示書 §2）。
+// 名札は 3D の位置に置くので、放っておくと重なるし画面外へも落ちる
+{
+  const pr = await page.evaluate(() => {
+    const els = [...document.querySelectorAll('.prop')];
+    const shown = els.filter(e => getComputedStyle(e).visibility !== 'hidden');
+    const boxes = shown.map(e => e.getBoundingClientRect());
+    let overlap = [];
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i], b = boxes[j];
+        if (!(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top)) {
+          overlap.push(`${shown[i].textContent.trim()}×${shown[j].textContent.trim()}`);
+        }
+      }
+    }
+    const out = boxes.filter(b => b.left < 0 || b.right > window.innerWidth).length;
+    return {
+      total: els.length, shown: shown.length, overlap, out,
+      tiles: document.querySelectorAll('.actiongrid').length
+    };
+  });
+  check('H1', 'base', pr.total === 5, `拠点の行き先が ${pr.total} 個（5 であるべき）`);
+  check('H2', 'base', pr.shown === 5, `映っている名札が ${pr.shown} 個しかない`);
+  check('H3', 'base', pr.overlap.length === 0, `名札が重なっている: ${pr.overlap.join(' / ')}`);
+  check('H4', 'base', pr.out === 0, `名札が ${pr.out} 個 画面からはみ出している`);
+  check('H5', 'base', pr.tiles === 0, 'タイルの並びが残っている（物に置き換えるはず）');
+}
 
 // --- 派遣準備
 await page.click('[data-act=dispatch]');
 await page.waitForTimeout(500);
+await probe(page, 'dispatch');
+
+// --- 派遣先の地図（カード脱却指示書 §1）
+//
+// 10行の一覧を 3D の経路に置き換えた面。**ノードは DOM のボタン**なので、
+// 44px あるか・本当に押せるかを普通に測れる（Raycaster にすると測れない）。
+await page.click('[data-act=map-open]');
+await page.waitForTimeout(900);
+{
+  const m = await probe(page, 'dispatch');
+  const n = await page.evaluate(() => {
+    const els = [...document.querySelectorAll('.mapnode')];
+    const shown = els.filter(e => getComputedStyle(e).visibility !== 'hidden');
+    const boxes = shown.map(e => e.getBoundingClientRect());
+    let overlap = 0;
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i], b = boxes[j];
+        if (!(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top)) overlap++;
+      }
+    }
+    return { total: els.length, shown: shown.length, overlap, on: document.querySelectorAll('.mapnode.on').length };
+  });
+  check('M1', 'dispatch', n.total === 10, `ノードが ${n.total} 個（10 であるべき）`);
+  // **全部映っていること。** 画面の外へ落ちたノードは押せない＝そのステージへ行けない
+  check('M2', 'dispatch', n.shown === 10, `映っているノードが ${n.shown} 個しかない`);
+  check('M3', 'dispatch', n.overlap === 0, `ノード同士が ${n.overlap} 組重なっている`);
+  check('M4', 'dispatch', n.on === 1, `選択中のノードが ${n.on} 個`);
+  check('M5', 'dispatch', m.ringCount >= 0 && m.renderError === null, '地図の描画に失敗している');
+}
+// 別のノードを押すと選択が移る
+await page.click('.mapnode[data-id="2"]');
+await page.waitForTimeout(700);
+check('M6', 'dispatch',
+  await page.evaluate(() => document.querySelector('.mapnode.on')?.dataset.id) === '2',
+  'ノードを押しても選択が移らない');
+await probe(page, 'dispatch');
+// 未解放を選ぶと、下端が「送る」から「解放する」に変わる。
+// 行けない場所を選んだまま送れてしまわないこと
+check('M7', 'dispatch', await page.evaluate(() => {
+  const b = document.querySelector('[data-role=cta]');
+  return !!b && b.hasAttribute('disabled') && b.textContent.includes('解放');
+}), '未解放のノードを選んでも下端が「送る」のまま');
+await page.click('.mapnode[data-id="1"]');
+await page.waitForTimeout(700);
+await page.click('[data-role=cta]');            // 「ここへ送る」で地図を閉じる
+await page.waitForTimeout(600);
+check('M8', 'dispatch', (await page.$('.mapnode')) === null, '地図が閉じていない');
 await probe(page, 'dispatch');
 
 // --- 装備選択（シート）。ここは data-screen 上は dispatch のまま
@@ -370,12 +447,43 @@ await page.click('[data-act=pick-open][data-slot=weapon]').catch(() => {});
 await page.waitForTimeout(400);
 if (await page.$('.sheet')) {
   await probe(page, 'dispatch');
+  // 升目（カード脱却指示書 §3）。文字を置かないので、
+  // **絵が焼けていること**が「何を選んでいるか分かる」の全部になる
+  check('P1', 'dispatch', (await page.$('.tiles .tile')) !== null, '装備の升目が出ていない');
+  check('P2', 'dispatch', (await page.$('.sheet-list .item')) === null,
+    '升目にしたはずの一覧に行が残っている');
   // 掴んだ要素ではなくセレクタで叩く。一覧はサムネが焼き上がるたびに
   // 描き直されるので、掴んだ参照はすぐ古くなる（実際 detached で落ちた）
-  if (await page.$('.sheet-list .item')) {
-    await page.click('.sheet-list .item');
+  if (await page.$('.tiles .tile')) {
+    await page.click('.tiles .tile');
     await page.waitForTimeout(600);
     await probe(page, 'dispatch');
+
+    // 台座の送り（§3「台座カルーセル」）。一覧に戻らず隣と比べ続けられること
+    const at = () => page.evaluate(() =>
+      document.querySelector('.carousel .c')?.textContent?.trim() ?? '');
+    check('P3', 'dispatch', (await at()).includes('/'), '台座に何番目かが出ていない');
+    const before = await at();
+    check('P4', 'dispatch',
+      await page.evaluate(() => document.querySelector('[data-act=pick-prev]')?.hasAttribute('disabled')),
+      '先頭なのに「前へ」が押せる');
+    await page.click('[data-act=pick-next]');
+    await page.waitForTimeout(600);
+    const after = await at();
+    check('P5', 'dispatch', after !== before && after !== '',
+      `送っても番号が変わらない（${before} → ${after}）`);
+    // 送った先が台座に載っていること（数字だけ動いて絵が変わらない壊れ方を防ぐ）
+    check('P6', 'dispatch', await page.evaluate(() => {
+      const sel = document.querySelector('.tile.on');
+      const nm = document.querySelector('.sheet-compare .nm');
+      return !!sel && !!nm;
+    }), '送った先が升目でも台座でも選ばれていない');
+    await probe(page, 'dispatch');
+    // 送りが効いていなければ「前へ」は無効のまま。例外で落とすと
+    // ここから先の検証が全部走らなくなるので、失敗として記録して進む
+    await page.click('[data-act=pick-prev]', { timeout: 4000 })
+      .catch(() => check('P7', 'dispatch', false, '送った後なのに「前へ」が押せない'));
+    await page.waitForTimeout(500);
     // 実際に装備する。初期装備のままだと派遣が数秒で終わってしまい、
     // 派遣中の表示（§4）を一度も観測できない
     if (await page.$('[data-act=equip]:not([disabled])')) {
@@ -441,6 +549,51 @@ for (let i = 0; i < 60; i++) {
 }
 const rep = await probe(page, 'report');
 check('T1', 'report', rep.toastCount > 0, '通知が出ていない。U8 が素通りしている');
+
+// --- 巻物（カード脱却指示書 §4）
+//
+// 板を8枚積むのをやめて1枚に繋げた面。**紙の上で墨が読めること**が肝で、
+// 地の色だけ変えて文字色を変え忘れると、白い字が薄茶の紙に消える。
+{
+  const sc = await page.evaluate(() => {
+    const el = document.querySelector('.scroll');
+    if (!el) return null;
+    const lum = c => {
+      const [r, g, b] = c.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => {
+        const x = v / 255;
+        return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    // 紙の地は要素の背景ではなく、重ねた勾配。実測できないので
+    // 「巻物の中の文字」と「巻物の外の地（body）」ではなく、
+    // 文字色と、その文字が乗っている紙の代表色（下の勾配の終端）で見る
+    const paper = lum('rgb(228,211,178)');
+    const worst = [];
+    for (const t of el.querySelectorAll('.n, .m, .l, .v, .beat span, .sc-note, .sc-lead, .fig .v, .fig .l')) {
+      if (!t.textContent.trim()) continue;
+      const ink = lum(getComputedStyle(t).color);
+      const hi = Math.max(ink, paper) + 0.05, lo = Math.min(ink, paper) + 0.05;
+      worst.push(hi / lo);
+    }
+    return {
+      panels: document.querySelectorAll('.stack .panel').length,
+      seals: el.querySelectorAll('.seal').length,
+      minContrast: worst.length ? Math.min(...worst) : 0,
+      samples: worst.length
+    };
+  });
+  check('R1', 'report', sc !== null, '巻物が出ていない');
+  if (sc) {
+    check('R2', 'report', sc.panels === 0, `板が ${sc.panels} 枚残っている（1枚の巻物にするはず）`);
+    check('R3', 'report', sc.seals >= 3, `封蝋の区切りが ${sc.seals} 個しかない`);
+    check('R4', 'report', sc.samples > 10, `文字を ${sc.samples} 件しか測れていない`);
+    // 4.5:1 は本文の基準。紙と墨なので余裕で超えるはずで、
+    // 超えないなら「地だけ変えて文字色を変え忘れた」ということ
+    check('R5', 'report', sc.minContrast >= 4.5,
+      `紙の上で読めない文字がある（最小コントラスト ${sc.minContrast.toFixed(1)}）`);
+  }
+}
 
 // --- 開封。稀少以上を必ず1つ混ぜて、カットインも測る
 await page.evaluate(() => {
@@ -524,7 +677,7 @@ await page.waitForTimeout(450);
   check('T13', 'base', d.ringMismatch.length === 0,
     `リングの表示と割合が食い違っている: ${d.ringMismatch.join(' / ')}`);
 }
-await page.click('[data-act=inventory]');
+await page.click('.drawer [data-act=inventory]');
 await page.waitForTimeout(600);
 const inv = await probe(page, 'inventory');
 check('U9a', 'inventory', await page.evaluate(() => window.__delvers.state.data.inventory.length) >= 200,
@@ -612,11 +765,49 @@ await page.waitForTimeout(400);
 // --- 図鑑
 await page.click('[data-act=detail]');
 await page.waitForTimeout(450);
-await page.click('[data-act=compendium]');
+await page.click('.drawer [data-act=compendium]');
 await page.waitForTimeout(500);
 await probe(page, 'compendium');
+// --- ページめくり（カード脱却指示書 §5）
+//
+// **前のページを裏に残しているか**まで見る。出ていくページを消してから
+// 入れるとフェードにしかならず、めくりに見えない。
+// 演出は「見えた瞬間」を捕まえる。1回だけ覗いて判定すると、
+// 描画が一瞬詰まった回に取りこぼして、実装ではなく間の悪さで落ちる
+await page.waitForTimeout(500);                 // 画面が落ち着いてから
+await page.click('[data-act=flip][data-d="1"]');
+{
+  let sawTurn = false, sawUnder = false, sawRotate = false;
+  for (let i = 0; i < 14; i++) {
+    const f = await page.evaluate(() => {
+      const el = document.querySelector('.book .page.turn');
+      const m = el ? getComputedStyle(el).transform : 'none';
+      return {
+        under: document.querySelectorAll('.book .page.under').length > 0,
+        turn: !!el,
+        rotated: m !== 'none' && m !== 'matrix(1, 0, 0, 1, 0, 0)'
+      };
+    });
+    sawTurn ||= f.turn;
+    sawUnder ||= f.under;
+    sawRotate ||= f.rotated;
+    if (sawTurn && sawUnder && sawRotate) break;
+    await page.waitForTimeout(30);
+  }
+  check('B1', 'compendium', sawTurn, 'めくっているページを一度も観測できなかった');
+  check('B2', 'compendium', sawUnder, '前のページが裏に残っていない（フェードになっている）');
+  check('B3', 'compendium', sawRotate, 'ページが回転していない');
+}
+await page.waitForTimeout(600);                 // めくり終わり
+check('B4', 'compendium',
+  await page.evaluate(() => document.querySelectorAll('.book .page.under').length) === 0,
+  'めくり終わっても前のページが残っている');
+check('B5', 'compendium',
+  await page.evaluate(() => document.querySelector('.pagefoot .c')?.textContent?.trim()) === '2 / 2',
+  'ページ番号が進んでいない');
+await probe(page, 'compendium');
 await page.click('[data-act=tab][data-i="1"]');
-await page.waitForTimeout(350);
+await page.waitForTimeout(600);
 await probe(page, 'compendium');
 if (await page.$('.cell.found')) {
   await page.click('.cell.found');
@@ -778,7 +969,7 @@ await probe(page, 'garden');                    // 通知が出ている状態
       const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
       return {
         w: r.width, h: r.height, y: r.y,
-        shown: getComputedStyle(e).display !== 'none',
+        shown: getComputedStyle(e).visibility !== 'hidden',
         reachable: !!hit && e.contains(hit),
         under: hit?.className ?? 'なし'
       };
@@ -845,7 +1036,7 @@ await page.click('[data-role=back]');           // 拠点
 await page.waitForTimeout(450);
 await page.click('[data-act=detail]');
 await page.waitForTimeout(450);
-await page.click('[data-act=inventory]');
+await page.click('.drawer [data-act=inventory]');
 await page.waitForTimeout(600);
 for (const [i, label] of [[1, '種'], [2, '収穫物'], [3, '薬']]) {
   await page.click(`[data-act=cat][data-i="${i}"]`);

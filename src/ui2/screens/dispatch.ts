@@ -1,5 +1,6 @@
 import type { Element, Item, JobId, Rarity, RetreatRule } from '../../sim/types';
 import type { Mood, SceneName } from '../../world/scenes';
+import { elementIndex } from '../../world/scenes';
 import type { ModelSpec } from '../../world/models';
 import type { Nav, Screen } from '../shell';
 import { RETREAT_RULES, canEquipArmor, jobDef, retreatRuleDef } from '../../data/jobs';
@@ -10,7 +11,7 @@ import { enemiesForStage } from '../../data/enemies';
 import { simulateRun } from '../../sim/combat';
 import { dominantElement } from '../../sim/items';
 import {
-  actionBar, button, compareView, effectiveScore, elementLabel, itemIcon, itemRow,
+  actionBar, button, compareView, effectiveScore, elementLabel, itemGrid, itemIcon,
   itemScore, panel, tabs, tag, topBar
 } from '../components';
 import { duration, each, esc, num, when } from '../dom';
@@ -53,6 +54,8 @@ export function dispatchScreen(nav: Nav): Screen {
   let candidate: Item | null = null;
   /** 持たせる薬。null なら持たせない */
   let potionId: string | null = null;
+  /** 派遣先の地図を開いているか（カード脱却指示書 §1） */
+  let mapOpen = false;
 
   /** 所要時間の見積のキャッシュ。条件が変わるまで使い回す */
   let etaKey = '';
@@ -237,6 +240,25 @@ export function dispatchScreen(nav: Nav): Screen {
     return text;
   }
 
+  /**
+   * 今の候補が一覧の何番目か（カード脱却指示書 §3「台座カルーセル」）。
+   *
+   * 番号を状態として持たない。並べ替えを切り替えると順番が変わるので、
+   * 覚えた番号は次の瞬間には別の品を指している。**毎回引き直す**。
+   */
+  function candIdx(list: readonly Item[]): number {
+    return candidate ? list.findIndex(i => i.id === candidate?.id) : -1;
+  }
+
+  /** 台座に載せたまま隣の品へ移る。一覧に戻らず続けて比べられる。 */
+  function step(delta: number): void {
+    const list = candidates();
+    const i = candIdx(list);
+    if (i < 0) return;
+    const next = list[Math.max(0, Math.min(list.length - 1, i + delta))];
+    if (next) candidate = next;
+  }
+
   function pickerSheet(): string {
     if (!picking) return '';
     const current = equipped(picking);
@@ -245,7 +267,13 @@ export function dispatchScreen(nav: Nav): Screen {
     return `
 <div class="sheet-back" data-act="pick-close"></div>
 <div class="sheet${when(candidate, ' hero')}">
-  ${when(candidate, `<div class="sheet-compare">${candidate
+  ${when(candidate, `
+    <div class="carousel">
+      ${button({ label: '‹', act: 'pick-prev', tier: 'quiet', disabled: candIdx(list) <= 0 })}
+      <span class="c">${candIdx(list) + 1} / ${list.length}</span>
+      ${button({ label: '›', act: 'pick-next', tier: 'quiet', disabled: candIdx(list) >= list.length - 1 })}
+    </div>
+    <div class="sheet-compare">${candidate
         ? compareView(current, candidate, { stage, measured: measure(candidate) }) : ''}</div>`)}
   <div class="sheet-sort">
     ${tabs([`${stage.name}での強さ`, '素の強さ'], sortByRaw ? 1 : 0, 'sortmode')}
@@ -253,11 +281,10 @@ export function dispatchScreen(nav: Nav): Screen {
   <div class="sheet-list">
     ${list.length === 0
         ? '<div class="empty">装備できる品がない</div>'
-        : each(list, it => itemRow({
-            item: it, compareTo: current && current.id !== it.id ? current : null,
-            stage: sortByRaw ? null : stage,
-            selected: candidate?.id === it.id, act: 'pick'
-          }))}
+        : itemGrid(list, {
+            compareTo: current, stage: sortByRaw ? null : stage,
+            act: 'pick', selectedId: candidate?.id ?? null
+          })}
   </div>
 </div>
 ${actionBar(candidate
@@ -270,13 +297,78 @@ ${actionBar(candidate
              })}
            </div>`
         : button({ label: '閉じる', act: 'pick-close', tier: 'quiet', block: true, role: 'cta' }),
-      candidate ? '別の行を叩けば比べ直せる' : 'タップで比較')}`;
+      candidate ? '‹ › で隣の品と比べ直せる' : 'タップで比較')}`;
+  }
+
+  /**
+   * 派遣先の地図（カード脱却指示書 §1）。
+   *
+   * 以前は10行の一覧カードと、その下に大きな明細カードが並んでいた。
+   * 行の高さが全部同じなので、**浅いか深いかが文字を読むまで分からない**——
+   * このゲームで一番はっきりした縦の軸を、平らな表に潰していた。
+   *
+   * 奥行きで言い直す。3D 側が経路とノードを描き、名前と数字はここが出す。
+   * **押されるのは 3D ではなく DOM のボタン**（§6.2）——
+   * Raycaster で叩かせると、この操作が U3/U11 の検査から消える。
+   */
+  function mapSheet(): string {
+    const st = nav.state;
+    const stage = stageDef(stageId);
+    const unlocked = st.data.unlockedStages.includes(stageId);
+    const prevCleared = stage.id === 1 || st.data.clearedStages.includes(stage.id - 1);
+
+    const marks = each(STAGES, (sg, i) => {
+      const ok = st.data.unlockedStages.includes(sg.id);
+      const done = st.data.clearedStages.includes(sg.id);
+      const sel = sg.id === stageId;
+      return `<button class="mapnode ${done ? 'done' : ok ? 'open' : 'lock'} ${sel ? 'on' : ''}"
+                      data-hotspot="node${i}" data-tap data-act="stage" data-id="${sg.id}"
+                      style="visibility:hidden">
+        <span class="no">${ok ? sg.id : '鍵'}</span>
+        ${when(sel, `<span class="nm">${esc(sg.name)}</span>`)}
+      </button>`;
+    });
+
+    return `
+${topBar({ title: '派遣先を選ぶ', back: 'map-close', gold: st.data.gold })}
+${marks}
+<div class="stack anchor-bottom">
+  ${panel(stage.name, unlocked ? `
+    <div class="row"><span class="l">敵の属性</span><span class="r">${
+      stage.enemyElement === 'mixed' ? '<span class="tag phys">複合</span>'
+        : tag(elementLabel(stage.enemyElement), stage.enemyElement)}</span></div>
+    <div class="row"><span class="l">弱点 ／ 効きにくい</span><span class="r">${
+      stage.weakTo ? tag(elementLabel(stage.weakTo), stage.weakTo)
+        : '<span class="v" style="color:var(--faint)">なし</span>'}
+      <span class="v" style="color:var(--ember)">${
+        stage.resists.length > 0 ? esc(stage.resists.map(elementLabel).join('・')) : 'なし'}</span></span></div>
+    <div class="row"><span class="l">満踏破で ／ ドロップ</span><span class="r"><span class="v">${
+      esc(duration(stage.minutes * 60))} ・ ${
+      stage.dropBias === 'weapon' ? '武器寄り' : stage.dropBias === 'armor' ? '防具寄り' : '均等'}</span></span></div>
+    <div class="row"><span class="l">出る敵 ／ 主</span><span class="r"><span class="v" style="font-size:var(--fs-label)">${
+      esc(enemiesForStage(stage.id).slice(0, 2).map(e => e.name).join(' / '))}
+      ・ <b style="color:var(--down)">${esc(bossName(stage.id))}</b></span></span></div>
+  ` : `
+    <div class="row"><span class="l">解放費用</span><span class="r"><span class="v" style="color:var(--gold)">${num(stage.unlockCost)}G</span></span></div>
+    <div style="font-size:var(--fs-label);color:var(--dim);margin-top:var(--sp-2)">${
+      !prevCleared ? esc(`ステージ${stage.id - 1}の踏破が必要`)
+        : st.data.gold >= stage.unlockCost ? '解放できる' : '金が足りない'}</div>
+  `)}
+</div>
+${actionBar(unlocked
+      ? button({ label: 'ここへ送る', act: 'map-close', tier: 'primary', block: true, role: 'cta' })
+      : button({
+          label: `解放する ・ ${num(stage.unlockCost)}G`, act: 'unlock',
+          tier: 'primary', block: true, role: 'cta',
+          disabled: st.data.gold < stage.unlockCost || !prevCleared
+        }),
+      '暗いノードはまだ行けない場所')}`;
   }
 
   return {
-    /** 装備を選んでいる間は展示台へ移る（§3-3） */
+    /** 装備を選んでいる間は展示台へ、地図を開いている間は地図へ移る */
     get scene(): SceneName {
-      return picking ? 'pedestal' : 'dispatch';
+      return picking ? 'pedestal' : mapOpen ? 'map' : 'dispatch';
     },
 
     /** 比較中の候補を台座に載せる */
@@ -300,6 +392,17 @@ ${actionBar(candidate
         const r = candidate?.rarity ?? 'common';
         return { accent: RARITY_LIGHT[r], intensity: RARITY_AURA[r] };
       }
+      if (mapOpen) {
+        const st = nav.state;
+        return {
+          nodes: STAGES.map(sg => ({
+            state: st.data.clearedStages.includes(sg.id) ? 2
+              : st.data.unlockedStages.includes(sg.id) ? 1 : 0,
+            element: sg.enemyElement === 'mixed' ? -1 : elementIndex(sg.enemyElement)
+          })),
+          selected: STAGES.findIndex(sg => sg.id === stageId)
+        };
+      }
       const stage = stageDef(stageId);
       return {
         accent: STAGE_LIGHT[stage.enemyElement] ?? GATE_DEFAULT,
@@ -316,6 +419,8 @@ ${actionBar(candidate
       const busy = st.isBusy(job());
       const w = equipped('weapon'), a = equipped('armor');
       const est = estimate();
+
+      if (mapOpen) return mapSheet();
 
       // 装備選択中は、その判断だけに集中させる
       if (picking) {
@@ -373,49 +478,15 @@ ${topBar({
         : `HP${Math.round(r.threshold * 100)}%を\n切ったら帰還`).replace('\n', '<br>')}</div>
     </div>`)}</div>`)}
 
-  ${panel('派遣先', `<div class="stages">${each(STAGES, s => {
-        const ok = st.data.unlockedStages.includes(s.id);
-        const cleared = st.data.clearedStages.includes(s.id);
-        return `<div class="stage ${stageId === s.id ? 'on' : ''} ${ok ? '' : 'lock'}"
-                     data-tap data-act="stage" data-id="${s.id}">
-          <span class="no">${s.id}</span>
-          <span class="nm">${esc(s.name)}${when(cleared, ' <span style="color:var(--up)">✓</span>')}</span>
-          ${ok
-            ? tag(s.enemyElement === 'mixed' ? '複合' : elementLabel(s.enemyElement),
-                  s.enemyElement === 'mixed' ? 'physical' : s.enemyElement)
-            : ''}
-          <span class="tm">${ok ? esc(duration(s.minutes * 60)) : `${num(s.unlockCost)}G`}</span>
-        </div>`;
-      })}</div>`)}
-
-  ${panel(stage.name, unlocked ? `
-    <div class="row"><span class="l">敵の属性</span><span class="r">${
-      stage.enemyElement === 'mixed' ? '<span class="tag phys">複合</span>'
-        : tag(elementLabel(stage.enemyElement), stage.enemyElement)}</span></div>
-    <div class="row"><span class="l">弱点</span><span class="r">${
-      stage.weakTo ? tag(elementLabel(stage.weakTo), stage.weakTo)
-        : '<span class="v" style="color:var(--faint)">なし</span>'}</span></div>
-    <div class="row"><span class="l">効きにくい</span><span class="r"><span class="v" style="color:var(--ember)">${
-      stage.resists.length > 0 ? esc(stage.resists.map(elementLabel).join('・')) : 'なし'}</span></span></div>
-    <div class="row"><span class="l">ドロップ</span><span class="r"><span class="v">${
-      stage.dropBias === 'weapon' ? '武器寄り' : stage.dropBias === 'armor' ? '防具寄り' : '均等'}</span></span></div>
-    <div class="row"><span class="l">満踏破で</span><span class="r"><span class="v">${esc(duration(stage.minutes * 60))}</span></span></div>
-    <div class="row"><span class="l">出る敵</span><span class="r"><span class="v" style="font-size:var(--fs-label)">${
-      esc(enemiesForStage(stage.id).slice(0, 3).map(e => e.name).join(' / '))}</span></span></div>
-    <div class="row"><span class="l">ボス</span><span class="r"><span class="v" style="color:var(--down);font-size:var(--fs-label)">${
-      esc(bossName(stage.id))}</span></span></div>
-  ` : `
-    <div class="row"><span class="l">解放費用</span><span class="r"><span class="v" style="color:var(--gold)">${num(stage.unlockCost)}G</span></span></div>
-    <div style="font-size:var(--fs-label);color:var(--dim);margin-top:var(--sp-2)">${
-      stage.id > 1 && !st.data.clearedStages.includes(stage.id - 1)
-        ? esc(`ステージ${stage.id - 1}の踏破が必要`)
-        : st.data.gold >= stage.unlockCost ? '解放できる' : '金が足りない'}</div>
-    ${button({
-      label: '解放する', act: 'unlock', tier: 'primary', block: true,
-      disabled: st.data.gold < stage.unlockCost
-        || (stage.id > 1 && !st.data.clearedStages.includes(stage.id - 1))
-    })}
-  `)}
+  ${(() => {
+      const cleared = st.data.clearedStages.includes(stage.id);
+      return `<button class="summary" data-tap data-act="map-open">
+        <span class="micro">派遣先</span>
+        <span class="t">${esc(stage.name)}${when(cleared, ' <span style="color:var(--up)">✓</span>')}
+          ・ ${unlocked ? esc(duration(stage.minutes * 60)) : `未解放 ${num(stage.unlockCost)}G`}</span>
+        <span class="chev">›</span>
+      </button>`;
+    })()}
 </div>
 ${actionBar(button({
         label: busy ? 'この職は派遣中' : !w || !a ? '装備を選ぶ' : !unlocked ? 'このステージは未解放' : '派遣する',
@@ -436,7 +507,10 @@ ${actionBar(button({
           stageId = Number(el.dataset.id ?? 1);
           // 所持品の「相性順」がどこへ送るつもりかを知れるようにする
           nav.stageContext = stageId;
+          etaKey = '';
           return;
+        case 'map-open': mapOpen = true; return;
+        case 'map-close': mapOpen = false; return;
         case 'unlock': st.unlockStage(stageId); return;
         case 'pick-open':
           picking = (el.dataset.slot ?? 'weapon') as 'weapon' | 'armor';
@@ -448,6 +522,8 @@ ${actionBar(button({
           return;
         }
         case 'pick-back': candidate = null; return;
+        case 'pick-prev': step(-1); return;
+        case 'pick-next': step(1); return;
         case 'sortmode': sortByRaw = el.dataset.i === '1'; return;
         case 'potion': potionId = el.dataset.id || null; return;
         case 'pick-close': picking = null; candidate = null; return;

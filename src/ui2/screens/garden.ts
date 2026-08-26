@@ -247,7 +247,7 @@ ${topBar({
         meta: ready > 0 ? `収穫 ${ready}` : `育成 ${growing}/${st.data.garden.plots}`
       })}
 ${when(tab === 0 && canExpand,
-        `<button class="hotspot" data-hotspot data-tap data-act="expand-open" style="display:none"
+        `<button class="hotspot" data-hotspot="expand" data-tap data-act="expand-open" style="visibility:hidden"
                  aria-label="畑を広げる"><span>＋</span></button>`)}
 <div class="stack hero anchor-bottom">
   ${panel('', `<div class="tabs">

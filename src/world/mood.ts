@@ -24,6 +24,12 @@ export interface Mood {
   slots?: readonly PlotMood[];
   /** 次の枠を買えるか。買えるときだけ温室に「＋」が立つ */
   canExpand?: boolean;
+  /** 地図のノード。要素数がそのままダンジョンの数になる */
+  nodes?: readonly NodeMood[];
+  /** 今選んでいるノードの番号。-1 なら選んでいない */
+  selected?: number;
+  /** 拠点に置いた物の状態 */
+  props?: PropMood;
 }
 
 /**
@@ -38,6 +44,36 @@ export interface PlotMood {
   kind: number;
   /** 育ち具合 0〜1 */
   ratio: number;
+}
+
+/**
+ * 拠点に置いた物の状態（カード脱却指示書 §2）。
+ *
+ * どれも 0〜1 で「用があるか」だけを言う。件数は DOM 側のバッジが出す——
+ * World層は数字を描かない（§6.2）。1 なら光る・揺れる。
+ */
+export interface PropMood {
+  /** 未開封がある */
+  chest?: number;
+  /** 未読のレポートがある */
+  mail?: number;
+  /** 出せる冒険者がいる */
+  sign?: number;
+  /** 所持品が溢れかけている */
+  shelf?: number;
+}
+
+/**
+ * 地図のノード1つ（カード脱却指示書 §1）。
+ *
+ * ここも数値だけ。名前は DOM 側が出す——World層は
+ * 「行ける／行けない／踏破した」を光の強さと色でしか言わない。
+ */
+export interface NodeMood {
+  /** 0＝未解放 / 1＝解放済み / 2＝踏破済み */
+  state: number;
+  /** 属性の番号（MOOD_ELEMENTS の添字）。複合は -1 */
+  element: number;
 }
 
 /**

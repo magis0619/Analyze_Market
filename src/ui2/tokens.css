@@ -66,6 +66,7 @@
   --d-pop: 280ms;
   --d-float: 900ms;
   --d-toast: 2400ms;
+  --d-flip: 420ms;   /* 図鑑のページめくり（§5） */
   --e-out: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* ---- §4.6 重なり ---- */
@@ -82,7 +83,7 @@
 
 /* §4.5「prefers-reduced-motion を尊重し、指定時は --d-* を 0 にする」 */
 @media (prefers-reduced-motion: reduce) {
-  :root { --d-tap: 0ms; --d-pop: 0ms; --d-float: 0ms; --d-toast: 0ms; }
+  :root { --d-tap: 0ms; --d-pop: 0ms; --d-float: 0ms; --d-toast: 0ms; --d-flip: 0ms; }
   * { animation: none !important; transition: none !important; }
 }
 
@@ -664,6 +665,252 @@ button { font: inherit; color: inherit; background: none; border: none; }
   color: transparent;          /* 文字は 3D 側が出している。ここは判定だけ */
 }
 .hotspot:active { background: rgba(155,224,138,0.16); }
+
+/* 地図のノード（カード脱却指示書 §1）。
+ *
+ * 3D が経路とノードを描き、番号と名前はここが出す。位置は Shell が
+ * 3D から受け取って置く（`data-hotspot`）。**押されるのはこのボタン**——
+ * Raycaster で 3D を叩かせると、この操作が U3/U11 の検査から消える。 */
+.mapnode {
+  position: fixed; z-index: var(--z-hud);
+  transform: translate(-50%, -50%);
+  display: grid; justify-items: center; gap: 2px;
+  padding: 0; border: 0; background: none;
+}
+.mapnode .no {
+  width: 44px; height: 44px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: var(--fs-body); font-variant-numeric: tabular-nums;
+  border: var(--bw) solid var(--line); color: var(--faint);
+  background: rgba(8,10,17,0.72);
+}
+.mapnode.open .no { color: var(--dim); border-color: var(--line-hi); }
+.mapnode.done .no { color: var(--up); border-color: rgba(125,220,138,0.55); }
+/* 選んでいるノードだけ名前を出す。10個ぶんの名前を常時出すと、
+   隣同士が重なって地図が読めなくなる（3Dのノードは近くに並ぶ） */
+.mapnode.on .no {
+  color: var(--gold); border-color: var(--gold);
+  box-shadow: 0 0 14px -2px var(--gold);
+}
+.mapnode .nm {
+  font-size: var(--fs-label); color: var(--text); white-space: nowrap;
+  padding: 2px var(--sp-2); border-radius: 999px;
+  background: rgba(8,10,17,0.86); border: 1px solid var(--line);
+}
+.mapnode.lock .no { opacity: 0.6; font-size: var(--fs-label); }
+
+/* 装備の升目（カード脱却指示書 §3）。
+ *
+ * 行の一覧は1件につき4つの語を並べていた。24件で96語——読む前に諦める。
+ * 升目に置くのは焼いたモデルの絵と、装備中との差だけ。
+ * レアリティは**縁の発光**で言う（行の左端にあった色バーは廃止）。 */
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-2); }
+.tile {
+  position: relative; aspect-ratio: 1; padding: 0;
+  border: var(--bw) solid color-mix(in srgb, var(--rc) 45%, transparent);
+  border-radius: var(--r-md); background: var(--surface);
+  display: grid; place-items: center;
+}
+.tile .ic { width: 100%; height: 100%; border-radius: var(--r-md); }
+.tile .ic img { width: 100%; height: 100%; object-fit: contain; }
+.tile.fine { box-shadow: 0 0 10px -2px color-mix(in srgb, var(--rc) 50%, transparent); }
+.tile.rare { box-shadow: 0 0 14px -2px color-mix(in srgb, var(--rc) 62%, transparent); }
+.tile.relic { box-shadow: 0 0 20px -3px color-mix(in srgb, var(--rc) 78%, transparent); }
+.tile.on { border-color: var(--gold); box-shadow: 0 0 16px -2px var(--gold); }
+/* 差だけを角に置く。名前も秒間も出さない——押せば台座で全部見られる */
+.tile .d {
+  position: absolute; right: 2px; bottom: 2px;
+  font-size: var(--fs-label); font-variant-numeric: tabular-nums;
+  padding: 1px 4px; border-radius: 999px;
+  background: rgba(8,10,17,0.86); border: 1px solid var(--line);
+}
+.tile .lk {
+  position: absolute; left: 3px; top: 3px;
+  font-size: var(--fs-micro); color: var(--gold);
+}
+
+/* 台座の送り（§3「前後スワイプ/矢印ボタン」）。
+ * 一覧に戻らずに隣の品と比べ続けられるようにする。 */
+.carousel {
+  flex: 0 0 auto; display: grid; grid-template-columns: var(--tap) 1fr var(--tap);
+  align-items: center; gap: var(--sp-2);
+}
+.carousel .c {
+  text-align: center; font-size: var(--fs-label); color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------- 帰還レポートの巻物（§4）
+ *
+ * 板を8枚積むのをやめ、1枚に繋げる。見出し・見どころ・道中・数字は
+ * どれも「1回の報告」の一部なのに、同じ角丸の板に切り分けて積んでいたので、
+ * 境目の数だけ「別の話が始まった」と読めていた。
+ *
+ * **外部画像は読まない**（§6.3 の資産規約はここにも効かせる）。
+ * 羊皮紙は重ねた勾配と、インラインの SVG ノイズだけで作る。 */
+.scroll {
+  position: relative; flex: 0 0 auto;
+  padding: var(--sp-5) var(--sp-4) var(--sp-6);
+  color: var(--text);
+  /* 巻物の中だけ**墨と紙**に入れ替える。役割色もそのまま使うと
+     紙の上で白飛びするので、同じ意味のまま暗いほうへ振り直す。
+     部品側（.row / .item / .beats / figures）は var() を読むだけなので、
+     ここを差し替えれば全部が付いてくる */
+  /* 値は勘で置かない。紙の代表色に対して**本文の基準 4.5:1 を満たす**ところまで
+     暗くしてある（U6 と同じ計算を巻物の全文字に当てる R5）。
+     最初は暗い画面の色をそのまま持ち込んでいて、--faint が 2.8:1、
+     --spd が 3.5:1 しか出ていなかった——地だけ変えて墨を変え忘れた状態 */
+  --text: #2b2116;
+  --dim: #5d4a35;
+  --faint: #655140;
+  --line: rgba(84,62,40,0.30);
+  --line-hi: rgba(84,62,40,0.52);
+  --surface: rgba(255,248,232,0.34);
+  --surface-2: rgba(255,248,232,0.6);
+  --up: #2d6038;
+  --down: #7a2f22;
+  --gold: #7a5510;
+  --ember: #8f4416;
+  --atk: #8f4416;
+  --def: #245070;
+  --spd: #2d6038;
+  --crit: #7a5510;
+  --r-common: #5c5245;
+  --r-fine: #245070;
+  --r-rare: #5a3d86;
+  --r-relic: #7a5510;
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgba(255,250,236,0.96), rgba(232,216,184,0.94) 60%),
+    linear-gradient(180deg, rgba(214,194,158,0.96), rgba(228,211,178,0.96));
+  /* 端を不揃いに切る（§4「clip-path で端を不揃いにする」）。
+     決め打ちの座標にして、毎フレーム形が変わらないようにする */
+  clip-path: polygon(
+    0% 1.2%, 8% 0.2%, 17% 1.4%, 26% 0.3%, 35% 1.5%, 44% 0.4%,
+    53% 1.3%, 62% 0.2%, 71% 1.4%, 80% 0.4%, 89% 1.2%, 100% 0.3%,
+    100% 98.8%, 91% 99.8%, 82% 98.5%, 73% 99.7%, 64% 98.6%, 55% 99.8%,
+    46% 98.7%, 37% 99.6%, 28% 98.5%, 19% 99.7%, 10% 98.6%, 0% 99.8%
+  );
+  /* 巻物が広がる（§4）。物理は要らない。
+     再描画のたびに頭から再生されないよう、経過ぶんだけ負の遅延を入れる */
+  animation: unroll 620ms var(--e-out) both;
+  transform-origin: top center;
+}
+@keyframes unroll {
+  from { transform: scaleY(0.02); opacity: 0.2 }
+  to   { transform: none; opacity: 1 }
+}
+/* 紙の繊維。SVG のノイズをそのまま埋め込むので、外部への読み込みは無い */
+.scroll::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  opacity: 0.16; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+/* 死んだ回だけ紙を焦がす。文字を読む場所は避けて、縁だけ暗くする */
+.scroll.ill { background:
+  radial-gradient(120% 60% at 50% 0%, rgba(250,238,222,0.95), rgba(214,190,166,0.94) 60%),
+  linear-gradient(180deg, rgba(196,166,140,0.96), rgba(210,184,158,0.96)); }
+.scroll-in { position: relative; display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.sc-head { display: flex; align-items: baseline; gap: var(--sp-2); flex-wrap: wrap; }
+.sc-head .hd { font-size: var(--fs-display); }
+.sc-head .sub { font-size: var(--fs-label); color: var(--faint); }
+.sc-lead { font-size: var(--fs-label); color: var(--dim); line-height: 1.6; }
+.sc-note {
+  margin-top: var(--sp-2); font-size: var(--fs-label);
+  color: var(--dim); line-height: 1.55;
+}
+.sc-sign {
+  margin-top: var(--sp-3); padding-top: var(--sp-2);
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-label); color: var(--faint); text-align: center;
+}
+
+/* 封蝋の区切り。線だけにすると、結局それは表の罫になる */
+.seal {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  gap: var(--sp-2); margin-top: var(--sp-4);
+}
+.seal i { height: 1px; background: var(--line); }
+.seal span {
+  font-size: var(--fs-label); letter-spacing: 0.14em; color: #7d3a2a;
+  padding: 3px var(--sp-3); border-radius: 999px;
+  border: 1px solid rgba(125,58,42,0.42);
+  background: radial-gradient(70% 70% at 40% 30%, rgba(168,80,58,0.30), rgba(125,58,42,0.16));
+}
+/* 巻物の中の部品は、紙に合わせて地を薄くする */
+.scroll .item { background: var(--surface); border-color: var(--line); }
+.scroll .item::before { opacity: 0.75; }
+.scroll .figs { background: var(--line); }
+.scroll .fig { background: var(--surface); }
+.scroll .beat i { background: var(--dim); }
+/* 枠の地は暗い前提で作ってある。紙の上では黒い四角が浮くので、
+   ここだけ紙に寄せる（未鑑定の「?」も墨で書く） */
+.scroll .ic {
+  background: linear-gradient(150deg, rgba(120,96,64,0.18), rgba(120,96,64,0.06));
+  border: 1px solid var(--line); color: var(--dim);
+}
+
+/* ---------------------------------------------------- 図鑑のページめくり（§5）
+ *
+ * ページは2枚しかないので three.js は入れない。CSS の 3D 変形で足りる。
+ * **前のページを裏に残す**のが肝——出ていくページを消してから
+ * 入れると、めくりではなくただのフェードになる。 */
+.book { position: relative; perspective: 1400px; }
+.page { transform-style: preserve-3d; }
+.page.under { position: absolute; inset: 0; opacity: 0.5; }
+.page.turn {
+  animation: page-fwd var(--d-flip) var(--e-out) both;
+  transform-origin: left center;
+}
+.page.turn.back {
+  animation-name: page-back;
+  transform-origin: right center;
+}
+/* 倒れてくる面に影を落とす。平らに回るだけだと紙に見えない */
+.page.turn::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, rgba(0,0,0,0.45), transparent 55%);
+  animation: page-shade var(--d-flip) var(--e-out) both;
+}
+.page.turn.back::after { background: linear-gradient(270deg, rgba(0,0,0,0.45), transparent 55%); }
+@keyframes page-fwd  { from { transform: rotateY(-96deg) } to { transform: none } }
+@keyframes page-back { from { transform: rotateY(96deg) }  to { transform: none } }
+@keyframes page-shade { from { opacity: 1 } to { opacity: 0 } }
+
+.pagefoot {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--sp-2);
+}
+.pagefoot .c {
+  font-size: var(--fs-label); color: var(--faint); font-variant-numeric: tabular-nums;
+}
+
+/* 拠点に置いた物の名札（カード脱却指示書 §2）。
+ *
+ * タイル4枚を看板・郵便受け・宝箱・棚・温室に置き換えた。
+ * 位置は 3D から受け取る（`data-hotspot`）。物の**足元**に取ってあるので、
+ * 名札は下にぶら下がり、物そのものは隠れない。
+ * 地図のノードと同じ形にして、読み方を1つにまとめる。 */
+.prop {
+  position: fixed; z-index: var(--z-hud);
+  transform: translate(-50%, 0);
+  display: flex; align-items: center; gap: var(--sp-1);
+  min-height: var(--tap); padding: 0 var(--sp-3);
+  border: var(--bw) solid var(--line); border-radius: 999px;
+  background: rgba(8,10,17,0.78); color: var(--dim);
+  font-size: var(--fs-label); white-space: nowrap;
+  backdrop-filter: blur(6px);
+}
+/* ActionBar が指している行き先だけ金にする。
+   「下のボタンはこれのことだ」を、タイルの段と同じ理屈で言う（§3.3） */
+.prop.on {
+  color: var(--gold); border-color: rgba(233,190,116,0.55);
+  box-shadow: 0 0 14px -3px var(--gold);
+}
+.prop .b {
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  display: grid; place-items: center; font-size: var(--fs-micro);
+  background: var(--gold); color: #14100a; font-weight: 700;
+}
 
 /* 大鍋の上に浮かせる内訳（§7「大鍋の上に素材/効果のポップアップ」）。
  *

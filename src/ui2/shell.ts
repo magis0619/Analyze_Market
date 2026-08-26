@@ -238,41 +238,46 @@ export class Shell implements Nav {
     if (this.screen.mood) this.stage.setMood(this.screen.mood);
     if (this.dirty) this.redraw();
     this.stage.renderAt(this.t);
-    this.placeHotspot();
+    this.placeHotspots();
   };
 
   /**
-   * 3D の目印の上に、透明な当たり判定を置く（§6.2）。
+   * 3D の目印の上に、押せるものを置く（§6.2）。
    *
-   * 「温室の空きスペースを押して畑を広げる」を Raycaster で組むと 3D 側に
-   * 当たり判定を持たせることになり、押せるかどうかを DOM から測れなくなる。
+   * 「温室の空きスペースを押して畑を広げる」「地図のノードを押して行き先を選ぶ」を
+   * Raycaster で組むと 3D 側に当たり判定を持たせることになり、
+   * 押せるかどうかを DOM から測れなくなる。
    * ここでは 3D は**場所だけ**を返し、押されるのは普通のボタンにしておく。
-   * 画面側は `data-hotspot` を1つ置くだけでよい。
+   * 画面側は `data-hotspot="<id>"` を置くだけでよい。
    */
-  private placeHotspot(): void {
-    const el = this.ui.querySelector<HTMLElement>('[data-hotspot]');
-    if (!el) return;
-    const at = this.stage.hotspot();
-    if (!at) { el.style.display = 'none'; return; }
-    el.style.display = '';
-    // **1px 未満の揺れは書かない。** カメラが常にゆっくり首を振っているので、
-    // そのまま流すと当たり判定が毎フレーム数値だけ動き続ける。
-    // 見た目は変わらないのに「動いている要素」になり、
-    // 自動操作が「止まるまで待つ」で待ち続けて掴めなくなる（実際に掴み損ねた）。
-    const x = Math.round(at.x * window.innerWidth);
-    const y = Math.round(at.y * window.innerHeight);
-    // 3px 未満は動かさない。判定の大きさは 68px なので、この程度の据え置きで
-    // 押す場所がずれることはない。
-    //
-    // **据え置きの記録は要素そのものに持たせる。** Shell 側の変数に持たせていたら、
-    // 再描画でボタンが作り直されたときに「もう置いた」と誤判定して、
-    // 新しいボタンが画面の外（0,0）に取り残された。
-    const prev = (el.dataset.at ?? '').split(',');
-    if (Math.abs(x - Number(prev[0] ?? NaN)) < 3 && Math.abs(y - Number(prev[1] ?? NaN)) < 3) return;
-    el.dataset.at = `${x},${y}`;
-    el.style.left = `${x}px`;
-    el.style.top = `${y}px`;
+  private placeHotspots(): void {
+    const els = this.ui.querySelectorAll<HTMLElement>('[data-hotspot]');
+    if (els.length === 0) return;
+    const at = this.stage.hotspots();
+    for (const el of Array.from(els)) {
+      const p = at.get(el.dataset.hotspot ?? '');
+      if (!p) { el.style.visibility = 'hidden'; continue; }
+      el.style.visibility = '';
+      // **1px 未満の揺れは書かない。** カメラが常にゆっくり首を振っているので、
+      // そのまま流すと当たり判定が毎フレーム数値だけ動き続ける。
+      // 見た目は変わらないのに「動いている要素」になり、
+      // 自動操作が「止まるまで待つ」で待ち続けて掴めなくなる（実際に掴み損ねた）。
+      const x = Math.round(p.x * window.innerWidth);
+      const y = Math.round(p.y * window.innerHeight);
+      // 3px 未満は動かさない。判定は 44px 以上あるので、この程度の据え置きで
+      // 押す場所がずれることはない。
+      //
+      // **据え置きの記録は要素そのものに持たせる。** Shell 側の変数に持たせていたら、
+      // 再描画でボタンが作り直されたときに「もう置いた」と誤判定して、
+      // 新しいボタンが画面の外（0,0）に取り残された。
+      const prev = (el.dataset.at ?? '').split(',');
+      if (Math.abs(x - Number(prev[0] ?? NaN)) < 3 && Math.abs(y - Number(prev[1] ?? NaN)) < 3) continue;
+      el.dataset.at = `${x},${y}`;
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+    }
   }
+
   private lastMs = performance.now();
 
   /**

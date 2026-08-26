@@ -330,6 +330,56 @@ export function itemRow(p: ItemRowProps): string {
     `${right}${p.extra ?? ''}</div>`;
 }
 
+export interface ItemTileProps {
+  item: Item;
+  /** 装備中との比較。差だけをバッジで出す */
+  compareTo?: Item | null;
+  /** 派遣先。渡すと素の強さではなく実効値で比べる */
+  stage?: StageDef | null;
+  selected?: boolean;
+  act: string;
+}
+
+/**
+ * 装備の升目（カード脱却指示書 §3）。
+ *
+ * **文字を置かない。** 行の一覧は1件ごとに名前・レアリティ・秒間・効果数と
+ * 4つの語を並べていたので、24件で96語になり、読む前に諦める画面だった。
+ * 升目に置くのは**焼いたモデルの絵**と、装備中との**差**だけ。
+ * それ以上は押したときに台座で見せる。
+ *
+ * レアリティは**縁の発光**で言う（左端の色バーは廃止）。
+ * 色バーは行の左端という「読み始める場所」を占めていたが、
+ * 升目では絵そのものが主役なので、縁に回すほうが素直に読める。
+ */
+export function itemTile(p: ItemTileProps): string {
+  const it = p.item;
+  const score = p.stage ? effectiveScore(it, p.stage) : itemScore(it);
+  let badge = '';
+  if (p.compareTo && p.compareTo.id !== it.id) {
+    const base = p.stage ? effectiveScore(p.compareTo, p.stage) : itemScore(p.compareTo);
+    const d = score - base;
+    if (d !== 0) {
+      badge = `<span class="d" style="color:var(--${d > 0 ? 'up' : 'down'})">` +
+        `${d > 0 ? '▲' : '▼'}${Math.abs(d)}</span>`;
+    }
+  }
+  return `<button class="tile ${RARITY_CLASS[it.rarity]} ${p.selected ? 'on' : ''}" ` +
+    `data-tap data-act="${esc(p.act)}" data-id="${esc(it.id)}" ` +
+    `aria-label="${esc(itemName(it))}">` +
+    itemThumb(it) +
+    `${badge}${when(it.locked, '<span class="lk">錠</span>')}</button>`;
+}
+
+/** 升目にして並べる。選んでいる1件は id で指す。 */
+export function itemGrid(
+  items: readonly Item[],
+  p: Omit<ItemTileProps, 'item' | 'selected'> & { selectedId?: string | null }
+): string {
+  return `<div class="tiles">${each(items, it =>
+    itemTile({ ...p, item: it, selected: it.id === p.selectedId }))}</div>`;
+}
+
 // ---------------------------------------------------------------- EquipCard
 
 export interface StatLine {

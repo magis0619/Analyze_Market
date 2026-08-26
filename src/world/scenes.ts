@@ -9,7 +9,7 @@ import type { Mood } from './mood';
 
 // Mood の定義は three.js に依存しない別ファイルに置いてある。
 // 画面もテストも import できるようにするため（§6.6）。
-export type { Mood, PlotMood, MoodElement } from './mood';
+export type { Mood, PlotMood, NodeMood, PropMood, MoodElement } from './mood';
 export { MOOD_ELEMENTS, elementIndex } from './mood';
 
 // three.js による 3D レイヤー。
@@ -220,14 +220,18 @@ interface SceneDef {
   /** 何も載っていないときに見せるもの。載せたら隠す */
   placeholder?: THREE.Object3D;
   /**
-   * DOM 側に当たり判定を置いてほしい 3D 物体。見えていないときは非表示にする。
+   * DOM 側に当たり判定を置いてほしい 3D 物体。id → 物体。
    *
    * **World層は当たり判定を持たない**（§6.2）。Raycaster で 3D を直接叩けば
    * 早いが、そうすると「押せるものが押せるか」を DOM から測れなくなり、
    * U3（44px 以上）も U11（本当に押せるか）も素通りする。
-   * ここでは位置だけを渡し、透明なボタンは Interface 層が置く。
+   * ここでは位置だけを渡し、ボタンは Interface 層が置く。
+   *
+   * id は画面側の `data-hotspot="<id>"` と一対一。見えていない物体
+   * （`visible === false` / カメラの後ろ / 画面外）は返さないので、
+   * 画面側は「返ってこなかった＝隠す」でよい。
    */
-  hotspot?: THREE.Object3D;
+  hotspots?: ReadonlyMap<string, THREE.Object3D>;
 }
 
 function buildBase(): SceneDef {
@@ -405,6 +409,143 @@ function buildBase(): SceneDef {
   green.add(gLight);
   green.position.set(4.8, 0, 1.2);
   scene.add(green);
+  // 温室も押せる物にする。**行き先はぜんぶ物**、という一貫した読み方にする
+  const greenFoot = new THREE.Object3D();
+  greenFoot.position.set(0, -0.2, 1.6);
+  green.add(greenFoot);
+
+  // 拠点の「用事」を物にする（カード脱却指示書 §2）。
+  //
+  // 以前は同じ大きさ・同じ角丸のタイルが4枚並んでいた。
+  // 押す先が4つあることは分かっても、**そこに何があるか**は
+  // 文字を読むまで分からない。看板・郵便受け・宝箱・棚に置き換えると、
+  // 絵を見た時点で「送り出す／読む／開ける／しまう」が分かる。
+  //
+  // **当たり判定はここには無い**（§6.2）。位置だけを DOM へ渡す。
+  const props = new Map<string, THREE.Object3D>();
+  const propGlow: Array<{ id: string; mat: THREE.MeshStandardMaterial; halo: THREE.Sprite; bob: THREE.Object3D }> = [];
+
+  function addProp(id: string, obj: THREE.Group, mat: THREE.MeshStandardMaterial,
+                   halo: THREE.Sprite, x: number, z: number): void {
+    obj.position.set(x, 0, z);
+    scene.add(obj);
+    // 目印は物の**足元**に取る。DOM 側は名札をその下にぶら下げるので、
+    // 中心に取ると名札が物の胴を隠す
+    const foot = new THREE.Object3D();
+    foot.position.set(0, -0.1, 0.4);
+    obj.add(foot);
+    props.set(id, foot);
+    propGlow.push({ id, mat, halo, bob: obj });
+  }
+
+  {
+    // 看板（派遣）。板に何も書かない——文字は DOM が出す
+    const g = new THREE.Group();
+    const wood = new THREE.MeshStandardMaterial({
+      color: 0x6b563c, roughness: 0.95, flatShading: true,
+      emissive: 0x2a1f14, emissiveIntensity: 0.2
+    });
+    for (const dx of [-0.42, 0.42]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.13, 1.7, 0.13), wood);
+      post.position.set(dx, 0.85, 0);
+      g.add(post);
+    }
+    const board = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.86, 0.1), wood);
+    board.position.y = 1.5;
+    board.rotation.x = -0.12;
+    g.add(board);
+    const halo = glowSprite(GOLD, 2.2, 0);
+    halo.position.y = 1.5;
+    g.add(halo);
+    addProp('sign', g, wood, halo, -3.0, 7.2);
+  }
+  {
+    // 郵便受け（帰還レポート）。旗が立っていれば未読
+    const g = new THREE.Group();
+    const metal = new THREE.MeshStandardMaterial({
+      color: 0x4a5570, roughness: 0.5, metalness: 0.35, flatShading: true,
+      emissive: 0x1b2233, emissiveIntensity: 0.2
+    });
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.2, 0.12), metal);
+    post.position.y = 0.6;
+    g.add(post);
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.42, 0.86), metal);
+    box.position.y = 1.35;
+    g.add(box);
+    const lid = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.31, 0.31, 0.86, 10, 1, false, 0, Math.PI), metal);
+    lid.rotation.z = Math.PI / 2;
+    lid.rotation.y = Math.PI / 2;
+    lid.position.y = 1.56;
+    g.add(lid);
+    const flag = new THREE.Mesh(
+      new THREE.BoxGeometry(0.34, 0.24, 0.05),
+      new THREE.MeshStandardMaterial({ color: 0xd8563f, roughness: 0.8, flatShading: true,
+        emissive: 0xd8563f, emissiveIntensity: 0.4 }));
+    flag.position.set(0.42, 1.72, 0);
+    g.add(flag);
+    const halo = glowSprite(0xff8348, 1.8, 0);
+    halo.position.set(0.42, 1.72, 0);
+    g.add(halo);
+    g.userData.flag = flag;
+    addProp('mail', g, metal, halo, -1.2, 6.0);
+  }
+  {
+    // 宝箱（未鑑定品）。中身があるときだけ、蓋の隙間から光が漏れる
+    const g = new THREE.Group();
+    const wood = new THREE.MeshStandardMaterial({
+      color: 0x5a4126, roughness: 0.9, flatShading: true,
+      emissive: 0x3a2a12, emissiveIntensity: 0.2
+    });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.72, 0.9), wood);
+    body.position.y = 0.36;
+    g.add(body);
+    const lid = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.45, 0.45, 1.3, 12, 1, false, 0, Math.PI), wood);
+    lid.rotation.z = Math.PI / 2;
+    lid.position.y = 0.74;
+    g.add(lid);
+    const band = new THREE.Mesh(
+      new THREE.BoxGeometry(0.16, 0.8, 0.94),
+      new THREE.MeshStandardMaterial({ color: 0x8a6a34, roughness: 0.45, metalness: 0.5, flatShading: true }));
+    band.position.y = 0.4;
+    g.add(band);
+    const slit = glowSprite(0xffd27a, 2.6, 0);
+    slit.position.y = 0.78;
+    g.add(slit);
+    addProp('chest', g, wood, slit, 0.7, 6.8);
+  }
+  {
+    // 棚（所持品）。溢れかけているときだけ赤く灯る
+    const g = new THREE.Group();
+    const wood = new THREE.MeshStandardMaterial({
+      color: 0x4e3d2a, roughness: 0.95, flatShading: true,
+      emissive: 0x241a10, emissiveIntensity: 0.2
+    });
+    for (const dx of [-0.62, 0.62]) {
+      const side = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.8, 0.5), wood);
+      side.position.set(dx, 0.9, 0);
+      g.add(side);
+    }
+    for (const y of [0.35, 0.95, 1.55]) {
+      const shelf = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.09, 0.5), wood);
+      shelf.position.y = y;
+      g.add(shelf);
+    }
+    const junkMat = new THREE.MeshStandardMaterial({
+      color: 0x6d7893, roughness: 0.55, metalness: 0.3, flatShading: true
+    });
+    for (const [i, [x, y]] of ([[-0.32, 0.55], [0.18, 0.5], [0.42, 1.14], [-0.24, 1.75]] as const).entries()) {
+      const junk = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.34, 0.22), junkMat);
+      junk.position.set(x, y, 0);
+      junk.rotation.z = i * 0.4;
+      g.add(junk);
+    }
+    const halo = glowSprite(0xff5f70, 2.0, 0);
+    halo.position.y = 1.0;
+    g.add(halo);
+    addProp('shelf', g, wood, halo, 2.4, 6.2);
+  }
 
   // 焚き火
   const fire = new THREE.Group();
@@ -447,12 +588,22 @@ function buildBase(): SceneDef {
   // 1 = 全員在宅、0 = 全員潜行中
   let presence = 1;
   let gReady = 0;
+  const propWant: Record<string, number> = { chest: 0, mail: 0, sign: 0, shelf: 0 };
+  const propNow: Record<string, number> = { chest: 0, mail: 0, sign: 0, shelf: 0 };
+
+  props.set('garden', greenFoot);
 
   return {
-    scene, cam,
+    scene, cam, hotspots: props,
     setMood(m) {
       if (m.presence !== undefined) presence = Math.max(0, Math.min(1, m.presence));
       if (m.intensity !== undefined) gReady = Math.max(0, Math.min(1, m.intensity));
+      if (m.props) {
+        for (const k of Object.keys(propWant)) {
+          const v = (m.props as Record<string, number | undefined>)[k];
+          if (v !== undefined) propWant[k] = Math.max(0, Math.min(1, v));
+        }
+      }
       if (m.slots) {
         for (const [i, gp] of gPlots.entries()) {
           const slot = m.slots[i];
@@ -485,6 +636,22 @@ function buildBase(): SceneDef {
       gLight.intensity = (5 + Math.sin(t * 0.9) * 0.8) * (1 + gReady * 0.7);
       gGlow.scale.setScalar((2.4 + Math.sin(t * 1.3) * 0.2) * (1 + gReady * 0.35));
       for (const [i, gp] of gPlots.entries()) if (gp.root.visible) gp.slot.update(t, i);
+
+      // 用がある物だけ光る（§2「未鑑定品がある間は sin 波で揺らす」）。
+      // バッジの代わりなので、**件数は言わない**——「ある／ない」だけ
+      for (const [i, p] of propGlow.entries()) {
+        const want = propWant[p.id] ?? 0;
+        const now = (propNow[p.id] ?? 0) + (want - (propNow[p.id] ?? 0)) * 0.08;
+        propNow[p.id] = now;
+        const pulse = 0.5 + Math.sin(t * 2.2 + i) * 0.5;
+        p.mat.emissiveIntensity = 0.18 + now * (0.5 + pulse * 0.7);
+        (p.halo.material as THREE.SpriteMaterial).opacity = now * (0.25 + pulse * 0.4);
+        p.halo.scale.setScalar(1.6 + now * (1.2 + pulse * 0.6));
+        // 用があるものは、ほんの少し浮いて呼ぶ
+        p.bob.position.y = now * (0.06 + Math.sin(t * 1.7 + i) * 0.06);
+        const flag = p.bob.userData.flag as THREE.Object3D | undefined;
+        if (flag) flag.rotation.z = -1.1 + now * 1.1;
+      }
 
       cam.position.x = 0.8 + Math.sin(t * 0.16) * 1.1;
       cam.position.y = 4.6 + Math.sin(t * 0.11) * 0.3;
@@ -1103,7 +1270,7 @@ function buildGarden(): SceneDef {
   const live: Bed[] = [];
 
   return {
-    scene, cam, hotspot: plus,
+    scene, cam, hotspots: new Map([['expand', plus]]),
     setMood(m) {
       if (m.intensity !== undefined) wantReady = Math.max(0, Math.min(1, m.intensity));
       if (m.slots) {
@@ -1456,6 +1623,162 @@ function buildPedestal(opts: { color?: number } = {}): SceneDef {
     }
   };
 }
+/**
+ * 派遣先の地図（カード脱却指示書 §1）。
+ *
+ * 以前は10行の一覧カードだった。行の高さが全部同じなので、
+ * 「浅い」「深い」「まだ行けない」が**文字を読むまで分からない**——
+ * ダンジョンの深さという、このゲームで一番はっきりした縦の軸を、
+ * わざわざ平らな表に潰していた。
+ *
+ * 奥行きで言い直す。上が浅く、下へ行くほど深く、深いものほど手前に大きい。
+ * 光っているのは踏破した場所、暗いトーラスはまだ行けない場所。
+ * **文字は DOM 側**（名前・時間・費用）。ここは形と光だけを持つ。
+ */
+const MAP_NODES = 10;
+
+function mapNodeAt(i: number): THREE.Vector3 {
+  // 深いほど下へ、そして手前へ。手前に来るほど大きく映るので、
+  // 「近づいてくる」感じがそのまま「危ない」になる
+  // 左右に振る。**隣同士は必ず反対側**——正弦波で置いたら
+  // 2番と3番がほぼ同じ x に来て、丸が重なって数字が読めなくなった。
+  // 折り返しながら降りる形は、地図としても「下っている」が伝わる。
+  return new THREE.Vector3(
+    (i % 2 ? 1 : -1) * (2.6 - (i % 3) * 0.45),
+    6.4 - i * 1.12,
+    -7 + i * 0.62
+  );
+}
+
+function buildMap(): SceneDef {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x05070d);
+  // 霧は薄く。濃いと奥のノードが完全に消えて「行ける先が無い」画面になる
+  scene.fog = new THREE.FogExp2(0x05070d, 0.018);
+
+  const cam = new THREE.PerspectiveCamera(46, 1, 0.1, 200);
+  cam.position.set(0, 0.9, 20);
+  cam.lookAt(0, -0.4, -3);
+
+  scene.add(new THREE.AmbientLight(0x2b3350, 1.25));
+  const key = new THREE.DirectionalLight(0x9fb6ff, 0.6);
+  key.position.set(-4, 8, 10);
+  scene.add(key);
+
+  const stars = makeStars(150, 21);
+  scene.add(stars);
+
+  const pts = Array.from({ length: MAP_NODES }, (_, i) => mapNodeAt(i));
+  const curve = new THREE.CatmullRomCurve3(pts);
+
+  // 経路。**区間ごとに分ける。** 1本の管にすると「どこまで行けるか」を
+  // 色で言えない——解放済みと未解放の境目こそ、この画面が伝えたい線。
+  const segs: THREE.Mesh[] = [];
+  for (let i = 0; i < MAP_NODES - 1; i++) {
+    const sub = new THREE.CatmullRomCurve3(
+      Array.from({ length: 8 }, (_, k) => curve.getPoint((i + k / 7) / (MAP_NODES - 1)))
+    );
+    const m = new THREE.Mesh(
+      new THREE.TubeGeometry(sub, 12, 0.075, 6, false),
+      new THREE.MeshStandardMaterial({
+        color: 0x2b3350, roughness: 0.8, emissive: 0x2b3350, emissiveIntensity: 0.2
+      })
+    );
+    scene.add(m);
+    segs.push(m);
+  }
+
+  interface MapNode {
+    root: THREE.Group;
+    ring: THREE.Mesh;
+    mat: THREE.MeshStandardMaterial;
+    glow: THREE.Sprite;
+  }
+  const nodes: MapNode[] = [];
+  const hotspots = new Map<string, THREE.Object3D>();
+  for (let i = 0; i < MAP_NODES; i++) {
+    const root = new THREE.Group();
+    root.position.copy(pts[i] as THREE.Vector3);
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x39425f, roughness: 0.55, metalness: 0.2, flatShading: true,
+      emissive: 0x39425f, emissiveIntensity: 0.2
+    });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.17, 6, 14), mat);
+    root.add(ring);
+    const glow = glowSprite(0xffffff, 2.4, 0);
+    root.add(glow);
+    root.userData.role = 'mapnode';
+    root.userData.state = 0;
+    scene.add(root);
+    nodes.push({ root, ring, mat, glow });
+    hotspots.set(`node${i}`, root);
+  }
+
+  const dust = makeMotes(120, { x: 16, y: 24, z: 14 }, 0x8fa8ff, 0.05, 88);
+  dust.position.y = -6;
+  scene.add(dust);
+
+  let selected = -1;
+  const state: number[] = new Array(MAP_NODES).fill(0);
+  const colors: THREE.Color[] = nodes.map(() => new THREE.Color(0x39425f));
+
+  /** 属性の番号 → 色。複合（-1）は魔力の紫 */
+  const NODE_COLOR = [0x9fb0d0, EMBER, FROST, GOLD, 0x7ddc8a];
+
+  return {
+    scene, cam, hotspots,
+    setMood(m) {
+      if (m.selected !== undefined) selected = m.selected;
+      if (!m.nodes) return;
+      for (const [i, n] of nodes.entries()) {
+        const info = m.nodes[i];
+        n.root.visible = info !== undefined;
+        if (!info) continue;
+        state[i] = info.state;
+        n.root.userData.state = info.state;
+        const hex = info.element < 0 ? ARCANE : NODE_COLOR[info.element] ?? GOLD;
+        // 未解放は属性の色を出さない。「何が出るか分からない」を色でも言う
+        (colors[i] as THREE.Color).setHex(info.state === 0 ? 0x39425f : hex);
+        n.mat.color.copy(colors[i] as THREE.Color);
+        n.mat.emissive.copy(colors[i] as THREE.Color);
+        (n.glow.material as THREE.SpriteMaterial).color.copy(colors[i] as THREE.Color);
+      }
+      // 区間の色は「両端とも解放済みなら通っている」で決める
+      for (const [i, seg] of segs.entries()) {
+        const on = (state[i] ?? 0) > 0 && (state[i + 1] ?? 0) > 0;
+        const mat = seg.material as THREE.MeshStandardMaterial;
+        mat.color.setHex(on ? 0x5f6f9e : 0x232a3e);
+        mat.emissive.setHex(on ? 0x5f6f9e : 0x232a3e);
+        mat.emissiveIntensity = on ? 0.35 : 0.12;
+      }
+    },
+    update(t) {
+      twinkle(stars, t);
+      driftMotes(dust, t, 0.12);
+      for (const [i, n] of nodes.entries()) {
+        if (!n.root.visible) continue;
+        const st = state[i] ?? 0;
+        const sel = i === selected;
+        // 踏破済みは常に灯り、選んでいるものは脈打つ。未解放は光らない
+        const base = st === 2 ? 0.85 : st === 1 ? 0.45 : 0.12;
+        const pulse = sel ? 0.35 + Math.sin(t * 2.6) * 0.22 : 0;
+        n.mat.emissiveIntensity = base + pulse;
+        (n.glow.material as THREE.SpriteMaterial).opacity =
+          st === 0 ? 0 : (st === 2 ? 0.5 : 0.28) + pulse * 0.6;
+        n.glow.scale.setScalar(2.2 + (sel ? 1.4 + Math.sin(t * 2.6) * 0.4 : 0));
+        n.ring.rotation.z = t * (sel ? 0.6 : 0.12) + i;
+        n.root.scale.setScalar(sel ? 1.22 : 1);
+      }
+      // 選んだ先へゆっくり首を振る（§1「カメラを寄せる」）。
+      // 一気に寄せると地図の全体が見えなくなるので、覗き込む程度に留める
+      const look = selected >= 0 ? mapNodeAt(selected) : new THREE.Vector3(0, -0.4, -3);
+      cam.position.x += (look.x * 0.18 + Math.sin(t * 0.14) * 0.4 - cam.position.x) * 0.05;
+      cam.position.y += (0.9 + look.y * 0.06 - cam.position.y) * 0.05;
+      cam.lookAt(cam.position.x * 0.4, -0.4 + (selected >= 0 ? look.y * 0.06 : 0), -3);
+    }
+  };
+}
+
 // ---------------------------------------------------------------- 実行系
 
 export const SCENES = {
@@ -1464,6 +1787,7 @@ export const SCENES = {
   vault: () => buildPedestal({ color: FROST }),
   base: buildBase,
   dispatch: buildGate,
+  map: buildMap,
   report: () => buildDescent({ reached: 0.78, accent: EMBER }),
   reveal: () => buildReveal({ color: 0xffc76b }),
   revealRare: () => buildReveal({ color: ARCANE }),
@@ -1487,9 +1811,9 @@ export interface Stage {
   setModel(spec: ModelSpec | null): void;
   /**
    * 3D 側の「押させたい物体」が今どこに映っているか。0〜1 の画面座標。
-   * 見えていなければ null。**当たり判定そのものは DOM 側が置く**（§6.2）。
+   * 見えていないものは入らない。**当たり判定そのものは DOM 側が置く**（§6.2）。
    */
-  hotspot(): { x: number; y: number } | null;
+  hotspots(): ReadonlyMap<string, { x: number; y: number }>;
   /**
    * 検証用。`?probe=1` のときだけ今のシーンを返す（それ以外は null）。
    *
@@ -1562,17 +1886,28 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
    * World層は座標だけを返し、透明なボタンは Interface 層が置く。
    */
   const projected = new THREE.Vector3();
-  function hotspot(): { x: number; y: number } | null {
-    const o = current?.hotspot;
-    if (!o || !o.visible) return null;
-    o.getWorldPosition(projected);
-    projected.project(current!.cam);
-    // カメラの後ろに回った物体は z > 1 になる。前に出たときだけ返す
-    if (projected.z > 1) return null;
-    const x = (projected.x + 1) / 2;
-    const y = (1 - projected.y) / 2;
-    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
-    return { x, y };
+  const spots = new Map<string, { x: number; y: number }>();
+  function hotspots(): ReadonlyMap<string, { x: number; y: number }> {
+    spots.clear();
+    const src = current?.hotspots;
+    if (!src || !current) return spots;
+    for (const [id, o] of src) {
+      // 祖先ごと消えていることもあるので、辿って確かめる
+      let vis = true;
+      for (let a: THREE.Object3D | null = o; a; a = a.parent) {
+        if (!a.visible) { vis = false; break; }
+      }
+      if (!vis) continue;
+      o.getWorldPosition(projected);
+      projected.project(current.cam);
+      // カメラの後ろに回った物体は z > 1 になる。前に出たときだけ返す
+      if (projected.z > 1) continue;
+      const x = (projected.x + 1) / 2;
+      const y = (1 - projected.y) / 2;
+      if (x < 0 || x > 1 || y < 0 || y > 1) continue;
+      spots.set(id, { x, y });
+    }
+    return spots;
   }
 
   function debugScene(): THREE.Scene | null {
@@ -1648,7 +1983,7 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
     composer = null;
   }
 
-  return { load, setMood, setModel, hotspot, debugScene, resize, renderAt, dispose };
+  return { load, setMood, setModel, hotspots, debugScene, resize, renderAt, dispose };
 }
 
 export type SceneName = keyof typeof SCENES;

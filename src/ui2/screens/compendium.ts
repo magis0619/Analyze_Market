@@ -4,12 +4,17 @@ import { BASE_TYPES, baseDef } from '../../data/bases';
 import { UNIQUES, uniqueDef } from '../../data/uniques';
 import { stageDef } from '../../data/stages';
 import { RARITY_CLASS, RARITY_LABEL, actionBar, button, panel, tabs, topBar } from '../components';
-import { each, esc, num } from '../dom';
+import { each, esc, num, when } from '../dom';
 
-// 図鑑（docs/UI-SPEC.md §2.8）。
+// 図鑑（docs/UI-SPEC.md §2.8 ＋ カード脱却指示書 §5）。
 //
 // この画面は**進捗の残高**であって、操作の場ではない。
 // 「まだ見ていないものがある」ことだけを見せて、拠点へ返す。
+//
+// **本にする**（§5）。中身は2ページしかないので three.js は要らない。
+// CSS の 3D 変形（perspective + rotateY）で、新しいページが
+// 前のページの上に倒れ込む。前のページを裏に残したまま重ねるのが肝で、
+// 出ていくページを消してから入れると、ただのフェードにしか見えない。
 //
 // 記録は state 側が openAll() で積んでいる（`baseId|rarity` と `unique:kind`）。
 // ここは読むだけで、状態を書き換えない。
@@ -37,10 +42,19 @@ function topRarity(found: Rarity[]): Rarity | null {
   return null;
 }
 
+/** ページがめくれている時間。長いと待たされ、短いと本に見えない */
+const FLIP_SEC = 0.42;
+
 export function compendiumScreen(nav: Nav): Screen {
   const st = nav.state;
   let tab = 0;
   let picked: string | null = null;
+  /** めくり中の残り秒。0 なら止まっている */
+  let flipT = 0;
+  /** めくる前のページ。裏に残して、その上に新しいページを倒す */
+  let prevTab = 0;
+  /** 1 なら進む（右から倒れる）、-1 なら戻る */
+  let flipDir: 1 | -1 = 1;
 
   interface BaseRow { rarity: Rarity; count: number; firstStage: number }
 
@@ -137,11 +151,24 @@ ${actionBar(button({ label: '閉じる', act: 'close', tier: 'quiet', block: tru
       const found = tab === 0 ? baseFound : uqFound;
       const all = tab === 0 ? BASE_TYPES.length : UNIQUES.length;
 
+      const page = (i: number): string => i === 0 ? baseGrid() : uniqueGrid();
+      const title = (i: number): string => i === 0 ? '基礎装備' : 'ユニーク効果';
+
       return `
 ${topBar({ title: '図鑑', back: 'back', gold: st.data.gold, meta: `${found} / ${all}` })}
 <div class="stack">
   ${panel('', tabs(['装備', 'ユニーク効果'], tab, 'tab'))}
-  ${panel(tab === 0 ? '基礎装備' : 'ユニーク効果', tab === 0 ? baseGrid() : uniqueGrid())}
+  ${panel(title(tab), `<div class="book">
+    ${when(flipT > 0, `<div class="page under">${page(prevTab)}</div>`)}
+    <div class="page ${flipT > 0 ? `turn ${flipDir < 0 ? 'back' : ''}` : ''}">${page(tab)}</div>
+  </div>`)}
+  <div class="pagefoot">
+    ${button({ label: '‹ 前のページ', act: 'flip', tier: 'quiet', disabled: tab === 0 })
+      .replace('data-act="flip"', 'data-act="flip" data-d="-1"')}
+    <span class="c">${tab + 1} / 2</span>
+    ${button({ label: '次のページ ›', act: 'flip', tier: 'quiet', disabled: tab === 1 })
+      .replace('data-act="flip"', 'data-act="flip" data-d="1"')}
+  </div>
   <div style="font-size:var(--fs-label);color:var(--faint);text-align:center;line-height:1.6">
     ${found === all
         ? 'すべて記録した'
@@ -154,10 +181,30 @@ ${actionBar(button({ label: '拠点へ戻る', act: 'back', tier: 'quiet', block
     act(action, el) {
       switch (action) {
         case 'back': nav.goBase(); return;
-        case 'tab': tab = Number(el.dataset.i ?? 0); return;
+        case 'tab': turnTo(Number(el.dataset.i ?? 0)); return;
+        case 'flip': turnTo(tab + (Number(el.dataset.d ?? 1) > 0 ? 1 : -1)); return;
         case 'pick': picked = el.dataset.id ?? null; return;
         case 'close': picked = null; return;
       }
+    },
+
+    tick(dt) {
+      if (flipT <= 0) return false;
+      flipT -= dt;
+      // めくり終わったときだけ描き直す。途中で描き直すと
+      // アニメーションが頭から再生され、ページが何度も倒れてくる
+      if (flipT <= 0) { flipT = 0; return true; }
+      return false;
     }
   };
+
+  /** ページを移る。同じページなら何もしない（無駄なめくりを起こさない） */
+  function turnTo(next: number): void {
+    const n = Math.max(0, Math.min(1, next));
+    if (n === tab) return;
+    prevTab = tab;
+    flipDir = n > tab ? 1 : -1;
+    tab = n;
+    flipT = FLIP_SEC;
+  }
 }
