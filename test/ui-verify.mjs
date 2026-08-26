@@ -79,7 +79,7 @@ const PROBE = () => {
 
   // U2: 文字が枠から溢れていない
   const overflow = [];
-  for (const el of document.querySelectorAll('.n, .nm, .l, .v, h1, .toast, .btn, .tag, .cell, .tab')) {
+  for (const el of document.querySelectorAll('.n, .nm, .l, .v, h1, .toast, .btn, .tag, .cell, .tab, .seed, .hint')) {
     if (!vis(el)) continue;
     if (el.scrollWidth > el.clientWidth + 1) overflow.push(el.textContent.trim().slice(0, 24));
     if (el.scrollHeight > el.clientHeight + 1) overflow.push(`${el.textContent.trim().slice(0, 16)}(縦)`);
@@ -173,11 +173,26 @@ const PROBE = () => {
     }
   }
 
+  // U12: 浮かせて置いた文字が、他の文字を踏んでいないか。
+  // U8 は通知だけを見ていたので、タイトルの種表示が CTA に踏まれていたのを
+  // 見逃していた。position:absolute の文字はすべて同じ目で見る。
+  const floated = [];
+  for (const el of document.querySelectorAll('.seed, .float, .charge-hint, .banner')) {
+    if (!vis(el) || !el.textContent.trim()) continue;
+    const fb = box(el);
+    for (const other of document.querySelectorAll('.n, .nm, .l, .v, .m, h1, .btn, .action, .tab, .cell')) {
+      if (!vis(other) || !other.textContent.trim() || el.contains(other) || other.contains(el)) continue;
+      if (inter(fb, box(other))) {
+        floated.push(`${el.textContent.trim().slice(0, 12)} × ${other.textContent.trim().slice(0, 12)}`);
+      }
+    }
+  }
+
   const hScroll = document.documentElement.scrollWidth > window.innerWidth + 1;
 
   return {
     overlaps, overflow, small, ctaMid, thumbTop: window.innerHeight * (2 / 3),
-    gold: goldEl ? box(goldEl) : null, contrasts, rarity, covered, blocked, hScroll,
+    gold: goldEl ? box(goldEl) : null, contrasts, rarity, covered, blocked, floated, hScroll,
     tapCount: [...document.querySelectorAll('[data-tap]')].filter(vis).length,
     liveCount,
     toastCount: [...document.querySelectorAll('[data-role=toast]')].filter(vis).length,
@@ -210,6 +225,8 @@ async function probe(page, name, { needsTap = true } = {}) {
     `無効ラベルのコントラスト ${r.contrasts.map(c => c.toFixed(1)).join(',')}`);
   check('U8', name, r.covered.length === 0,
     `通知が文字を覆っている ${r.covered.length}件: ${r.covered.slice(0, 3).join(' / ')}`);
+  check('U12', name, r.floated.length === 0,
+    `浮かせた文字が他の文字を踏んでいる ${r.floated.length}件: ${r.floated.slice(0, 3).join(' / ')}`);
   check('U11', name, r.blocked.length === 0,
     `押せない操作 ${r.blocked.length}件: ${r.blocked.slice(0, 3).join(' / ')}`);
   // 「生きている操作が0件」だと U11 は無条件に通る。素通りを防ぐ
@@ -248,7 +265,7 @@ await page.waitForTimeout(500);
 await probe(page, 'dispatch');
 
 // --- 装備選択（シート）。ここは data-screen 上は dispatch のまま
-await page.click('[data-act=pick][data-slot=weapon]').catch(() => {});
+await page.click('[data-act=pick-open][data-slot=weapon]').catch(() => {});
 await page.waitForTimeout(400);
 if (await page.$('.sheet')) {
   await probe(page, 'dispatch');
@@ -308,6 +325,23 @@ for (let i = 0; i < 12; i++) {
 }
 await page.waitForTimeout(500);
 await probe(page, 'opening');
+
+// 開けた数と一覧の行数が合っているか。
+// カットインの途中で次へ進むと、その1個が一覧にも売却額にも入らず、
+// 「4/4 なのに3行」という表示になっていた（戦利品自体は失われない）。
+{
+  const r = await page.evaluate(() => {
+    const meta = document.querySelector('.topbar .pill')?.textContent?.trim() ?? '';
+    const m = meta.match(/(\d+)\s*\/\s*(\d+)/);
+    return {
+      shown: document.querySelectorAll('.stack .list .item').length,
+      opened: m ? Number(m[1]) : -1, total: m ? Number(m[2]) : -1
+    };
+  });
+  check('T3', 'opening', r.shown === r.total,
+    `開封 ${r.opened}/${r.total} と表示しながら一覧は ${r.shown}行`);
+}
+
 await page.click('[data-role=cta]');            // 拠点へ
 await page.waitForTimeout(500);
 

@@ -60,6 +60,7 @@ export class Shell implements Nav {
   private ui: HTMLElement;
   private screen: Screen;
   private screenName = '';
+  private sceneName: SceneName | '' = '';
   private factories: ScreenFactories;
   private t = 0;
   private originMs = Date.now();
@@ -133,7 +134,8 @@ export class Shell implements Nav {
   // ------------------------------------------------------------ 描画
 
   private mount(): void {
-    this.stage.load(this.screen.scene);
+    this.sceneName = this.screen.scene;
+    this.stage.load(this.sceneName);
     // 検証スクリプトがここを読んで「今どの画面か」を確認する（§7.2）。
     // 座標決め打ちのスクリプトが別画面を測り続ける事故を、構造で防ぐ
     document.documentElement.dataset.screen = this.screenName;
@@ -186,6 +188,12 @@ export class Shell implements Nav {
     this.t += dt;
 
     if (this.screen.tick?.(dt)) this.dirty = true;
+    // 画面の中で背景が変わることがある（開封の溜め・提示は専用のシーンを持つ）。
+    // mount のときだけ読み込んでいたので、カットインの間も拠点の背景のままだった
+    if (this.screen.scene !== this.sceneName) {
+      this.sceneName = this.screen.scene;
+      this.stage.load(this.sceneName);
+    }
     if (this.dirty) this.redraw();
     this.stage.renderAt(this.t);
   };

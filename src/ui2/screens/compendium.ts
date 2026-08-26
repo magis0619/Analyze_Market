@@ -145,7 +145,7 @@ ${topBar({ title: '図鑑', back: 'back', gold: st.data.gold, meta: `${found} / 
   <div style="font-size:var(--fs-label);color:var(--faint);text-align:center;line-height:1.6">
     ${found === all
         ? 'すべて記録した'
-        : `残り ${all - found}。深いステージほど出やすい`}
+        : `残り${all - found}種。深いステージほど出やすい`}
   </div>
 </div>
 ${actionBar(button({ label: '拠点へ戻る', act: 'back', primary: true, block: true, role: 'cta' }))}`;

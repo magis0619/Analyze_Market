@@ -64,7 +64,7 @@ export function itemIconClass(it: Item): string {
   return it.slot === 'weapon' ? elementClass(dominantElement(it.element)) : 'def';
 }
 
-function affixText(a: Item['affixes'][number]): string {
+export function affixText(a: Item['affixes'][number]): string {
   const def = affixDef(a.kind);
   const el = a.element ? elementLabel(a.element) : '';
   if (a.kind === 'elementFlat') return `${el}ダメージ追加`;
@@ -225,8 +225,10 @@ function statsOf(it: Item, cmp?: Item | null): StatLine[] {
         delta: cmp ? itemScore(it) - itemScore(cmp) : undefined },
       { label: '威力', value: `${it.power}`,
         delta: cmp ? it.power - cmp.power : undefined },
+      // 値と同じ桁で出す。100倍した整数（1.26→1.14 で「12」）を並べると、
+      // 何の12なのか読み手には分からない
       { label: '速度', value: it.speed.toFixed(2), tone: 'spd',
-        delta: cmp ? Math.round((it.speed - cmp.speed) * 100) : undefined },
+        delta: cmp ? Math.round((it.speed - cmp.speed) * 100) / 100 : undefined },
       { label: '会心', value: `${it.crit.toFixed(1)}%`, tone: 'crit',
         delta: cmp ? Math.round((it.crit - cmp.crit) * 10) / 10 : undefined, unit: '' }
     ];

@@ -126,8 +126,10 @@ ${topBar({ title: '帰還レポート', gold: st.data.gold, meta: stage.name })}
       </div>
     `)
         : panel('戦利品', `
-      <div class="list">${each(r.loot.slice(0, 4), it =>
-          `<div class="item ${it.rarity}">
+      <div class="list">${each(r.loot.slice(0, 4), () =>
+          // レアリティのクラスを付けない。左端の色帯で中身が分かってしまい、
+          // 開封の意味が無くなる（§7.4 開けるまで分からないこと）
+          `<div class="item">
              <div class="ic">?</div>
              <div class="tx"><div class="n">未鑑定品</div><div class="m">開封すると分かる</div></div>
            </div>`)}</div>

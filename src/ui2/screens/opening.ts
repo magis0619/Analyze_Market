@@ -5,7 +5,7 @@ import { baseDef } from '../../data/bases';
 import { uniqueDef } from '../../data/uniques';
 import { sellValue } from '../../sim/items';
 import {
-  RARITY_LABEL, actionBar, button, itemRow, itemScore, panel, topBar
+  RARITY_LABEL, actionBar, affixText, button, itemRow, itemScore, panel, topBar
 } from '../components';
 import { each, esc, num, when } from '../dom';
 
@@ -56,6 +56,13 @@ export function openingScreen(nav: Nav, items: Item[]): Screen {
 
   /** 次の1個へ。カットイン対象なら溜めから始める。 */
   function next(): void {
+    // 出て行く1個を必ず一覧へ落としてから進む。
+    // カットイン中の品は「提示を見終わってから」入れているので、
+    // 待たずに次へ進むと一覧にも売却額にも入らない——
+    // 件数は 4/4 なのに一覧は3行、という表示になっていた。
+    // （戦利品そのものは openAll() が拾うので失われてはいない）
+    const leaving = current();
+    if (leaving && !shown.includes(leaving)) shown.push(leaving);
     idx++;
     const it = current();
     if (!it) {
@@ -73,12 +80,22 @@ export function openingScreen(nav: Nav, items: Item[]): Screen {
     }
   }
 
-  /** 残り全部を一覧へ流し込む。 */
+  /**
+   * 残り全部を一覧へ流し込む。
+   *
+   * カットイン中の1個は、まだ `shown` に入っていない（提示を見終わってから
+   * 入れている）。そのまま残りだけ流すと、件数が 4/4 なのに一覧が3行、
+   * 売却額もその1個ぶん足りない、という表示になっていた。
+   * 戦利品そのものは openAll() が拾うので失われてはいないが、
+   * 「何が出たか」を確かめる画面としては嘘をついている。
+   */
   function skipAll(): void {
+    const cur = current();
+    if (cur && !shown.includes(cur)) shown.push(cur);
     while (idx < queue.length - 1) {
       idx++;
       const it = current();
-      if (it) shown.push(it);
+      if (it && !shown.includes(it)) shown.push(it);
     }
     phase = 'done';
     claim();
@@ -106,7 +123,7 @@ export function openingScreen(nav: Nav, items: Item[]): Screen {
       <div class="row"><span class="l">会心</span><span class="r"><span class="v" style="color:var(--crit)">${it.crit.toFixed(1)}%</span></span></div>`)}
     ${when(it.affixes.length > 0, `<div class="sep"></div>
       <div class="fx">${each(it.affixes, a =>
-        `<div><span>効果</span><span>${'★'.repeat(a.tier)}${'☆'.repeat(5 - a.tier)}</span></div>`)}</div>`)}
+        `<div><span>${esc(affixText(a))}</span><span>${'★'.repeat(a.tier)}${'☆'.repeat(5 - a.tier)}</span></div>`)}</div>`)}
     ${when(u !== null, `<div class="sep"></div>
       <div style="text-align:left">
         <div style="font-size:var(--fs-label);color:var(--gold-hi);margin-bottom:var(--sp-1)">《${esc(u?.name ?? '')}》</div>

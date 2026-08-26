@@ -11,8 +11,10 @@ import { duration, each, esc, num, when } from '../dom';
 // 答える場所はここしかない（設計書 §9）。派遣スロットが、誰が・どこへ・
 // あと何分か、を必ず1行で示すこと。
 
+// 職ごとの1文字。絵文字（⚔🛡🗡）は環境によって細い×印に潰れ、
+// 3人並べても見分けがつかなくなる（一覧のアイコンと同じ理由）。
 const JOB_ICON: Record<JobId, string> = {
-  swordsman: '⚔', guardian: '🛡', skirmisher: '🗡'
+  swordsman: '剣', guardian: '守', skirmisher: '遊'
 };
 
 export function baseScreen(nav: Nav): Screen {
