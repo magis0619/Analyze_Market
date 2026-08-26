@@ -177,7 +177,11 @@ export class Shell implements Nav {
     requestAnimationFrame(this.loop);
     if (!this.running) return;
     const now = performance.now();
-    const dt = Math.min(0.05, (now - this.lastMs) / 1000);
+    // 上限は「タブから戻ったときの飛び」を止めるためのもの。
+    // 0.05 だと 20fps を割った瞬間から演出時間が実時間より遅れ始め、
+    // 遺物の溜め 2.4 秒が数倍に伸びる（弱い端末では固まったように見える）。
+    // 見えていない間はそもそも回していないので、ここは緩くてよい。
+    const dt = Math.min(0.25, (now - this.lastMs) / 1000);
     this.lastMs = now;
     this.t += dt;
 

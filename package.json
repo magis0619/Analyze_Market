@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node scripts/static-checks.mjs && tsx test/run-tests.ts"
+    "test": "node scripts/static-checks.mjs && tsx test/run-tests.ts && bash scripts/ui-verify.sh",
+    "test:ui": "bash scripts/ui-verify.sh"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
