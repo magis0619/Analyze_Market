@@ -1,16 +1,22 @@
 import type { Nav, Screen } from '../shell';
 import type { Mood } from '../../world/scenes';
-import { HERBS, POTIONS, herbDef, potionDef } from '../../data/garden';
+import { elementIndex } from '../../world/scenes';
+import { HERBS, POTIONS, herbDef } from '../../data/garden';
 import { actionBar, button, panel, ring, toasts, topBar } from '../components';
 import { coarseDuration, duration, each, esc, num, when } from '../dom';
 
-// 薬草園（新機能指示書「薬草園画面」）。
+// 薬草園（新機能指示書「薬草園画面」＋ 改善 §6・§7）。
 //
 // **反復作業を作らない。** 水やりも間引きも無い。植えたら放っておけば育ち、
 // 育ったものは腐らない。プレイヤーがすることは「植える」と「収穫する」だけ。
 //
 // 進捗は既存のリング（UI-SPEC §3 / 円グラフ）を流用する。
 // 新しい見せ方を足すより、既に読み方を覚えたものを使い回すほうが速く伝わる。
+//
+// **板を縦に積まない**（§7）。以前は「種と薬」の面だけで
+// 錬金工房の説明／収穫物／持っている薬／畑を広げる、と4枚が縦に並び、
+// 派遣準備で潰したはずの「カードの塔」がここで再発していた。
+// 種はアイコンの升目に、たくわえは1行に、畑の拡張は3Dの「＋」に移す。
 
 type Tab = 0 | 1;
 
@@ -18,6 +24,12 @@ export function gardenScreen(nav: Nav): Screen {
   let tab: Tab = 0;
   /** 植え付け先を選んでいる枠。null なら選んでいない */
   let planting: number | null = null;
+  /** 升目で選んでいる薬草。詳細と行動ボタンの対象 */
+  let picked: string | null = null;
+  /** たくわえの内訳を開いているか */
+  let stockOpen = false;
+  /** 畑を広げる確認を出しているか */
+  let expanding = false;
   const notices: string[] = [];
   let noticeT = 0;
   /** 前に描いたときの畑の見た目。変わらなければ描き直さない */
@@ -56,92 +68,151 @@ export function gardenScreen(nav: Nav): Screen {
     </div>`;
   }
 
+  /**
+   * 薬草の升目（§7「武器/防具と同じアイコングリッド化」）。
+   *
+   * 名前・育つ時間・手持ちの数だけを出す。**効果や材料は出さない**——
+   * 5種ぶん全部の説明を並べると、結局それは縦長の一覧に戻る。
+   * 押したものの説明だけを、升目の下に1枚出す。
+   */
+  function herbGrid(mode: 'plant' | 'buy'): string {
+    const g = nav.state.data.garden;
+    return `<div class="hgrid">${each(HERBS, h => {
+      const seeds = g.seeds[h.id] ?? 0;
+      const off = mode === 'plant' && seeds === 0;
+      return `<button class="hcell ${h.element} ${picked === h.id ? 'on' : ''} ${off ? 'off' : ''}"
+                      data-tap data-act="pick-herb" data-id="${h.id}">
+        <span class="g">${esc(h.glyph)}</span>
+        <span class="n">${esc(h.name)}</span>
+        <span class="b">${Math.round(h.growSec / 60)}分</span>
+        ${when(seeds > 0, `<span class="q">${seeds}</span>`)}
+      </button>`;
+    })}</div>`;
+  }
+
+  /** 升目で選んだ薬草の説明。何の材料になるかまで言う（畑へ戻る理由になる） */
+  function herbDetail(): string {
+    if (!picked) return '';
+    const h = herbDef(picked);
+    const use = POTIONS.find(p => p.main === h.id);
+    const seeds = nav.state.data.garden.seeds[h.id] ?? 0;
+    return `<div class="hdetail">
+      <div class="row"><span class="l">${esc(h.name)}</span>
+        <span class="r"><span class="v">${esc(duration(h.growSec))}で ${h.yield}個</span></span></div>
+      <div class="row"><span class="l">手持ちの種</span>
+        <span class="r"><span class="v">${seeds}</span></span></div>
+      ${when(use !== undefined, `<div class="row"><span class="l">${esc(use?.name ?? '')}の主材料</span>
+        <span class="r"><span class="v" style="color:var(--dim)">${esc(use?.text ?? '')}</span></span></div>`)}
+    </div>`;
+  }
+
   /** 植える薬草を選ぶシート。 */
   function plantSheet(): string {
     const st = nav.state;
+    const h = picked ? herbDef(picked) : null;
+    const canPlant = h !== null && (st.data.garden.seeds[h.id] ?? 0) > 0;
     return `
 ${topBar({ title: '何を植えるか', back: 'cancel', gold: st.data.gold })}
 <div class="sheet-back" data-act="cancel"></div>
-<div class="sheet">
-  <div class="sheet-list">
-    ${each(HERBS, h => {
-      const have = st.data.garden.seeds[h.id] ?? 0;
-      return `<button class="item ${have > 0 ? '' : 'off'}" ${have > 0
-        ? `data-tap data-act="plant" data-id="${h.id}"` : 'disabled'}>
-        <div class="ic ${h.element}">${esc(h.glyph)}</div>
-        <div class="tx">
-          <div class="n">${esc(h.name)}</div>
-          <div class="m">${esc(duration(h.growSec))}で ${h.yield}個 ・ 種 ${have}</div>
-        </div>
-        ${when(have === 0, '<div class="rr" style="color:var(--faint)">種が無い</div>')}
-      </button>`;
-    })}
-  </div>
+<div class="sheet hero anchor-bottom">
+  ${herbGrid('plant')}
+  ${picked ? herbDetail() : '<div class="empty">植えるものを選ぶ</div>'}
 </div>
-${actionBar(button({ label: 'やめる', act: 'cancel', tier: 'quiet', block: true }))}`;
+${actionBar(`<div class="pair">
+  ${button({ label: 'やめる', act: 'cancel', tier: 'quiet' })}
+  ${button({
+      label: h ? `${h.name}を植える` : '選んでいない',
+      act: 'plant', tier: 'primary', role: 'cta', disabled: !canPlant
+    })}
+</div>`, h && !canPlant ? 'この種を持っていない。種は「種と薬」で買える' : undefined)}`;
   }
 
-  /** 種を買う・薬を確かめる面。 */
-  function stockTab(): string {
-    const st = nav.state;
-    const g = st.data.garden;
-    const expand = st.nextPlotCost();
+  /** たくわえの内訳。1行の要約を押したときだけ開く（§7 の統合） */
+  function stockDrawer(): string {
+    const g = nav.state.data.garden;
+    const herbs = HERBS.filter(h => (g.herbs[h.id] ?? 0) > 0);
+    const potions = POTIONS.filter(p => (g.potions[p.id] ?? 0) > 0);
     return `
-  ${panel('種を買う', `<div class="list">
-    ${each(HERBS, h => `<div class="item">
-      <div class="ic ${h.element}">${esc(h.glyph)}</div>
-      <div class="tx">
-        <div class="n">${esc(h.name)}</div>
-        <div class="m">${esc(duration(h.growSec))}で ${h.yield}個 ・ 手持ち ${g.seeds[h.id] ?? 0}</div>
-      </div>
-      ${button({
-        label: `${num(h.seedCost)}G`, act: 'buy', tier: 'secondary',
-        disabled: st.data.gold < h.seedCost
-      }).replace('data-act="buy"', `data-act="buy" data-id="${h.id}"`)}
-    </div>`)}
-  </div>`)}
+<div class="sheet-back solid" data-act="stock-close"></div>
+<div class="drawer">
+  ${panel('収穫した薬草', herbs.length > 0
+      ? `<div class="chips">${each(herbs, h =>
+          `<span class="chip ${h.element}">${esc(h.glyph)} ${esc(h.name)} ${g.herbs[h.id] ?? 0}</span>`)}</div>`
+      : '<div class="empty">まだ何も採れていない</div>')}
+  ${panel('持っている薬', potions.length > 0
+      ? `<div class="list">${each(potions, p =>
+          `<div class="item">
+            <div class="ic ${p.element}">薬</div>
+            <div class="tx"><div class="n">${esc(p.name)}</div><div class="m">${esc(p.text)}</div></div>
+            <div class="rr">×${g.potions[p.id] ?? 0}</div>
+          </div>`)}</div>`
+      : '<div class="empty">錬金工房で作れる</div>')}
+  ${button({ label: '閉じる', act: 'stock-close', tier: 'quiet', block: true })}
+</div>`;
+  }
 
-  ${panel('錬金工房', `
-    <div style="font-size:var(--fs-label);color:var(--dim);line-height:1.55">
-      収穫した薬草を薬に変える。薬は派遣のときに1本だけ持たせられる。
+  /** 畑を広げる確認。専用の板を常設せず、温室の「＋」から開く（§7） */
+  function expandModal(): string {
+    const st = nav.state;
+    const cost = st.nextPlotCost();
+    if (cost === null) return '';
+    const g = st.data.garden;
+    return `
+<div class="sheet-back" data-act="expand-close"></div>
+<div class="modal">
+  <div class="modal-body">
+    <div class="nm">畑を ${g.plots} → ${g.plots + 1} 枠にする</div>
+    <div style="font-size:var(--fs-display);color:var(--gold);margin-top:var(--sp-1)">${num(cost)}G</div>
+    <div style="font-size:var(--fs-label);color:var(--dim);margin-top:var(--sp-2);line-height:1.55">
+      同時に育てられる薬草が1種類増える。広げた枠は戻せない。
     </div>
-    ${button({ label: '錬金工房へ', act: 'alchemy', tier: 'secondary', block: true })}
-  `)}
+    <div class="pair" style="margin-top:var(--sp-4)">
+      ${button({ label: 'やめる', act: 'expand-close', tier: 'quiet' })}
+      ${button({
+        label: '広げる', act: 'expand', tier: 'primary',
+        disabled: st.data.gold < cost
+      })}
+    </div>
+  </div>
+</div>`;
+  }
 
-  ${panel('収穫物', HERBS.some(h => (g.herbs[h.id] ?? 0) > 0)
-    ? `<div class="chips">${each(HERBS.filter(h => (g.herbs[h.id] ?? 0) > 0), h =>
-        `<span class="chip ${h.element}">${esc(h.glyph)} ${esc(h.name)} ${g.herbs[h.id] ?? 0}</span>`)}</div>`
-    : '<div class="empty">まだ何も採れていない</div>')}
-
-  ${panel('持っている薬', POTIONS.some(p => (g.potions[p.id] ?? 0) > 0)
-    ? `<div class="list">${each(POTIONS.filter(p => (g.potions[p.id] ?? 0) > 0), p =>
-        `<div class="item">
-          <div class="ic ${p.element}">薬</div>
-          <div class="tx"><div class="n">${esc(p.name)}</div><div class="m">${esc(p.text)}</div></div>
-          <div class="rr">×${g.potions[p.id] ?? 0}</div>
-        </div>`)}</div>`
-    : '<div class="empty">錬金工房で作れる</div>')}
-
-  ${when(expand !== null, panel('畑を広げる', `
-    <div class="row"><span class="l">${g.plots} → ${g.plots + 1} 枠</span>
-      <span class="r"><span class="v" style="color:var(--gold)">${num(expand ?? 0)}G</span></span></div>
-    ${button({
-      label: '広げる', act: 'expand', tier: 'secondary', block: true,
-      disabled: st.data.gold < (expand ?? Infinity)
-    })}
-  `))}`;
+  /** たくわえ1行（§7「1行のステータスサマリーに統合」）。拠点の帯と同じ文法 */
+  function stockLine(): string {
+    const g = nav.state.data.garden;
+    const kinds = HERBS.filter(h => (g.herbs[h.id] ?? 0) > 0).length;
+    const bottles = POTIONS.reduce((a, p) => a + (g.potions[p.id] ?? 0), 0);
+    return `<button class="summary" data-tap data-act="stock-open">
+      <span class="micro">たくわえ</span>
+      <span class="t">収穫した薬草 ${kinds}種 ・ 薬 ${bottles}本</span>
+      <span class="chev">›</span>
+    </button>`;
   }
 
   return {
     scene: 'garden',
 
-    /** 収穫できるものがあるほど温室が明るくなる（§3 の Mood と同じ仕組み） */
+    /**
+     * 温室へ渡す状態（§6）。
+     *
+     * **枠の数も中身も、そのまま数で渡す。** 以前は明るさしか渡していなかったので、
+     * 何を植えても同じ緑の株が常に6本立っていた——「育成 2/2」の横で3本が
+     * 育っている絵になり、数字と絵が食い違っていた。
+     */
     get mood(): Mood {
       const st = nav.state;
-      const beds = st.data.garden.beds.length;
+      const g = st.data.garden;
+      const beds = g.beds.length;
       return {
         accent: 0x9be08a,
-        intensity: beds === 0 ? 0 : Math.min(1, st.readyCount() / beds)
+        intensity: beds === 0 ? 0 : Math.min(1, st.readyCount() / beds),
+        slots: g.beds.map((_, i) => {
+          const p = st.plotProgress(i);
+          return p
+            ? { kind: elementIndex(p.herb.element), ratio: p.ratio }
+            : { kind: -1, ratio: 0 };
+        }),
+        canExpand: st.nextPlotCost() !== null
       };
     },
 
@@ -150,28 +221,55 @@ ${actionBar(button({ label: 'やめる', act: 'cancel', tier: 'quiet', block: tr
       const st = nav.state;
       const ready = st.readyCount();
       const growing = st.data.garden.beds.filter(b => b !== null).length;
+      const canExpand = st.nextPlotCost() !== null;
+
+      // 下端のボタンは面ごとに1つだけ。畑では「採る／植える」、
+      // 種と薬では「工房へ」。板で行き先を増やさない（§7）。
+      //
+      // **確認を出している間は下端が主役を降りる。** 段は画面に1つ（§3.3 規則2）で、
+      // 確認の「広げる」と下端の「植える」が両方 primary だと、
+      // 暗幕の裏に同じ重さのボタンが残って、どちらが今の話なのか分からない。
+      const main = tab === 1
+        ? { label: '錬金工房へ', act: 'alchemy' }
+        : ready > 0
+          ? { label: `育った ${ready}枠を収穫する`, act: 'harvest-all' }
+          : seedCount() > 0 && st.data.garden.beds.some(b => b === null)
+            ? { label: '空いた畑に植える', act: 'pick-first' }
+            : { label: '種を買う', act: 'to-stock' };
+      const cta = button({
+        ...main, block: true, role: 'cta',
+        tier: expanding ? 'quiet' : 'primary'
+      });
 
       return `
 ${topBar({
         title: '薬草園', back: 'back', gold: st.data.gold,
         meta: ready > 0 ? `収穫 ${ready}` : `育成 ${growing}/${st.data.garden.plots}`
       })}
-<div class="stack hero">
+${when(tab === 0 && canExpand,
+        `<button class="hotspot" data-hotspot data-tap data-act="expand-open" style="display:none"
+                 aria-label="畑を広げる"><span>＋</span></button>`)}
+<div class="stack hero anchor-bottom">
   ${panel('', `<div class="tabs">
     <div class="tab ${tab === 0 ? 'on' : ''}" data-tap data-act="tab" data-i="0">畑</div>
     <div class="tab ${tab === 1 ? 'on' : ''}" data-tap data-act="tab" data-i="1">種と薬</div>
   </div>`)}
 
   ${tab === 0
-        ? panel('', `<div class="beds">${each(st.data.garden.beds, (_, i) => bed(i))}</div>`)
-        : stockTab()}
+        ? panel('', `<div class="beds">${each(st.data.garden.beds, (_, i) => bed(i))}</div>`
+            + when(canExpand, '<div class="hintline calm">温室の「＋」を押すと畑を広げられる</div>'))
+        : panel('種を買う', `${herbGrid('buy')}
+            ${picked ? herbDetail() : ''}
+            ${when(picked !== null, `${button({
+              label: picked ? `${herbDef(picked).name}の種を買う ・ ${num(herbDef(picked).seedCost)}G` : '',
+              act: 'buy', tier: 'secondary', block: true,
+              disabled: picked === null || st.data.gold < herbDef(picked).seedCost
+            })}`)}`)
+          + stockLine()}
 </div>
-${actionBar(
-        ready > 0
-          ? button({ label: `育った ${ready}枠を収穫する`, act: 'harvest-all', tier: 'primary', block: true, role: 'cta' })
-          : seedCount() > 0 && st.data.garden.beds.some(b => b === null)
-            ? button({ label: '空いた畑に植える', act: 'pick-first', tier: 'primary', block: true, role: 'cta' })
-            : button({ label: '錬金工房へ', act: 'alchemy', tier: 'primary', block: true, role: 'cta' }))}
+${actionBar(cta)}
+${when(stockOpen, stockDrawer())}
+${when(expanding, expandModal())}
 ${toasts(notices)}`;
     },
 
@@ -179,21 +277,23 @@ ${toasts(notices)}`;
       const st = nav.state;
       switch (action) {
         case 'back': nav.goBase(); return;
-        case 'tab': tab = (Number(el.dataset.i ?? 0) === 1 ? 1 : 0); return;
+        case 'tab': tab = (Number(el.dataset.i ?? 0) === 1 ? 1 : 0); picked = null; return;
+        case 'to-stock': tab = 1; picked = null; return;
         case 'alchemy': nav.goAlchemy(); return;
-        case 'pick-bed': planting = Number(el.dataset.i ?? 0); return;
+        case 'pick-bed': planting = Number(el.dataset.i ?? 0); picked = null; return;
         case 'pick-first': {
           const i = st.data.garden.beds.findIndex(b => b === null);
-          if (i >= 0) planting = i;
+          if (i >= 0) { planting = i; picked = null; }
           return;
         }
-        case 'cancel': planting = null; return;
+        case 'pick-herb': picked = el.dataset.id ?? null; return;
+        case 'cancel': planting = null; picked = null; return;
         case 'plant': {
-          const id = el.dataset.id;
-          if (planting !== null && id && st.plant(planting, id)) {
-            notify(`${herbDef(id).name}を植えた`);
+          if (planting !== null && picked && st.plant(planting, picked)) {
+            notify(`${herbDef(picked).name}を植えた`);
           }
           planting = null;
+          picked = null;
           return;
         }
         case 'harvest': {
@@ -207,12 +307,16 @@ ${toasts(notices)}`;
           return;
         }
         case 'buy': {
-          const id = el.dataset.id;
-          if (id && st.buySeed(id)) notify(`${herbDef(id).name}の種を買った`);
+          if (picked && st.buySeed(picked)) notify(`${herbDef(picked).name}の種を買った`);
           return;
         }
+        case 'stock-open': stockOpen = true; return;
+        case 'stock-close': stockOpen = false; return;
+        case 'expand-open': expanding = true; return;
+        case 'expand-close': expanding = false; return;
         case 'expand':
           if (st.expandGarden()) notify('畑を広げた');
+          expanding = false;
           return;
       }
     },
@@ -235,7 +339,7 @@ ${toasts(notices)}`;
       const sig = nav.state.data.garden.beds
         .map((_, i) => {
           const p = nav.state.plotProgress(i);
-              // 指紋も**表示している文字列**で取る。内部の秒で取ると、
+          // 指紋も**表示している文字列**で取る。内部の秒で取ると、
           // 画面が変わらないのに毎秒描き直すことになる
           return p ? `${p.herb.id}:${p.ratio >= 1 ? 'R' : coarseDuration(p.remainingSec)}` : '-';
         })
@@ -245,6 +349,3 @@ ${toasts(notices)}`;
     }
   };
 }
-
-/** 未使用の値を参照して lint を黙らせない。薬の定義は工房でも使う。 */
-export const POTION_REF = potionDef;

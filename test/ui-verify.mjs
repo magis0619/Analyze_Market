@@ -644,16 +644,32 @@ await page.click('[data-act=garden]');
 await page.waitForTimeout(600);
 await probe(page, 'garden');
 
-// 種を買う
+// 種を買う（升目 → 詳細 → 買う。§7 のグリッド化）
 await page.click('[data-act=tab][data-i="1"]');
 await page.waitForTimeout(400);
 await probe(page, 'garden');
-check('G1', 'garden', (await page.$('[data-act=buy][data-id=ironleaf]')) !== null, '種を買うボタンが無い');
-await page.click('[data-act=buy][data-id=ironleaf]');
+check('G1', 'garden', (await page.$('.hgrid .hcell[data-id=ironleaf]')) !== null, '種の升目が出ていない');
+// 押す前は詳細も購入ボタンも出ていないこと（升目に全部の説明を並べない §7）
+check('G1b', 'garden', (await page.$('.hdetail')) === null, '何も選んでいないのに詳細が出ている');
+await page.click('.hgrid .hcell[data-id=ironleaf]');
+await page.waitForTimeout(350);
+check('G1c', 'garden', (await page.$('.hdetail')) !== null, '升目を押しても詳細が出ない');
+await probe(page, 'garden');
+await page.click('[data-act=buy]');
 await page.waitForTimeout(350);
 check('G2', 'garden',
   await page.evaluate(() => (window.__delvers.state.data.garden.seeds.ironleaf ?? 0) > 0),
   '種を買っても手持ちが増えていない');
+
+// たくわえは1行に畳まれていて、押すと開く（§7 の統合）
+check('G2b', 'garden', (await page.$('.summary[data-act=stock-open]')) !== null,
+  'たくわえの1行が出ていない');
+await page.click('[data-act=stock-open]');
+await page.waitForTimeout(450);
+await probe(page, 'garden');
+check('G2c', 'garden', (await page.$('.drawer')) !== null, 'たくわえを押しても中身が開かない');
+await page.click('.drawer [data-act=stock-close]');
+await page.waitForTimeout(400);
 
 // 植える
 await page.click('[data-act=tab][data-i="0"]');
@@ -661,16 +677,70 @@ await page.waitForTimeout(400);
 check('G3', 'garden', (await page.$('.bed.empty')) !== null, '空きの畑が1枠も無い');
 await page.click('.bed.empty');
 await page.waitForTimeout(450);
-check('G4', 'garden', (await page.$('.sheet-list .item:not([disabled])')) !== null,
+check('G4', 'garden', (await page.$('.sheet .hcell[data-id=ironleaf]:not(.off)')) !== null,
   '種を持っているのに植えられる薬草が出ていない');
 await probe(page, 'garden');                    // 植え付けシート
-await page.click('.sheet-list .item:not([disabled])');
+await page.click('.sheet .hcell[data-id=ironleaf]');
+await page.waitForTimeout(300);
+await probe(page, 'garden');                    // 選んだ状態
+await page.click('[data-act=plant]');
 await page.waitForTimeout(450);
 check('G5', 'garden',
   await page.evaluate(() => window.__delvers.state.data.garden.beds.some(b => b !== null)),
   '植えたのに畑が空のまま');
+
+// 2枠目には**別の**薬草を植える。同じものを2つ植えると、
+// 「種類ごとに姿が違うか」（§6）を確かめられない
+await page.click('[data-act=tab][data-i="1"]');
+await page.waitForTimeout(400);
+await page.click('.hgrid .hcell[data-id=embermoss]');
+await page.waitForTimeout(300);
+await page.click('[data-act=buy]');
+await page.waitForTimeout(350);
+await page.click('[data-act=tab][data-i="0"]');
+await page.waitForTimeout(400);
+await page.click('.bed.empty');
+await page.waitForTimeout(450);
+await page.click('.sheet .hcell[data-id=embermoss]');
+await page.waitForTimeout(300);
+await page.click('[data-act=plant]');
+await page.waitForTimeout(450);
 const gplant = await probe(page, 'garden');
 check('G6', 'garden', gplant.ringCount > 0, '育成中の畑に進捗リングが出ていない');
+
+// **枠の数と絵の数が合っているか**（改善指示書 §6）。
+//
+// 「育成 2/2」と書いてある横で3本の苗が育っていた。これは絵の好みではなく
+// 数の食い違いなので、目で見るのではなく数えて確かめる。
+{
+  const m = await page.evaluate(() => {
+    const sc = window.__delvers.shell.world.debugScene();
+    if (!sc) return null;
+    let beds = 0, planted = 0;
+    const kinds = [];
+    sc.traverse(o => {
+      if (o.userData?.role !== 'bed' || !o.visible) return;
+      beds++;
+      if (o.userData.plantKind >= 0) { planted++; kinds.push(o.userData.plantKind); }
+    });
+    const st = window.__delvers.state;
+    return {
+      beds, planted, kinds,
+      plots: st.data.garden.plots,
+      growing: st.data.garden.beds.filter(b => b !== null).length
+    };
+  });
+  check('G14', 'garden', m !== null, '3D シーンを覗けない（?probe=1 が効いていない）');
+  if (m) {
+    check('G15', 'garden', m.beds === m.plots,
+      `畑は ${m.plots} 枠なのに温室には ${m.beds} 区画ある`);
+    check('G16', 'garden', m.planted === m.growing,
+      `育てているのは ${m.growing} 枠なのに苗は ${m.planted} 本立っている`);
+    check('G17', 'garden', m.planted > 0 && new Set(m.kinds).size === m.kinds.length,
+      `違う薬草を植えたのに同じ姿になっている（${m.kinds.join(',')}）`);
+  }
+}
+
 
 // 育ちきらせる（実時間は待てないので、植えた時刻を過去へ）
 await page.evaluate(() => {
@@ -689,6 +759,53 @@ check('G8', 'garden',
   '収穫しても薬草が増えていない');
 await probe(page, 'garden');                    // 通知が出ている状態
 
+// 畑を広げる。専用の板ではなく温室の「＋」から開く（§7）。
+// **3D の当たり判定ではなく DOM のボタン**なので、ここが測れる——
+// U3（44px 以上）も U11（本当に押せるか）も probe が見ている
+{
+  // 再描画を挟んでから測る。判定は毎フレーム置き直しているので、
+  // 「描き直した直後に置き忘れる」壊れ方をしうる（実際そうなっていた）
+  await page.evaluate(() => window.__delvers.shell.invalidate());
+  await page.waitForTimeout(250);
+  const hs = await page.$('[data-hotspot]');
+  check('G8b', 'garden', hs !== null, '畑を広げる「＋」の当たり判定が無い');
+  if (hs) {
+    const box = await page.evaluate(() => {
+      const e = document.querySelector('[data-hotspot]');
+      const r = e.getBoundingClientRect();
+      // **本当に指が届くか**まで見る。3D の目印は板の裏へ回りうるので、
+      // 「出ている」だけでは足りない（板の下に落とす変異はこれで落ちる）
+      const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      return {
+        w: r.width, h: r.height, y: r.y,
+        shown: getComputedStyle(e).display !== 'none',
+        reachable: !!hit && e.contains(hit),
+        under: hit?.className ?? 'なし'
+      };
+    });
+    check('G8c', 'garden', box.shown, '「＋」が 3D に映っているのに当たり判定が出ていない');
+    check('G8c2', 'garden', box.reachable, `「＋」が押せない位置にある（手前に ${box.under}）`);
+    check('G8d', 'garden', box.w >= 44 && box.h >= 44,
+      `「＋」の当たり判定が ${Math.round(box.w)}×${Math.round(box.h)}`);
+    const plots0 = await page.evaluate(() => window.__delvers.state.data.garden.plots);
+    // 押せないときは**失敗として記録する**。例外で落とすと、
+    // ここから先の検証が丸ごと走らなくなり、1件の不具合が全体を隠す
+    let clicked = true;
+    await page.click('[data-hotspot]', { timeout: 4000 }).catch(() => { clicked = false; });
+    check('G8c3', 'garden', clicked, '「＋」を叩けなかった（手前の何かが飲んでいる）');
+    await page.waitForTimeout(450);
+    if (clicked) {
+      const g = await probe(page, 'garden');
+      check('G8e', 'garden', g.modal, '「＋」を押しても拡張の確認が出ない');
+      await page.click('.modal [data-act=expand]');
+      await page.waitForTimeout(450);
+      check('G8f', 'garden',
+        await page.evaluate(() => window.__delvers.state.data.garden.plots) === plots0 + 1,
+        '広げても枠が増えていない');
+    }
+  }
+}
+
 // 錬金工房。材料が1回分では足りないので、畑を回した結果に足して整える
 await page.evaluate(() => {
   const g = window.__delvers.state.data.garden;
@@ -703,8 +820,14 @@ await page.waitForTimeout(400);
 await page.click('[data-act=alchemy]');
 await page.waitForTimeout(600);
 await probe(page, 'alchemy');
+check('G8g', 'alchemy', (await page.$('.hgrid .hcell[data-id=ironblood]')) !== null,
+  '作れる薬が升目になっていない');
+check('G8h', 'alchemy', (await page.$('.cauldron-pop')) === null,
+  '何も選んでいないのに大鍋の上に内訳が出ている');
 await page.click('[data-act=sel][data-id=ironblood]');
 await page.waitForTimeout(400);
+check('G8i', 'alchemy', (await page.$('.cauldron-pop')) !== null,
+  '薬を押しても大鍋の上に内訳が出ない');
 await probe(page, 'alchemy');                   // 材料の内訳が開いた状態
 check('G9', 'alchemy', await page.evaluate(() => window.__delvers.state.canBrew('ironblood')),
   '材料が揃っているのに作れない判定になっている');

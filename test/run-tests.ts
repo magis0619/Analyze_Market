@@ -10,6 +10,7 @@ import { BASE_TYPES, baseDef } from '../src/data/bases';
 import { JOBS, RETREAT_RULES, canEquipArmor, jobDef, retreatRuleDef } from '../src/data/jobs';
 import { STAGES, itemPowerFor, stageDef } from '../src/data/stages';
 import { HERBS, POTIONS } from '../src/data/garden';
+import { MOOD_ELEMENTS, elementIndex } from '../src/world/mood';
 import type { Dispatch, Item } from '../src/sim/types';
 
 let failures = 0;
@@ -444,6 +445,18 @@ console.log('薬草園');
   }
   check('薬草は5属性すべてを覆う',
     new Set(HERBS.map(h => h.element)).size === 5);
+
+  // 3D へは**属性の番号**しか渡らない（World層はゲームの語彙を持たない）。
+  // 並びが狂うと「火苔を植えたのに青い蕾が生える」という壊れ方をするが、
+  // 画面は普通に動いてしまうので、テストで並びを固定しておく。
+  const idx = HERBS.map(h => elementIndex(h.element));
+  check('薬草の見た目: 5種が別々の番号に落ちる', new Set(idx).size === HERBS.length);
+  check('薬草の見た目: 番号が 0〜4 に収まる', idx.every(i => i >= 0 && i < MOOD_ELEMENTS.length));
+  for (const h of HERBS) {
+    check(`薬草の見た目: ${h.name} が ${h.element} の番号を取る`,
+      MOOD_ELEMENTS[elementIndex(h.element)] === h.element);
+  }
+  check('薬草の見た目: 知らない属性でも落ちない', elementIndex('nonsense') === 0);
 }
 
 console.log('回帰: 批評R2で検出した破綻');

@@ -1,5 +1,6 @@
 import type { JobId } from '../../sim/types';
 import type { Mood } from '../../world/scenes';
+import { elementIndex } from '../../world/scenes';
 import type { Nav, Screen } from '../shell';
 import { jobDef } from '../../data/jobs';
 import { stageDef, STAGES } from '../../data/stages';
@@ -261,7 +262,20 @@ ${actionBar(button({ label: '閉じる', act: 'detail-close', tier: 'quiet', blo
       const st = nav.state;
       const total = Math.max(1, st.availableJobs().length);
       const out = st.data.dispatches.length;
-      return { presence: 1 - out / total };
+      const g = st.data.garden;
+      // 温室の中身も渡す。**メニューを開かなくても成長段階が分かること**
+      // （指示書「拠点（3Dシーン）」）——以前はここが常に同じ緑の苗6本で、
+      // 何も植えていない拠点と満作の拠点が同じ絵だった
+      return {
+        presence: 1 - out / total,
+        intensity: g.beds.length === 0 ? 0 : Math.min(1, st.readyCount() / g.beds.length),
+        slots: g.beds.map((_, i) => {
+          const pr = st.plotProgress(i);
+          return pr
+            ? { kind: elementIndex(pr.herb.element), ratio: pr.ratio }
+            : { kind: -1, ratio: 0 };
+        })
+      };
     },
 
     render() {

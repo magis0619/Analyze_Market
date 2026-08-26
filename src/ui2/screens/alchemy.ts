@@ -4,7 +4,7 @@ import { HERBS, POTIONS, herbDef } from '../../data/garden';
 import { actionBar, button, panel, toasts, topBar } from '../components';
 import { each, esc, when } from '../dom';
 
-// 錬金工房（新機能指示書「錬金工房画面」）。
+// 錬金工房（新機能指示書「錬金工房画面」＋ 改善 §7）。
 //
 // **工程を操作させない。** 参考にした作品はすり潰す・煮る・かき混ぜるを
 // 手で行わせるが、この作品の芯は「決めるのは3つだけ」なので、
@@ -14,6 +14,10 @@ import { each, esc, when } from '../dom';
 // 材料が5種しかない今の規模では総当たりで終わってしまい、
 // 「発見」ではなく「作業」になる。作れるもの・足りないものを最初から見せて、
 // **何を育てればよいか**が分かる画面にするほうが、畑へ戻る理由になる。
+//
+// 並べ方は装備選択の台座と同じ形にする（§7）。5行の縦長の一覧では
+// 大鍋がカードに隠れて、色が変わる主役が見えなかった。
+// 升目を下に置き、押したものの内訳だけを鍋の上へ浮かせる。
 
 const BREW_SEC = 1.6;
 
@@ -47,6 +51,13 @@ export function alchemyScreen(nav: Nav): Screen {
     return parts.join(' ・ ');
   }
 
+  /** 主材料以外に使える薬草の合計 */
+  function otherStock(mainId: string): number {
+    let n = 0;
+    for (const h of HERBS) if (h.id !== mainId) n += have(h.id);
+    return n;
+  }
+
   return {
     scene: 'alchemy',
 
@@ -65,38 +76,39 @@ export function alchemyScreen(nav: Nav): Screen {
       const sel = POTIONS.find(p => p.id === selected) ?? null;
       const stock = HERBS.filter(h => have(h.id) > 0);
 
+      // 押した薬の内訳は**鍋の上に浮かせる**。板として下に積むと、
+      // 選ぶたびに画面が伸びて、鍋の色（今どれを作ろうとしているか）が消える
+      const popup = sel === null ? '' : `
+<div class="cauldron-pop">
+  <div class="nm">${esc(sel.name)}</div>
+  <div class="row"><span class="l">${esc(herbDef(sel.main).name)}</span>
+    <span class="r"><span class="v ${have(sel.main) >= 2 ? '' : 'short'}">${have(sel.main)} / 2</span></span></div>
+  <div class="row"><span class="l">他の薬草（何でもよい）</span>
+    <span class="r"><span class="v ${otherStock(sel.main) >= sel.other ? '' : 'short'}">${otherStock(sel.main)} / ${sel.other}</span></span></div>
+  <div class="eff">${esc(sel.text)}</div>
+</div>`;
+
       return `
 ${topBar({ title: '錬金工房', back: 'back', gold: st.data.gold })}
-<div class="stack hero">
+${popup}
+<div class="stack hero anchor-bottom">
   ${panel('手持ちの薬草', stock.length > 0
         ? `<div class="chips">${each(stock, h =>
             `<span class="chip ${h.element}">${esc(h.glyph)} ${esc(h.name)} ${have(h.id)}</span>`)}</div>`
         : '<div class="empty">薬草園で育てて収穫する</div>')}
 
-  ${panel('作れる薬', `<div class="list">${each(POTIONS, p => {
+  ${panel('作れる薬', `<div class="hgrid">${each(POTIONS, p => {
         const ok = st.canBrew(p.id);
-        const lack = missing(p.id);
-        return `<button class="item ${selected === p.id ? 'on' : ''} ${ok ? '' : 'off'}"
+        const held = g.potions[p.id] ?? 0;
+        return `<button class="hcell ${p.element} ${selected === p.id ? 'on' : ''} ${ok ? '' : 'off'}"
                         data-tap data-act="sel" data-id="${p.id}">
-          <div class="ic ${p.element}">薬</div>
-          <div class="tx">
-            <div class="n">${esc(p.name)}${when((g.potions[p.id] ?? 0) > 0,
-              ` <b style="color:var(--gold)">×${g.potions[p.id] ?? 0}</b>`)}</div>
-            <div class="m">${esc(ok ? p.text : lack)}</div>
-          </div>
-          <div class="rr" style="color:var(--${ok ? 'up' : 'faint'})">${ok ? '作れる' : '材料不足'}</div>
+          <span class="g">薬</span>
+          <span class="n">${esc(p.name)}</span>
+          <span class="b">${ok ? '作れる' : '材料不足'}</span>
+          ${when(held > 0, `<span class="q">${held}</span>`)}
         </button>`;
-      })}</div>`)}
-
-  ${when(sel !== null, panel('この薬の材料', `
-    <div class="row"><span class="l">${esc(sel ? herbDef(sel.main).name : '')}</span>
-      <span class="r"><span class="v">2 / ${sel ? have(sel.main) : 0}</span></span></div>
-    <div class="row"><span class="l">他の薬草（何でもよい）</span>
-      <span class="r"><span class="v">${sel?.other ?? 0}</span></span></div>
-    <div style="margin-top:var(--sp-2);font-size:var(--fs-label);color:var(--dim);line-height:1.55">
-      ${esc(sel?.text ?? '')}
-    </div>
-  `))}
+      })}</div>${when(sel !== null && !st.canBrew(sel?.id ?? ''),
+        `<div class="hintline">${esc(missing(sel?.id ?? ''))}</div>`)}`)}
 </div>
 ${actionBar(brewT > 0
         ? button({ label: '調合している…', act: 'noop', tier: 'quiet', block: true, role: 'cta', disabled: true })
