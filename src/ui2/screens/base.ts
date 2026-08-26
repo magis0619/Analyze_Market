@@ -21,7 +21,11 @@ const JOB_ICON: Record<JobId, string> = {
 interface Tile {
   act: string;
   en: string;
+  /** 3枚並びのときの短い名前 */
   label: string;
+  /** 幅いっぱいのときの名前。狭い枠に合わせて全部を縮めると、
+      主役の1枚まで素っ気なくなる */
+  wide: string;
   /** 未処理の件数。0 なら押せない */
   count?: (nav: Nav) => number;
 }
@@ -36,10 +40,12 @@ interface Tile {
  * どれを押せばいいかを毎回プレイヤーが考えることになる。
  */
 const TILES: readonly Tile[] = [
-  { act: 'dispatch', en: 'Dispatch', label: '派遣準備' },
-  { act: 'open', en: 'Unopened', label: '未鑑定品を開封', count: n => n.state.data.pending.length },
-  { act: 'report', en: 'Report', label: '帰還レポート', count: n => n.state.data.inbox.length },
-  { act: 'inventory', en: 'Inventory', label: 'インベントリ' }
+  { act: 'dispatch', en: 'Dispatch', label: '派遣準備', wide: '派遣の準備をする' },
+  { act: 'open', en: 'Unopened', label: '開封', wide: '未鑑定品を開封する',
+    count: n => n.state.data.pending.length },
+  { act: 'report', en: 'Report', label: 'レポート', wide: '帰還レポートを読む',
+    count: n => n.state.data.inbox.length },
+  { act: 'inventory', en: 'Inventory', label: '所持品', wide: '所持品を整理する' }
 ];
 
 export function baseScreen(nav: Nav): Screen {
@@ -47,9 +53,10 @@ export function baseScreen(nav: Nav): Screen {
   function tile(t: Tile, cta: string): string {
     const n = t.count ? t.count(nav) : -1;
     const off = n === 0;
-    return `<button class="action ${t.act === cta ? 'secondary' : ''}"
+    const main = t.act === cta;
+    return `<button class="action ${main ? 'secondary' : ''}"
                     data-tap data-act="${t.act}"${off ? ' disabled' : ''}>
-      <span class="micro">${t.en}</span>${esc(t.label)}
+      <span class="micro">${t.en}</span>${esc(main ? t.wide : t.label)}
       ${when(n > 0, `<span class="badge">${n}</span>`)}
     </button>`;
   }

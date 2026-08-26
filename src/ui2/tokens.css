@@ -158,6 +158,19 @@ button { font: inherit; color: inherit; background: none; border: none; }
 .pill.warn { color: var(--down); border-color: rgba(255,95,112,0.45); }
 @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
 
+/* 画面ごとの色味（指示書 §5）。
+ *
+ * 全部が同じ紺一色だと、どの画面も同じ場所に見えて記憶に残らない。
+ * 3D 側は画面ごとに違う場所を映しているのに、その上の板だけが
+ * 一様だったので、せっかくの差を打ち消していた。
+ * 板の面の色をごく僅かに寄せる（役割色は動かさない——
+ * 攻撃の赤が画面ごとに違ってはいけない）。 */
+[data-screen="base"] { --surface: rgba(28, 30, 46, 0.74); }
+[data-screen="dispatch"] { --surface: rgba(30, 27, 40, 0.74); }
+[data-screen="report"] { --surface: rgba(32, 28, 38, 0.74); }
+[data-screen="opening"] { --surface: rgba(26, 26, 44, 0.74); }
+[data-screen="inventory"], [data-screen="compendium"] { --surface: rgba(22, 28, 48, 0.74); }
+
 /* ---------------------------------------------------- Stack（L2） */
 .stack {
   flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
@@ -182,20 +195,53 @@ button { font: inherit; color: inherit; background: none; border: none; }
 .actionbar .pair { display: grid; grid-template-columns: 1fr 2fr; gap: var(--sp-2); }
 .actionbar .trio { display: grid; grid-template-columns: 1fr 1fr 1.6fr; gap: var(--sp-2); }
 
-/* ---------------------------------------------------- Panel */
+/* ---------------------------------------------------- Panel（指示書 §5）
+ *
+ * **問題:** 同じ角丸・同じ塗り・同じ幅の板が縦に積まれていて、
+ * 「量産ダッシュボード」に見えていた。ドット絵路線には戻さない判断なので、
+ * 板そのものの作りで差を出す。
+ *
+ * やったこと:
+ *   - 角を落とす代わりに**四隅の切り欠き**を出す（鋲を打った金具の見立て）
+ *   - 見出しを板の中ではなく**上の罫の上に載せる**（銘板の見立て）
+ *   - 同じ塗りをやめ、上端だけ明るい斜めの光を入れる
+ * 画像は使わない。増やすと管理する資産が増え、追加のたびに描き足しになる。 */
 .panel {
-  background: var(--surface);
+  position: relative;
+  background:
+    linear-gradient(160deg, rgba(120,145,210,0.10) 0%, transparent 34%),
+    var(--surface);
   border: var(--bw) solid var(--line);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   backdrop-filter: blur(14px) saturate(1.15);
-  box-shadow: 0 12px 34px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+  box-shadow: 0 12px 34px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
 }
-.panel.raised { background: var(--surface-2); border-color: var(--line-hi); }
+/* 四隅の切り欠き。板の縁が「留められている」ように見せる */
+.panel::before, .panel::after {
+  content: ''; position: absolute; width: 9px; height: 9px;
+  border: 1px solid var(--line-hi); pointer-events: none; opacity: 0.55;
+}
+.panel::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; border-top-left-radius: var(--r-md); }
+.panel::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; border-bottom-right-radius: var(--r-md); }
+
+.panel.raised {
+  background: linear-gradient(160deg, rgba(150,175,240,0.14) 0%, transparent 38%), var(--surface-2);
+  border-color: var(--line-hi);
+}
+/* 見出しは板の中ではなく、上の罫の上に載せる */
 .panel > header {
   display: flex; align-items: center; gap: var(--sp-2);
   padding: var(--sp-3) var(--sp-3) 0;
 }
-.panel > header .hr { flex: 1; height: 1px; background: var(--line); }
+.panel > header .micro {
+  padding: 2px var(--sp-2); border-radius: 999px;
+  border: 1px solid var(--line); background: rgba(8,10,17,0.7);
+  margin-top: -14px; margin-left: -2px;
+}
+.panel > header .hr {
+  flex: 1; height: 1px; margin-top: -13px;
+  background: linear-gradient(90deg, var(--line), transparent);
+}
 .panel > .body { padding: var(--sp-2) var(--sp-3) var(--sp-3); }
 
 /* ---------------------------------------------------- Button（§3.3 4段）
@@ -257,10 +303,19 @@ button { font: inherit; color: inherit; background: none; border: none; }
  * 以前は4枚が同じ大きさ・同じ色で並び、未開封が7個あるときも
  * 何も無いときも同じ顔をしていた——「次に何をすればいいか」を
  * プレイヤーが毎回自分で考えることになっていた。 */
-.actiongrid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
+/* 均等な2×2をやめる（指示書 §5「要素ごとにサイズを変えた非対称レイアウト」）。
+ *
+ * ActionBar が指している行き先が1枚で横幅いっぱい、残り3枚が下に並ぶ。
+ * 「量産ダッシュボード」の見た目が崩れ、同時に
+ * 「下のボタンはこれのことだ」も強くなる（§3 と同じ狙い）。
+ *
+ * **3列にするのが肝。** 2列のままだと、幅いっぱいの1枚を除いた3枚が
+ * 2+1 に割れて、最後の1枚が半端に取り残される（実際そう見えた）。
+ * どのタイルが主役になっても割り切れる形にする。 */
+.actiongrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-2); }
 .action {
   position: relative; text-align: left; min-height: 60px;
-  padding: var(--sp-3); border-radius: var(--r-md);
+  padding: var(--sp-2); border-radius: var(--r-md);
   /* 段は落とすが、押せることは見えていないといけない。
      枠を完全に消すとただの文字になり、タップ対象に見えなくなる */
   border: var(--bw) solid rgba(150,170,220,0.07);
@@ -268,11 +323,16 @@ button { font: inherit; color: inherit; background: none; border: none; }
   color: var(--dim);
   display: flex; flex-direction: column; justify-content: center; gap: var(--sp-1);
 }
-/* ActionBar が指している行き先。「あれのことだ」と分かるようにする */
+.action .micro { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* ActionBar が指している行き先。幅いっぱいに取って
+   「あれのことだ」と分かるようにする */
 .action.secondary {
+  grid-column: 1 / -1; min-height: 76px; padding: var(--sp-3);
   border-color: var(--line); background: var(--surface); color: var(--text);
 }
-.action.secondary .micro { color: var(--gold); }
+.action.secondary .micro {
+  color: var(--gold); font-size: var(--fs-label); letter-spacing: 0.24em;
+}
 .action[disabled] { opacity: 0.42; }
 /* 未処理があるタイルは、段は上げずに件数だけを主張する */
 .action:has(.badge) { border-color: var(--line); background: var(--surface); color: var(--text); }
@@ -461,7 +521,7 @@ button { font: inherit; color: inherit; background: none; border: none; }
 .fig { background: rgba(14,18,30,0.85); padding: var(--sp-2) var(--sp-1); text-align: center; }
 .fig[data-act] { cursor: pointer; }
 .fig[data-act] .micro { color: var(--gold); }
-.fig .v { font-size: var(--fs-title); margin-top: 3px; }
+.fig .v { font-size: var(--fs-title); margin-top: 3px; font-family: var(--ff-en); }
 
 /* ---------------------------------------------------- Stage / Rule / Tag */
 .stages { display: flex; flex-direction: column; gap: var(--sp-1); }
