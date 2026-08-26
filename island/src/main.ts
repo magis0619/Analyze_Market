@@ -3,7 +3,7 @@ import { Env } from './env';
 import { createSky } from './sky';
 import { createTerrain } from './terrain';
 import { createWater } from './water';
-import { createFoliage } from './foliage';
+import { createFoliage, createLineup } from './foliage';
 import { Walker, VIEWS, type ViewName } from './walker';
 
 const params = new URLSearchParams(location.search);
@@ -27,7 +27,9 @@ const { mesh: terrain, field } = createTerrain(env);
 scene.add(terrain);
 scene.add(createSky(env));
 scene.add(createWater(env));
-scene.add(createFoliage(env, field));
+// ?lineup=1 で、種を1体ずつ並べただけの検分用シーンにする
+const lineup = params.get('lineup') === '1';
+scene.add(lineup ? createLineup(env, field) : createFoliage(env, field));
 
 const walker = new Walker(camera, field);
 const view = (params.get('view') ?? 'beach') as ViewName;
@@ -41,10 +43,20 @@ const weatherEl = document.getElementById('weather') as HTMLInputElement;
 const timeVal = document.getElementById('timeval')!;
 const weatherVal = document.getElementById('weatherval')!;
 
+// 時計の数字は出さない（指示書の「数字を見せない」）。
+// 何時何分かではなく、いまが一日のどのあたりかだけ分かればいい。
 function fmtTime(t: number): string {
-  const h = Math.floor(t) % 24;
-  const m = Math.floor((t - Math.floor(t)) * 60);
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  const h = ((t % 24) + 24) % 24;
+  if (h < 4.0) return '真夜中';
+  if (h < 5.6) return '夜明け前';
+  if (h < 7.2) return '朝焼け';
+  if (h < 10.0) return '朝';
+  if (h < 14.0) return '真昼';
+  if (h < 16.4) return '昼下がり';
+  if (h < 18.0) return '夕方';
+  if (h < 19.4) return '夕焼け';
+  if (h < 21.0) return '宵';
+  return '夜';
 }
 const WEATHER_NAMES = ['快晴', '晴れ', 'うすぐもり', 'くもり', '雨もよう'];
 function fmtWeather(w: number): string {
@@ -80,6 +92,24 @@ resize();
 
 // スクリーンショット用に時間を止められるようにしておく（批評の再現性のため）
 const still = params.get('still') !== null ? Number(params.get('still')) : null;
+
+// --- 到着と、帰り道 -------------------------------------------------------
+// 「行って、帰ってくる」をひとつの体験にする。スクリーンショットのときだけは
+// 演出を飛ばして、色の突き合わせが到着途中の色に引きずられないようにする。
+const arriveParam = params.get('arrive');
+if (arriveParam !== null) {
+  // 到着の途中の色を撮るための固定値（自己批評用）
+  env.arrive = Math.max(0, Math.min(1, Number(arriveParam)));
+  env.arriveTarget = env.arrive;
+} else if (still !== null) {
+  env.arrive = 1;
+  env.arriveTarget = 1;
+}
+document.addEventListener('visibilitychange', () => {
+  env.arriveTarget = document.hidden ? 0 : 1;
+});
+window.addEventListener('blur', () => { env.arriveTarget = 0; });
+window.addEventListener('focus', () => { env.arriveTarget = 1; });
 
 let last = performance.now();
 let frames = 0;

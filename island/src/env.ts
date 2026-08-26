@@ -29,6 +29,18 @@ export class Env {
   /** 経過秒（波・雲のアニメーション用） */
   clock = 0;
 
+  /**
+   * 到着の度合い 0..1。指示書の「到着の演出」と「終わり方も設計する」。
+   * 起動直後は 0 から始めてゆっくり満ち、画面から離れると静かに引く。
+   * 何かを達成して上がる値ではないので、UI には一切出さない。
+   */
+  arrive = 0;
+  /** 目標値。1 = 居る、0 = 離れた */
+  arriveTarget = 1;
+  /** 満ちるのは遅く、引くのはそれより少し速い（帰り道は短い） */
+  private static readonly ARRIVE_IN = 6.5;
+  private static readonly ARRIVE_OUT = 2.8;
+
   readonly sunDir = new THREE.Vector3();
   readonly moonDir = new THREE.Vector3();
 
@@ -54,6 +66,8 @@ export class Env {
 
     uWeather: { value: 0 },
     uPixelRatio: { value: 1 },
+    // 0 = オフィスの残響 / 1 = 島に着いた状態
+    uArrive: { value: 0 },
     uCloudCover: { value: 0.22 },
     uFogDensity: { value: 0.00062 },
 
@@ -80,6 +94,14 @@ export class Env {
   update(dt: number): void {
     this.clock += dt;
     const u = this.uniforms;
+
+    // 到着／退出。ease-in-out で、始まりと終わりに角が立たないようにする
+    const rate = this.arriveTarget > this.arrive ? Env.ARRIVE_IN : Env.ARRIVE_OUT;
+    const step = dt / rate;
+    if (this.arrive < this.arriveTarget) this.arrive = Math.min(this.arriveTarget, this.arrive + step);
+    else if (this.arrive > this.arriveTarget) this.arrive = Math.max(this.arriveTarget, this.arrive - step);
+    const a = this.arrive;
+    u.uArrive!.value = a * a * (3 - 2 * a);
     u.uTime!.value = this.clock;
     u.uCloudTime!.value = this.clock;
 

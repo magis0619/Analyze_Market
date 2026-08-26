@@ -57,11 +57,14 @@ export function makeStoneTextures(size = 256): StoneTextures {
     for (let x = 0; x < size; x++) {
       const i = (y * size + x) * 4;
       const v = at(x, y);
-      // 暗めの石材。値の幅は狭くして、色ではなく陰影で見せる
-      const base = 0.36 + v * 0.42;
-      albedo[i] = Math.round(255 * base * 0.98);
-      albedo[i + 1] = Math.round(255 * base * 0.95);
-      albedo[i + 2] = Math.round(255 * base * 0.90);
+      // 琉球石灰岩。白っぽくて多孔質なので、明るい地に暗い孔を穿つ
+      let base = 0.58 + v * 0.40;
+      // 孔（ポア）。小さく暗い窪みを散らす
+      const pore = at(x * 1 + 3, y * 1 + 7);
+      if (pore > 0.72) base *= 0.62 + (pore - 0.72) * 0.9;
+      albedo[i] = Math.round(255 * Math.min(1, base * 1.00));
+      albedo[i + 1] = Math.round(255 * Math.min(1, base * 0.975));
+      albedo[i + 2] = Math.round(255 * Math.min(1, base * 0.905));
       albedo[i + 3] = 255;
 
       const dx = (at(x + 1, y) - at(x - 1, y)) * 5.5;

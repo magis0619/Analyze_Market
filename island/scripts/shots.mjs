@@ -33,7 +33,14 @@ const shots = only
       { name: 'beach-dusk', view: 'beach', time: '18.4', weather: '0' },
       { name: 'beach-night', view: 'beach', time: '1.0', weather: '0' },
       { name: 'beach-cloudy', view: 'beach', time: '11.5', weather: '0.75' },
-      { name: 'overlook-dusk', view: 'overlook', time: '18.2', weather: '0' }
+      { name: 'overlook-dusk', view: 'overlook', time: '18.2', weather: '0' },
+      // 指示書 §4-1 の植生・人工物を種ごとに見るための視点
+      { name: 'rest', view: 'rest', time: '11.5', weather: '0' },
+      { name: 'palms', view: 'palms', time: '11.5', weather: '0' },
+      { name: 'adan', view: 'adan', time: '11.5', weather: '0' },
+      { name: 'deigo', view: 'deigo', time: '11.5', weather: '0' },
+      { name: 'mangrove', view: 'mangrove', time: '11.5', weather: '0' },
+      { name: 'pier', view: 'pier', time: '11.5', weather: '0' }
     ];
 
 for (const s of shots) {

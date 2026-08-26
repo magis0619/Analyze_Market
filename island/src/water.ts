@@ -266,7 +266,7 @@ export function createWater(env: Env): THREE.Mesh {
         col = applyFog(col, dist, vWorld - uCamPos);
         col = desaturate(col, uWeather * 0.45);
 
-        gl_FragColor = vec4(col, edge);
+        gl_FragColor = vec4(grade(col), edge);
         #include <colorspace_fragment>
       }
     `

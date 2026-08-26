@@ -3,13 +3,16 @@
 import * as THREE from 'three';
 import { sampleHeight, type Field } from './heightfield';
 
-export type ViewName = 'beach' | 'overlook' | 'shallows' | 'reef';
+export type ViewName = 'beach' | 'overlook' | 'shallows' | 'reef'
+  | 'rest' | 'palms' | 'adan' | 'deigo' | 'mangrove' | 'pier' | 'lineup';
 
 /** 決め打ちの視点。批評用のスクリーンショットもここを基準に撮る。 */
 export const VIEWS: Record<ViewName, {
-  pos: [number, number, number]; yaw: number; pitch: number; fov: number;
+  pos: [number, number, number]; yaw?: number; pitch: number; fov: number;
   /** 目線の高さ（省略時 1.68m）。岬の岩の上に立つ視点だけ高くしている */
   eye?: number;
+  /** yaw の代わりに「どこを見るか」で指定する（自己批評用の視点はこちらが楽） */
+  look?: [number, number];
 }> = {
   // 砂浜に立って湾の外を見る。参考画像1枚目の構図
   // 汀線の 8m ほど手前に立ち、浜に沿って斜め沖を見る。
@@ -21,7 +24,24 @@ export const VIEWS: Record<ViewName, {
   // 波打ち際。砂と泡と浅瀬だけが見える
   shallows: { pos: [4, 1.55, 80], yaw: -0.20, pitch: -0.26, fov: 58 },
   // リーフ縁の白波を沖から見る
-  reef: { pos: [-40, 2.4, 20], yaw: 3.05, pitch: -0.03, fov: 55 }
+  reef: { pos: [-40, 2.4, 20], yaw: 3.05, pitch: -0.03, fov: 55 },
+
+  // --- 以下は自己批評用。種ごとのシルエットを近くで確かめる ---
+  // 東屋・焚き火・ハンモックと、その足元の月桃／ソテツ／花木
+  rest: { pos: [-4, 0, 133], look: [-20, 118], pitch: -0.04, fov: 52 },
+  // 浜沿いのヤシ並び。幹のしなりと葉の垂れを見る
+  palms: { pos: [34, 0, 98], look: [-30, 106], pitch: 0.03, fov: 52 },
+  // 岬の岩場のふち。アダンの気根と、石灰岩の岩肌
+  // 低木より高い位置から見ないと、藪に埋まって何も写らない
+  adan: { pos: [305, 0, -38], look: [281, -57], pitch: -0.04, fov: 50, eye: 5.5 },
+  // 岬のデイゴ。真っ赤な房を空に抜く
+  deigo: { pos: [204, 0, 96], look: [236, 98], pitch: 0.02, fov: 44, eye: 9.0 },
+  // 湾の奥のマングローブ。支柱根が水面から出ているか
+  mangrove: { pos: [-116, 0, 113], look: [-148, 98], pitch: -0.05, fov: 52 },
+  // 桟橋を横から
+  pier: { pos: [8, 0, 85], look: [-20, 72], pitch: -0.05, fov: 52 },
+  // 種を横一列に並べて見比べる（?lineup=1 と一緒に使う）
+  lineup: { pos: [0, 0, 133], look: [0, 104], pitch: 0.05, fov: 46, eye: 3.4 }
 };
 
 export class Walker {
@@ -40,9 +60,19 @@ export class Walker {
   applyView(name: ViewName): void {
     const v = VIEWS[name];
     this.pos.set(v.pos[0], v.pos[1], v.pos[2]);
-    this.yaw = v.yaw;
+    if (v.look) {
+      // 前方は (-sin yaw, -cos yaw)。見たい点との差からそのまま逆算する
+      const dx = v.look[0] - v.pos[0];
+      const dz = v.look[1] - v.pos[2];
+      this.yaw = Math.atan2(-dx, -dz);
+    } else {
+      this.yaw = v.yaw ?? 0;
+    }
     this.pitch = v.pitch;
     this.eyeHeight = v.eye ?? 1.68;
+    // 目線の高さはその場で確定させる。徐々に持ち上げると、最初の数フレームは
+    // 地面の下にカメラがあることになり、地形が裏面カリングで消える。
+    this.pos.y = Math.max(sampleHeight(this.field, this.pos.x, this.pos.z), 0) + this.eyeHeight;
     this.camera.fov = v.fov;
     this.camera.updateProjectionMatrix();
     this.sync();
