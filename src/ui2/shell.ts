@@ -3,6 +3,8 @@ import type { GameState } from '../game/state';
 import type { SceneName, Stage } from '../world/scenes';
 import type { ModelSpec } from '../world/models';
 import { createStage } from '../world/scenes';
+import { onThumbReady } from '../world/thumbs';
+import { play, unlockAudio } from './sound';
 import { bindPressFeedback, onAct, qs } from './dom';
 
 // アプリの器（docs/UI-SPEC.md §0.5 の2層構成）。
@@ -37,6 +39,14 @@ export interface Screen {
 export interface Nav {
   readonly state: GameState;
   readonly timeScale: number;
+  /**
+   * 直前に見ていた派遣先。
+   *
+   * 所持品の「相性順」は、どこへ送るつもりかが分からないと計算できない。
+   * セーブに持たせるほどのものではない（次に開いたときは選び直せばよい）ので、
+   * 画面をまたぐ間だけ Shell が覚えておく。
+   */
+  stageContext: number | null;
   now(): number;
   goTitle(): void;
   goBase(): void;
@@ -64,6 +74,7 @@ function escapeText(s: string): string {
 export class Shell implements Nav {
   readonly state: GameState;
   timeScale = 1;
+  stageContext: number | null = null;
 
   private stage: Stage;
   private ui: HTMLElement;
@@ -94,11 +105,16 @@ export class Shell implements Nav {
     this.stage = createStage(canvas);
 
     this.unbind.push(onAct(this.ui, (act, el) => {
+      // ブラウザは操作なしに音を鳴らさせない。最初のタップでここを通す
+      unlockAudio();
+      play(el.hasAttribute('disabled') ? 'deny' : 'tap');
       if (act === '__home') { this.goBase(); return; }
       const changed = this.screen.act?.(act, el);
       if (changed !== false) this.dirty = true;
     }));
     this.unbind.push(bindPressFeedback(this.ui));
+    // 一覧のサムネは裏で焼いている。焼き上がったぶんを画面に出す
+    this.unbind.push(onThumbReady(() => { this.dirty = true; }));
 
     const onResize = (): void => {
       this.stage.resize(window.innerWidth, window.innerHeight);

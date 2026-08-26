@@ -8,6 +8,7 @@ import { dominantElement, sellValue } from '../../sim/items';
 import {
   RARITY_LABEL, actionBar, affixText, button, itemRow, itemScore, panel, topBar
 } from '../components';
+import { openSfx, play } from '../sound';
 import { each, esc, num, when } from '../dom';
 
 // 開封（docs/UI-SPEC.md §2.6）。
@@ -33,6 +34,11 @@ function isCut(it: Item): boolean {
 
 const CHARGE: Record<string, number> = { rare: 1.2, relic: 2.4 };
 const HOLD: Record<string, number> = { rare: 2.2, relic: 4.2 };
+/** 数値が実数まで上がるまでの秒数（指示書 §1） */
+const COUNT_SEC = 0.5;
+/** 画面フラッシュの強さ。並は光らせない（毎回光ると価値が下がる） */
+const FLASH: Record<string, number> = { common: 0, fine: 0.16, rare: 0.34, relic: 0.62 };
+const FLASH_SEC = 0.55;
 
 type Phase = 'list' | 'charge' | 'reveal' | 'done';
 
@@ -78,6 +84,7 @@ export function openingScreen(nav: Nav, items: Item[]): Screen {
       shown.push(it);
       phase = 'list';
       phaseT = 0;
+      play(openSfx(it.rarity));
     }
   }
 
@@ -102,6 +109,33 @@ export function openingScreen(nav: Nav, items: Item[]): Screen {
     claim();
   }
 
+  /** 0→1 の立ち上がり。終わり際が緩む（指示書 §1「イージング必須」） */
+  function easeOut(x: number): number {
+    const t = Math.max(0, Math.min(1, x));
+    return 1 - Math.pow(1 - t, 3);
+  }
+
+  /** 数値の出方。0 から COUNT_SEC かけて実数まで上がる。 */
+  function counted(target: number): number {
+    return Math.round(target * easeOut(phaseT / COUNT_SEC));
+  }
+
+  /**
+   * 画面のフラッシュ（指示書 §1）。
+   *
+   * **CSS アニメーションではなく phaseT から作る。** この作りでは
+   * 数値のカウントアップのために毎フレーム描き直すので、
+   * アニメーションに任せると毎フレーム頭から再生されて光りっぱなしになる。
+   */
+  function flash(it: Item): string {
+    const peak = FLASH[it.rarity] ?? 0;
+    if (peak <= 0) return '';
+    const a = peak * (1 - easeOut(phaseT / FLASH_SEC));
+    if (a <= 0.004) return '';
+    return `<div class="flash" style="opacity:${a.toFixed(3)};` +
+      `background:radial-gradient(circle at 50% 34%, var(--r-${it.rarity}), transparent 68%)"></div>`;
+  }
+
   function cutPlate(it: Item): string {
     const u = it.unique ? uniqueDef(it.unique) : null;
     const eq = nav.state.data.equipped.swordsman;
@@ -116,12 +150,13 @@ export function openingScreen(nav: Nav, items: Item[]): Screen {
     <div style="font-size:var(--fs-label);color:var(--faint)">${esc(baseDef(it.baseId).name)}</div>
     <div class="sep"></div>
     <div class="row"><span class="l">${it.slot === 'weapon' ? '秒間火力' : '防御'}</span>
-      <span class="r"><span class="v" style="color:var(--${it.slot === 'weapon' ? 'atk' : 'def'})">${itemScore(it)}</span>
+      <span class="r"><span class="v" style="color:var(--${it.slot === 'weapon' ? 'atk' : 'def'})">${counted(itemScore(it))}</span>
       ${when(diff !== null && diff !== 0,
         `<b class="d ${(diff ?? 0) > 0 ? 'up' : 'dn'}">${(diff ?? 0) > 0 ? '▲' : '▼'}${Math.abs(diff ?? 0)}</b>`)}</span></div>
     ${when(it.slot === 'weapon', `
-      <div class="row"><span class="l">威力</span><span class="r"><span class="v">${it.power}</span></span></div>
-      <div class="row"><span class="l">会心</span><span class="r"><span class="v" style="color:var(--crit)">${it.crit.toFixed(1)}%</span></span></div>`)}
+      <div class="row"><span class="l">威力</span><span class="r"><span class="v">${counted(it.power)}</span></span></div>
+      <div class="row"><span class="l">会心</span><span class="r"><span class="v" style="color:var(--crit)">${
+        (it.crit * easeOut(phaseT / COUNT_SEC)).toFixed(1)}%</span></span></div>`)}
     ${when(it.affixes.length > 0, `<div class="sep"></div>
       <div class="fx">${each(it.affixes, a =>
         `<div><span>${esc(affixText(a))}</span><span>${'★'.repeat(a.tier)}${'☆'.repeat(5 - a.tier)}</span></div>`)}</div>`)}
@@ -130,7 +165,7 @@ export function openingScreen(nav: Nav, items: Item[]): Screen {
         <div style="font-size:var(--fs-label);color:var(--gold-hi);margin-bottom:var(--sp-1)">《${esc(u?.name ?? '')}》</div>
         <div style="font-size:var(--fs-label);color:var(--dim);line-height:1.55">${esc(u?.text ?? '')}</div>
       </div>`)}
-    <div style="margin-top:var(--sp-3);font-size:var(--fs-label);color:var(--gold)">+${num(sellValue(it))}G 相当</div>
+    <div style="margin-top:var(--sp-3);font-size:var(--fs-label);color:var(--gold)">+${num(counted(sellValue(it)))}G 相当</div>
   </div>
 </div>`;
   }
@@ -169,7 +204,7 @@ export function openingScreen(nav: Nav, items: Item[]): Screen {
         return `
 ${topBar({ title: '開封', gold: nav.state.data.gold, meta: `${count} / ${total}` })}
 <div class="stack" aria-hidden="true"></div>
-${when(phase === 'reveal', cutPlate(it))}
+${when(phase === 'reveal', flash(it) + cutPlate(it))}
 ${when(phase === 'charge', `<div class="reveal"><div class="charge-hint">${
           it.rarity === 'relic' ? '遺物' : '稀少'}</div></div>`)}
 ${actionBar(button({
@@ -215,7 +250,7 @@ ${actionBar(
         case 'skip-cut': {
           // 溜めを飛ばして中身だけ見る
           const it = current();
-          if (it && phase === 'charge') { phase = 'reveal'; phaseT = 0; }
+          if (it && phase === 'charge') { phase = 'reveal'; phaseT = 0; play(openSfx(it.rarity)); }
           return;
         }
         case 'skip-all': skipAll(); return;
@@ -231,8 +266,12 @@ ${actionBar(
       if (phase === 'charge' && phaseT >= (CHARGE[it.rarity] ?? 1.2)) {
         phase = 'reveal';
         phaseT = 0;
+        play(openSfx(it.rarity));
         return true;
       }
+      // カウントアップとフラッシュが終わるまでは毎フレーム描き直す。
+      // 演出は phaseT の関数なので、描き直さないと止まって見える
+      if (phase === 'reveal' && phaseT < Math.max(COUNT_SEC, FLASH_SEC) + 0.05) return true;
       if (phase === 'reveal' && phaseT >= (HOLD[it.rarity] ?? 2.2)) {
         // 見終わったら一覧へ着地させる。次へ進むのはプレイヤーの操作を待つ
         if (!shown.includes(it)) {

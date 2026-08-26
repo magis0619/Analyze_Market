@@ -325,8 +325,13 @@ await page.click('[data-act=pick-open][data-slot=weapon]').catch(() => {});
 await page.waitForTimeout(400);
 if (await page.$('.sheet')) {
   await probe(page, 'dispatch');
-  const row = await page.$('.sheet-list .item');
-  if (row) { await row.click(); await page.waitForTimeout(400); await probe(page, 'dispatch'); }
+  // 掴んだ要素ではなくセレクタで叩く。一覧はサムネが焼き上がるたびに
+  // 描き直されるので、掴んだ参照はすぐ古くなる（実際 detached で落ちた）
+  if (await page.$('.sheet-list .item')) {
+    await page.click('.sheet-list .item');
+    await page.waitForTimeout(600);
+    await probe(page, 'dispatch');
+  }
   await page.click('[data-act=pick-close]');
   await page.waitForTimeout(350);
 }
@@ -370,8 +375,38 @@ await page.click('[data-role=cta]');
 await page.waitForTimeout(500);
 await probe(page, 'opening');
 await page.click('[data-role=cta]');            // 1個目を開ける
-await page.waitForTimeout(700);
-await probe(page, 'opening');                   // 溜め or 提示（カットイン中）
+
+// T5/T6: 提示の演出（指示書 §1）。
+//
+// 数値は0から実数まで上がり、フラッシュは消える。どちらも phaseT の関数なので、
+// 「止まったまま」の壊れ方をしうる——特にフラッシュが消えないと画面全体が
+// 白く覆われ、その下の文字が読めなくなる。時間を置いて2回見る。
+{
+  let rising = null, flashPeak = 0;
+  for (let i = 0; i < 40; i++) {
+    await page.waitForTimeout(80);
+    const snap = await page.evaluate(() => ({
+      plate: !!document.querySelector('.plate'),
+      v: document.querySelector('.plate .v')?.textContent ?? null,
+      flash: parseFloat(document.querySelector('.flash')?.style.opacity ?? '0')
+    }));
+    if (!snap.plate) continue;
+    flashPeak = Math.max(flashPeak, snap.flash);
+    if (rising === null && snap.v !== null) rising = Number(snap.v);
+    if (rising !== null && snap.v !== null && Number(snap.v) > rising) break;
+  }
+  // カウントアップが終わり、フラッシュが引き切るまで待つ（どちらも 0.55 秒以内）
+  await page.waitForTimeout(1200);
+  const settled = await page.evaluate(() => ({
+    v: document.querySelector('.plate .v')?.textContent ?? null,
+    flash: parseFloat(document.querySelector('.flash')?.style.opacity ?? '0')
+  }));
+  check('T5', 'opening', rising !== null && settled.v !== null && Number(settled.v) > rising,
+    `数値がカウントアップしていない（${rising} → ${settled.v}）`);
+  check('T6', 'opening', flashPeak > 0.05 && settled.flash < 0.05,
+    `フラッシュが出ていない、または消えていない（最大 ${flashPeak} → 現在 ${settled.flash}）`);
+}
+await probe(page, 'opening');                   // 提示（カットイン中）
 // 溜め・提示・一覧と状態が変わるので、出ている操作を順に押して開け切る
 for (let i = 0; i < 12; i++) {
   if (await page.$('[data-act=skip-all]')) { await page.click('[data-act=skip-all]'); break; }
@@ -423,6 +458,23 @@ for (const [label, sel] of [
   }, sel);
   check('U9', 'inventory', ms < 16.7, `${label} に ${ms.toFixed(1)}ms（予算 16.7ms）`);
 }
+// T7: 一覧のサムネ（指示書 §1）。焼き上がるまで待ってから見る
+for (let i = 0; i < 40; i++) {
+  await page.waitForTimeout(150);
+  if (await page.evaluate(() => document.querySelectorAll('.item .ic.shot').length > 5)) break;
+}
+{
+  const t = await page.evaluate(() => ({
+    shot: document.querySelectorAll('.vlist .item .ic.shot').length,
+    rows: document.querySelectorAll('.vlist .item').length,
+    baked: window.__delvers.thumbCount?.() ?? -1
+  }));
+  check('T7', 'inventory', t.rows > 0 && t.shot === t.rows,
+    `サムネが焼けていない行がある（${t.shot} / ${t.rows}）`);
+  // 組み合わせごとに一度だけ焼く。行数ぶん焼いていたら仕組みが効いていない
+  check('T8', 'inventory', t.baked > 0 && t.baked <= 60,
+    `焼いた枚数が ${t.baked}。組み合わせ単位のキャッシュが効いていない`);
+}
 check('U9b', 'inventory',
   await page.evaluate(() => document.querySelectorAll('.vlist .item').length) < 60,
   '一覧の全件を DOM に置いている（仮想スクロールが効いていない）');
@@ -433,10 +485,10 @@ check('U9b', 'inventory',
 for (const [label, slotIndex] of [['武器', '1'], ['防具', '2']]) {
   await page.click(`[data-act=slotf][data-i="${slotIndex}"]`);
   await page.waitForTimeout(350);
-  const row = await page.$('.vlist .item');
-  check('T4', 'inventory', row !== null, `${label}が1件も無い`);
-  if (!row) continue;
-  await row.click();
+  const has = (await page.$('.vlist .item')) !== null;
+  check('T4', 'inventory', has, `${label}が1件も無い`);
+  if (!has) continue;
+  await page.click('.vlist .item');
   await page.waitForTimeout(600);
   await probe(page, 'inventory');
   await page.click('[data-role=back]');
@@ -464,8 +516,11 @@ await probe(page, 'compendium');
 await page.click('[data-act=tab][data-i="1"]');
 await page.waitForTimeout(350);
 await probe(page, 'compendium');
-const cell = await page.$('.cell.found');
-if (cell) { await cell.click(); await page.waitForTimeout(400); await probe(page, 'compendium'); }
+if (await page.$('.cell.found')) {
+  await page.click('.cell.found');
+  await page.waitForTimeout(400);
+  await probe(page, 'compendium');
+}
 
 // --- U5: 所持金の位置が全画面で一致するか
 {

@@ -9,6 +9,7 @@ import { openingScreen } from './ui2/screens/opening';
 import { inventoryScreen } from './ui2/screens/inventory';
 import { compendiumScreen } from './ui2/screens/compendium';
 import { modelbookScreen } from './ui2/screens/modelbook';
+import { thumbCount } from './world/thumbs';
 
 // 入口。
 //
@@ -66,4 +67,4 @@ if (params.get('models') === '1') {
 const ts = parseFloat(params.get('timescale') ?? '1');
 shell.timeScale = Number.isFinite(ts) && ts >= 1 ? Math.min(20000, ts) : 1;
 
-(window as unknown as { __delvers: unknown }).__delvers = { shell, state };
+(window as unknown as { __delvers: unknown }).__delvers = { shell, state, thumbCount };

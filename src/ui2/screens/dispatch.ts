@@ -7,8 +7,8 @@ import { enemiesForStage } from '../../data/enemies';
 import { simulateRun } from '../../sim/combat';
 import { dominantElement } from '../../sim/items';
 import {
-  actionBar, button, compareView, elementLabel, itemIcon, itemRow, itemScore,
-  panel, tag, topBar
+  actionBar, button, compareView, effectiveScore, elementLabel, itemIcon, itemRow,
+  itemScore, panel, tabs, tag, topBar
 } from '../components';
 import { duration, each, esc, num, when } from '../dom';
 
@@ -24,7 +24,8 @@ const RULE_TONE: Record<RetreatRule, string> = {
 export function dispatchScreen(nav: Nav): Screen {
   let jobIdx = 0;
   let rule: RetreatRule = 'standard';
-  let stageId = Math.max(...nav.state.data.unlockedStages);
+  let stageId = nav.stageContext ?? Math.max(...nav.state.data.unlockedStages);
+  nav.stageContext = stageId;
   /** 装備選択のシート。null なら閉じている */
   let picking: 'weapon' | 'armor' | null = null;
   /** 比較中の候補。null なら一覧のまま */
@@ -33,6 +34,11 @@ export function dispatchScreen(nav: Nav): Screen {
   /** 所要時間の見積のキャッシュ。条件が変わるまで使い回す */
   let etaKey = '';
   let etaCache: { min: number; max: number; hopeless: boolean } | null = null;
+  /** 実測比較のキャッシュ。候補を選び直すまで使い回す */
+  let measureKey = '';
+  let measureCache: string | null = null;
+  /** 候補一覧を素の強さで並べるか。既定は派遣先での実効値（指示書 §2） */
+  let sortByRaw = false;
 
   const job = (): JobId => nav.state.availableJobs()[jobIdx] ?? 'swordsman';
   const equipped = (slot: 'weapon' | 'armor'): Item | null => {
@@ -101,29 +107,97 @@ export function dispatchScreen(nav: Nav): Screen {
       `color:var(--${warn ? 'ember' : 'dim'})">${esc(parts.join(' ・ '))}</div>`;
   }
 
-  /** 装備できる候補（職の防具制限を反映）。強い順。 */
+  /**
+   * 装備できる候補（職の防具制限を反映）。
+   *
+   * **並びは「素の強さ」ではなく「その派遣先での実効値」。**
+   * 灼熱坑に炎の武器を持って行くと火力が半減するのに、
+   * 素の秒間火力で並べるとその武器が一番上に来る——
+   * 一覧が嘘をついていたので、プレイヤーは騙されるほうが自然だった（指示書 §2）。
+   */
   function candidates(): Item[] {
     const st = nav.state;
     const j = jobDef(job());
+    const stage = stageDef(stageId);
     return st.data.inventory
       .filter(it => it.slot === picking)
       .filter(it => it.slot === 'weapon' || canEquipArmor(j, baseDef(it.baseId).tags))
-      .sort((a, b) => itemScore(b) - itemScore(a));
+      .sort((a, b) => sortByRaw
+        ? itemScore(b) - itemScore(a)
+        : effectiveScore(b, stage) - effectiveScore(a, stage));
+  }
+
+  /**
+   * 候補と装備中を**実際に走らせて**比べる（指示書 §2「対ステージ期待値」）。
+   *
+   * 解析値（属性係数を掛けただけ）は敵の硬さも撤退ラインもユニーク効果も見ていない。
+   * 一覧を並べるにはそれで足りるが、装備を差し替えるかどうかの決断は
+   * 本物のシミュレーションで裏を取る。候補を選んだときだけ走る（毎フレームではない）。
+   */
+  function measure(cand: Item): string | null {
+    const st = nav.state;
+    const cur = equipped(picking === 'armor' ? 'armor' : 'weapon');
+    const other = equipped(picking === 'armor' ? 'weapon' : 'armor');
+    if (!other) return null;
+    const key = `${job()}|${stageId}|${rule}|${cur?.id ?? '-'}|${cand.id}|${st.data.tier}`;
+    if (measureKey === key) return measureCache;
+
+    const run = (w: Item, a: Item): number => {
+      let sum = 0;
+      const N = 5;
+      for (let i = 0; i < N; i++) {
+        sum += simulateRun({
+          // 本番の派遣とは別系列。ここで引いた乱数が結果に影響しないようにする
+          seed: (0x5EA1000 + i * 40503) >>> 0,
+          job: jobDef(job()), weapon: w, armor: a,
+          rule: retreatRuleDef(rule), stage: stageDef(stageId), tier: st.data.tier
+        }).depth;
+      }
+      return sum / N;
+    };
+    const pair = (it: Item | null): [Item, Item] | null => {
+      if (!it) return null;
+      return picking === 'armor' ? [other, it] : [it, other];
+    };
+    const candPair = pair(cand);
+    const curPair = pair(cur);
+    let text: string | null = null;
+    if (candPair) {
+      const after = run(candPair[0], candPair[1]);
+      if (curPair) {
+        const before = run(curPair[0], curPair[1]);
+        const d = after - before;
+        text = Math.abs(d) < 0.5
+          ? `実測: 到達深度はほぼ変わらない（${before.toFixed(1)} → ${after.toFixed(1)}）`
+          : `実測: 到達深度 ${before.toFixed(1)} → ${after.toFixed(1)}（${d > 0 ? '+' : ''}${d.toFixed(1)}）`;
+      } else {
+        text = `実測: 到達深度 ${after.toFixed(1)}`;
+      }
+    }
+    measureKey = key;
+    measureCache = text;
+    return text;
   }
 
   function pickerSheet(): string {
     if (!picking) return '';
     const current = equipped(picking);
     const list = candidates();
+    const stage = stageDef(stageId);
     return `
 <div class="sheet-back" data-act="pick-close"></div>
 <div class="sheet">
-  ${when(candidate, `<div class="sheet-compare">${candidate ? compareView(current, candidate) : ''}</div>`)}
+  ${when(candidate, `<div class="sheet-compare">${candidate
+        ? compareView(current, candidate, { stage, measured: measure(candidate) }) : ''}</div>`)}
+  <div class="sheet-sort">
+    ${tabs([`${stage.name}での強さ`, '素の強さ'], sortByRaw ? 1 : 0, 'sortmode')}
+  </div>
   <div class="sheet-list">
     ${list.length === 0
         ? '<div class="empty">装備できる品がない</div>'
         : each(list, it => itemRow({
             item: it, compareTo: current && current.id !== it.id ? current : null,
+            stage: sortByRaw ? null : stage,
             selected: candidate?.id === it.id, act: 'pick'
           }))}
   </div>
@@ -266,7 +340,11 @@ ${actionBar(button({
         case 'back': nav.goBase(); return;
         case 'job': jobIdx = Number(el.dataset.i ?? 0); return;
         case 'rule': rule = (el.dataset.id ?? 'standard') as RetreatRule; return;
-        case 'stage': stageId = Number(el.dataset.id ?? 1); return;
+        case 'stage':
+          stageId = Number(el.dataset.id ?? 1);
+          // 所持品の「相性順」がどこへ送るつもりかを知れるようにする
+          nav.stageContext = stageId;
+          return;
         case 'unlock': st.unlockStage(stageId); return;
         case 'pick-open':
           picking = (el.dataset.slot ?? 'weapon') as 'weapon' | 'armor';
@@ -278,6 +356,7 @@ ${actionBar(button({
           return;
         }
         case 'pick-back': candidate = null; return;
+        case 'sortmode': sortByRaw = el.dataset.i === '1'; return;
         case 'pick-close': picking = null; candidate = null; return;
         case 'equip': {
           if (!candidate || !picking) return;

@@ -465,22 +465,26 @@ function buildPedestal(opts: { color?: number } = {}): SceneDef {
 
   // 台座は「背後で何かが光っている」程度に沈めていた名残で暗く、
   // 実際に品を載せてみると鎧が影の塊になった。被写体を見せる明るさに上げる
-  scene.add(new THREE.AmbientLight(0x2e3960, 1.5));
-  const key = new THREE.SpotLight(0xdfe8ff, 170, 22, 0.8, 0.45, 1.4);
+  // 鎧のような広い金属面は、強い一点光源で必ず白く飛ぶ。
+  // 環境光を厚めに、直射を控えめにすると、形を残したまま明るくできる
+  scene.add(new THREE.AmbientLight(0x33406e, 2.6));
+  const key = new THREE.SpotLight(0xdfe8ff, 62, 24, 0.9, 0.6, 1.2);
   key.position.set(2.6, 5.6, 4.6);
   key.target.position.set(0, 1.6, 0);
   scene.add(key);
   scene.add(key.target);
-  const rim = new THREE.PointLight(color, 26, 18, 2);
+  const rim = new THREE.PointLight(color, 18, 18, 2);
   rim.position.set(-3.2, 3.4, -1.2);
   scene.add(rim);
-  const fill = new THREE.PointLight(0x8ea6ff, 14, 18, 2);
+  const fill = new THREE.PointLight(0x8ea6ff, 9, 18, 2);
   fill.position.set(3.2, 1.4, 3.6);
   scene.add(fill);
 
+  // 台座は飾りであって主役ではない。被写体を見せるために光を上げたとき、
+  // 一番広い面であるここが真っ先に白く飛んで、載っている品と明るさを競っていた
   const dais = new THREE.Mesh(
     new THREE.CylinderGeometry(1.9, 2.3, 0.42, 12),
-    new THREE.MeshStandardMaterial({ color: 0x2a3048, roughness: 0.92, flatShading: true })
+    new THREE.MeshStandardMaterial({ color: 0x161b2c, roughness: 0.98, flatShading: true })
   );
   dais.position.y = SUBJECT_Y - MODEL_HEIGHT * 0.5 - 0.34;
   dais.scale.setScalar(0.78);

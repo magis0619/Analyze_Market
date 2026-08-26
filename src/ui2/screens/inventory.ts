@@ -1,6 +1,8 @@
-import type { Item, Rarity, Slot } from '../../sim/types';
+import type { Item, Rarity, Slot, StageDef } from '../../sim/types';
 import type { Nav, Screen } from '../shell';
 import type { ModelSpec } from '../../world/models';
+import { stageDef } from '../../data/stages';
+import { effectiveScore } from '../affinity';
 import { Prng } from '../../sim/prng';
 import { dominantElement, sellValue } from '../../sim/items';
 import {
@@ -14,7 +16,7 @@ import { each, esc, num, when } from '../dom';
 // 全件を DOM に出すと innerHTML の書き換えだけで予算を食うので、
 // 見えている範囲＋前後の余白だけを描く（仮想スクロール）。
 
-const SORTS = ['強さ', 'レア', '種別', '新着'] as const;
+const SORTS = ['相性', '強さ', 'レア', '種別'] as const;
 const SLOTS: Array<Slot | 'all'> = ['all', 'weapon', 'armor'];
 const SLOT_LABEL = ['全部', '武器', '防具'];
 const RARS: Array<Rarity | 'all' | 'fine+'> = ['all', 'fine+', 'common'];
@@ -27,7 +29,9 @@ const OVERSCAN = 6;
 
 export function inventoryScreen(nav: Nav): Screen {
   const st = nav.state;
-  let sort = 0;
+  // 既定は「相性」——どこへ送るつもりかが分かっているなら、
+  // 素の強さで並べた一覧は嘘をつく（指示書 §2）。分からなければ強さに落とす
+  let sort = nav.stageContext === null ? 1 : 0;
   let slotF = 0;
   let rarF = 0;
   let selectedId: string | null = null;
@@ -35,6 +39,23 @@ export function inventoryScreen(nav: Nav): Screen {
   let scrollTop = 0;
   const notices: string[] = [];
   let noticeT = 0;
+
+  /**
+   * 並べ替えの見出し。「相性」だけでは**何との相性か**が分からない。
+   * 派遣先が分かっているなら、その名前をそのまま出す。
+   */
+  function sortLabels(): string[] {
+    const stage = contextStage();
+    return [stage ? `対 ${stage.name}` : '相性', ...SORTS.slice(1)];
+  }
+
+  /**
+   * 相性を計算する相手。派遣準備で最後に見ていた派遣先。
+   * 一度も見ていなければ null で、そのときは素の強さで並べる。
+   */
+  function contextStage(): StageDef | null {
+    return nav.stageContext === null ? null : stageDef(nav.stageContext);
+  }
 
   /** 装備中のIDは売却・破棄の対象から必ず外す。 */
   function equippedIds(): Set<string> {
@@ -56,15 +77,19 @@ export function inventoryScreen(nav: Nav): Screen {
       return true;
     });
     xs = xs.slice();
+    const stage = contextStage();
     switch (sort) {
-      case 0: xs.sort((a, b) => itemScore(b) - itemScore(a)); break;
-      case 1: {
+      case 0:
+        if (stage) xs.sort((a, b) => effectiveScore(b, stage) - effectiveScore(a, stage));
+        else xs.sort((a, b) => itemScore(b) - itemScore(a));
+        break;
+      case 1: xs.sort((a, b) => itemScore(b) - itemScore(a)); break;
+      case 2: {
         const rank = (r: Rarity): number => ['common', 'fine', 'rare', 'relic'].indexOf(r);
         xs.sort((a, b) => rank(b.rarity) - rank(a.rarity) || itemScore(b) - itemScore(a));
         break;
       }
-      case 2: xs.sort((a, b) => a.slot.localeCompare(b.slot) || itemScore(b) - itemScore(a)); break;
-      case 3: xs.reverse(); break;
+      case 3: xs.sort((a, b) => a.slot.localeCompare(b.slot) || itemScore(b) - itemScore(a)); break;
     }
     return xs;
   }
@@ -90,6 +115,7 @@ export function inventoryScreen(nav: Nav): Screen {
 
     render() {
       const list = view();
+      const stage = contextStage();
       const eq = equippedIds();
       const sel = selectedId ? st.itemById(selectedId) : null;
       const bulk = sellable();
@@ -150,7 +176,7 @@ ${topBar({
       })}
 <div class="stack" data-role="list" data-scroll>
   ${panel('', `
-    ${tabs(SORTS, sort, 'sort')}
+    ${tabs(sortLabels(), sort, 'sort')}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-2);margin-top:var(--sp-2)">
       ${tabs(SLOT_LABEL, slotF, 'slotf')}
       ${tabs(RAR_LABEL, rarF, 'rarf')}
@@ -162,6 +188,7 @@ ${topBar({
              <div class="vlist-inner" style="transform:translateY(${first * ROW_H}px)">
                ${each(slice, it => itemRow({
                  item: it, showSell: true, act: 'sel',
+                 stage: sort === 0 ? stage : null,
                  selected: it.id === selectedId,
                  extra: when(eq.has(it.id), '<div class="rr" style="color:var(--gold)">装備中</div>')
                }))}

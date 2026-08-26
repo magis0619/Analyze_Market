@@ -1,8 +1,12 @@
-import type { Item, Rarity } from '../../sim/types';
+import type { Item, Rarity, StageDef } from '../../sim/types';
+import type { ModelSpec } from '../../world/models';
+import { thumbFor } from '../../world/thumbs';
 import { baseDef } from '../../data/bases';
 import { affixDef } from '../../data/affixes';
 import { uniqueDef } from '../../data/uniques';
 import { dominantElement, sellValue } from '../../sim/items';
+import { affinityKind, affinityText, effectiveScore } from '../affinity';
+export { affinityKind, effectiveScore } from '../affinity';
 import { each, esc, num, when } from '../dom';
 
 // 共通UIコンポーネント（docs/UI-SPEC.md §3.2）。
@@ -62,6 +66,28 @@ export function itemIcon(it: Item): string {
 /** itemIcon の色分けに使うクラス。 */
 export function itemIconClass(it: Item): string {
   return it.slot === 'weapon' ? elementClass(dominantElement(it.element)) : 'def';
+}
+
+/** その品の3Dモデル仕様。一覧のサムネと台座で同じものを指す。 */
+export function itemModelSpec(it: Item): ModelSpec {
+  return {
+    baseId: it.baseId, rarity: it.rarity,
+    element: it.slot === 'weapon' ? dominantElement(it.element) : 'physical'
+  };
+}
+
+/**
+ * 一覧の左に置く枠（§1 所有実感）。
+ *
+ * モデルのサムネが焼けていればそれを、まだなら属性の1文字を出す。
+ * **待たない。** 焼き上がるまで行を出さないと、200件の一覧が
+ * 一瞬空白になる。少し遅れて良くなるほうがよい。
+ */
+export function itemThumb(it: Item): string {
+  const url = thumbFor(itemModelSpec(it));
+  const cls = `${RARITY_CLASS[it.rarity]} ${itemIconClass(it)}`;
+  if (url) return `<div class="ic ${cls} shot"><img src="${url}" alt=""></div>`;
+  return `<div class="ic ${cls}">${itemIcon(it)}</div>`;
 }
 
 export function affixText(a: Item['affixes'][number]): string {
@@ -193,6 +219,12 @@ export interface ItemRowProps {
   item: Item;
   /** 装備中との比較。差を ▲▼ で出す */
   compareTo?: Item | null;
+  /**
+   * 派遣先。渡すと、素の強さではなく**その派遣先での実効値**で語る。
+   * 属性が3倍の開きを生むのに素の数字しか出していなかったので、
+   * 「一番大きい数字を装備する」以外の選択が生まれなかった（指示書 §2）。
+   */
+  stage?: StageDef | null;
   /** 売値を出す（比較が無いとき） */
   showSell?: boolean;
   selected?: boolean;
@@ -202,13 +234,19 @@ export interface ItemRowProps {
 
 export function itemRow(p: ItemRowProps): string {
   const it = p.item;
-  const sub = it.slot === 'weapon' ? `秒間${itemScore(it)}` : `防御${it.power}`;
-  const meta = [RARITY_LABEL[it.rarity], sub, it.affixes.length > 0 ? `効果${it.affixes.length}` : '']
-    .filter(Boolean).join(' ・ ');
+  const score = p.stage ? effectiveScore(it, p.stage) : itemScore(it);
+  const sub = it.slot === 'weapon' ? `秒間${score}` : `防御${score}`;
+  const kind = p.stage ? affinityKind(it, p.stage) : null;
+  const meta = [
+    RARITY_LABEL[it.rarity], sub,
+    p.stage && kind !== 'even' ? affinityText(it, p.stage) : '',
+    it.affixes.length > 0 ? `効果${it.affixes.length}` : ''
+  ].filter(Boolean).join(' ・ ');
 
   let right = '';
   if (p.compareTo) {
-    const d = itemScore(it) - itemScore(p.compareTo);
+    const base = p.stage ? effectiveScore(p.compareTo, p.stage) : itemScore(p.compareTo);
+    const d = score - base;
     if (d !== 0) {
       right = `<div class="rr" style="color:var(--${d > 0 ? 'up' : 'down'})">${d > 0 ? '▲' : '▼'}${Math.abs(d)}</div>`;
     }
@@ -218,9 +256,9 @@ export function itemRow(p: ItemRowProps): string {
 
   return `<div class="item ${RARITY_CLASS[it.rarity]} ${p.selected ? 'on' : ''}"` +
     `${when(p.act, ` data-tap data-act="${esc(p.act ?? '')}" data-id="${esc(it.id)}"`)}>` +
-    `<div class="ic ${itemIconClass(it)}">${itemIcon(it)}</div>` +
+    itemThumb(it) +
     `<div class="tx"><div class="n">${esc(itemName(it))}${when(it.locked, ' 🔒')}</div>` +
-    `<div class="m">${esc(meta)}</div></div>` +
+    `<div class="m${when(kind && kind !== 'even', ` aff-${kind}`)}">${esc(meta)}</div></div>` +
     `${right}${p.extra ?? ''}</div>`;
 }
 
@@ -273,11 +311,18 @@ export interface EquipCardProps {
   compareTo?: Item | null;
   label?: string;
   showSell?: boolean;
+  /** 派遣先。渡すと先頭に「対〈ステージ〉」の実効値が入る */
+  stage?: StageDef | null;
 }
 
 /** 装備カード。順序は §3.3 で固定（画面ごとに入れ替えない）。 */
 export function equipCard(p: EquipCardProps): string {
   const it = p.item;
+  // 等倍なら「対〈ステージ〉」は素の値と同じ数字になる。
+  // 同じ数字を2行並べても情報は増えず、目が滑るだけなので出さない
+  const same = p.stage ? affinityKind(it, p.stage) === 'even' : true;
+  const eff = p.stage && !same ? effectiveScore(it, p.stage) : null;
+  const effCmp = p.stage && !same && p.compareTo ? effectiveScore(p.compareTo, p.stage) : null;
   return `
   ${when(p.label, `<div class="micro" style="margin-bottom:var(--sp-1)">${esc(p.label ?? '')}</div>`)}
   <div class="card ${RARITY_CLASS[it.rarity]}">
@@ -286,6 +331,11 @@ export function equipCard(p: EquipCardProps): string {
     ${when(itemName(it) !== baseDef(it.baseId).name,
       `<div class="base">${esc(baseDef(it.baseId).name)}</div>`)}
     <div style="margin-top:var(--sp-2)">
+      ${when(eff !== null, statRow({
+        label: p.stage ? `対 ${p.stage.name}` : '',
+        value: `${eff}`, tone: it.slot === 'weapon' ? 'atk' : 'def',
+        delta: effCmp !== null ? (eff ?? 0) - effCmp : undefined
+      }))}
       ${each(statsOf(it, p.compareTo), statRow)}
     </div>
     ${when(it.affixes.length > 0, `<div class="fx">${each(it.affixes, a =>
@@ -300,22 +350,45 @@ export function equipCard(p: EquipCardProps): string {
 }
 
 /** 装備比較（§2.4）。「差し引きどちらが強いか」を必ず1行で言い切る。 */
-export function compareView(current: Item | null, next: Item): string {
+export interface CompareProps {
+  stage?: StageDef | null;
+  /**
+   * 実測の言い切り（例「実測で 2 階層ぶん深く潜れる」）。
+   *
+   * 解析値は「どれを見るか」を決めるためのもので、
+   * 「どれを選ぶか」はシミュレーションで決める。渡さなければ解析値だけで語る。
+   */
+  measured?: string | null;
+}
+
+export function compareView(current: Item | null, next: Item, p: CompareProps = {}): string {
   if (!current) {
     return `<div>${equipCard({ item: next, label: '新しい品' })}</div>`;
   }
-  const diff = itemScore(next) - itemScore(current);
-  const verdict = diff > 0 ? `この候補のほうが ${diff} 強い`
-    : diff < 0 ? `装備中のほうが ${-diff} 強い`
-    : '素の強さは互角。効果で選ぶ';
+  const st = p.stage ?? null;
+  // 派遣先が分かっているなら、素の強さではなく**そこでの実効値**で言い切る。
+  // 素の数字だけを見せていたので、耐性で半減する武器が「一番強い」と表示され、
+  // プレイヤーが騙されていた
+  const cur = st ? effectiveScore(current, st) : itemScore(current);
+  const cand = st ? effectiveScore(next, st) : itemScore(next);
+  const diff = cand - cur;
+  const where = st ? `${st.name}では` : '';
+  const verdict = diff > 0 ? `${where}この候補のほうが ${diff} 強い`
+    : diff < 0 ? `${where}装備中のほうが ${-diff} 強い`
+    : `${where}互角。効果で選ぶ`;
   const tone = diff > 0 ? 'up' : diff < 0 ? 'down' : 'dim';
+  const kind = st ? affinityKind(next, st) : null;
   return `
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-2)">
-    <div>${equipCard({ item: current, label: 'Current' })}</div>
-    <div>${equipCard({ item: next, compareTo: current, label: 'Candidate' })}</div>
+    <div>${equipCard({ item: current, label: 'Current', stage: st })}</div>
+    <div>${equipCard({ item: next, compareTo: current, label: 'Candidate', stage: st })}</div>
   </div>
   <div class="verdict" data-role="verdict"
        style="border-color:color-mix(in srgb, var(--${tone}) 35%, transparent);
               background:color-mix(in srgb, var(--${tone}) 10%, transparent);
-              color:var(--${tone})">${esc(verdict)}</div>`;
+              color:var(--${tone})">${esc(verdict)}</div>
+  ${when(st && kind !== 'even', `<div class="aff-note aff-${kind}">${
+    esc(st ? affinityText(next, st) : '')}${when(st?.weakTo,
+      ` ・ ${esc(st?.name ?? '')}の弱点は${elementLabel(st?.weakTo ?? '')}`)}</div>`)}
+  ${when(p.measured, `<div class="measured" data-role="measured">${esc(p.measured ?? '')}</div>`)}`;
 }

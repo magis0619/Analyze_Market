@@ -77,7 +77,7 @@ const LEATHER = 0x2b2118;
  * 鎧の胴を照らすと、受ける光の量が桁違いで真っ白に飛ぶ——
  * 実際、中鎧と重鎧が形の分からない光の塊になっていた。
  */
-function steel(spec: ModelSpec, dim = 1): THREE.MeshStandardMaterial {
+function steel(spec: ModelSpec, dim = 1, rough = 0): THREE.MeshStandardMaterial {
   const f = FINISH[spec.rarity];
   // 物理は素の鋼、属性持ちは刃そのものに色が乗る
   const base = spec.element === 'physical' ? 0xcfd8ee : ELEMENT_COLOR[spec.element];
@@ -85,7 +85,7 @@ function steel(spec: ModelSpec, dim = 1): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({
     color: tint,
     metalness: f.metalness,
-    roughness: f.roughness,
+    roughness: Math.min(0.96, f.roughness + rough),
     emissive: spec.element === 'physical' ? 0x000000 : ELEMENT_COLOR[spec.element],
     emissiveIntensity: spec.element === 'physical' ? 0 : f.emissive * 0.16,
     flatShading: true
@@ -306,8 +306,10 @@ function buildArmor(spec: ModelSpec, p: {
   // 広い面は暗めに。ここを刃と同じ明るさにすると光の塊になる。
   // 剣は細いので同じ明るさでも飛ばないが、鎧の胴は面積が10倍あり、
   // 同じ設定だと形の分からない白い板になる
-  const body = p.metal ? steel(spec, 0.34) : plain(LEATHER, 0.95);
-  const edge = p.metal ? steel(spec, 0.44) : steel(spec, 0.26);
+  // 鎧は面が広く平らなので、刃と同じ滑らかさだと正面を向いた瞬間に
+  // 面ごと反射して白い板になる。磨きを落として拡散寄りにする
+  const body = p.metal ? steel(spec, 0.55, 0.3) : plain(LEATHER, 0.95);
+  const edge = p.metal ? steel(spec, 0.68, 0.26) : steel(spec, 0.4, 0.3);
 
   // 胴。胸で広く、腰で締める
   const torso = new THREE.Mesh(
@@ -318,11 +320,17 @@ function buildArmor(spec: ModelSpec, p: {
   torso.position.y = 0.3;
   g.add(torso);
 
-  // 胸当て。前面を一段せり出させて、樽ではなく人の形にする
-  const front = new THREE.Mesh(new THREE.BoxGeometry(p.chest * 1.12, 0.92, p.depth), edge);
-  front.position.set(0, 0.5, p.chest * 0.7);
-  front.rotation.x = -0.12;
-  g.add(front);
+  // 胸当て。**1枚の平板にしない。** 正面を向いた平面は光を面ごと返すので、
+  // そこだけ白く飛んで胸の形が消える。左右に振った2枚に割ると、
+  // どちらかは必ず斜めになり、陰影で形が出る
+  for (const side of [-1, 1]) {
+    const front = new THREE.Mesh(
+      new THREE.BoxGeometry(p.chest * 0.62, 0.92, p.depth), edge
+    );
+    front.position.set(side * p.chest * 0.27, 0.5, p.chest * 0.66);
+    front.rotation.set(-0.12, side * 0.34, 0);
+    g.add(front);
+  }
 
   // 襟
   g.add(cyl(p.chest * 0.46, p.chest * 0.58, 0.16, 8, trim(spec), 1.12));
