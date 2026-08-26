@@ -3,6 +3,8 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import type { ModelSpec } from './models';
+import { MODEL_HEIGHT, animateModel, buildItemModel, disposeModel } from './models';
 
 // three.js による 3D レイヤー。
 //
@@ -129,7 +131,15 @@ function glowSprite(color: number, size: number, intensity = 1): THREE.Sprite {
 
 // ---------------------------------------------------------------- 拠点
 
-interface SceneDef { scene: THREE.Scene; cam: THREE.PerspectiveCamera; update(t: number): void }
+interface SceneDef {
+  scene: THREE.Scene;
+  cam: THREE.PerspectiveCamera;
+  update(t: number): void;
+  /** 装備モデルを載せる場所。持たないシーンは undefined */
+  mount?: THREE.Object3D;
+  /** 何も載っていないときに見せるもの。載せたら隠す */
+  placeholder?: THREE.Object3D;
+}
 
 function buildBase(): SceneDef {
   const scene = new THREE.Scene();
@@ -333,12 +343,25 @@ function buildReveal(opts: { color?: number } = {}): SceneDef {
   scene.fog = new THREE.FogExp2(0x05060c, 0.05);
 
   const cam = new THREE.PerspectiveCamera(46, 1, 0.1, 100);
-  cam.position.set(0, 1.1, 11);
-  cam.lookAt(0, -1.4, 0);
+  // 台座と同じ組み方。中心を camera より 1.5 上に置いて、上から3割に見せる。
+  // **見せ場の高さは1箇所で決める。** 光条・光輪・紙片・被写体を
+  // 別々の数字で置いていたら、光が集まる点と品の位置がずれていた
+  const SUBJECT_Y = 2.75;
+  cam.position.set(0, SUBJECT_Y - 1.5, 10.6);
+  cam.lookAt(0, SUBJECT_Y - 1.5, 0);
 
   scene.add(new THREE.AmbientLight(0x1a2038, 0.7));
 
-  // 中心の遺物。八面体を2枚重ねて、内側を発光、外側をワイヤで包む
+  // 品を載せる場所。カットインでは DOM の明細板が画面の下半分を占めるので、
+  // 3D 側の主役は上へ逃がす（両方が真ん中を取り合うと、どちらも損をする）
+  const mount = new THREE.Group();
+  mount.position.y = SUBJECT_Y;
+  scene.add(mount);
+
+  // 品が載るまでの仮の姿。八面体を2枚重ねて、内側を発光、外側をワイヤで包む
+  const placeholder = new THREE.Group();
+  placeholder.position.y = SUBJECT_Y;
+  scene.add(placeholder);
   const core = new THREE.Mesh(
     new THREE.OctahedronGeometry(1.15, 0),
     new THREE.MeshStandardMaterial({
@@ -346,16 +369,18 @@ function buildReveal(opts: { color?: number } = {}): SceneDef {
       roughness: 0.22, metalness: 0.9, flatShading: true
     })
   );
-  scene.add(core);
+  placeholder.add(core);
   const cage = new THREE.Mesh(
     new THREE.OctahedronGeometry(1.9, 0),
     new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: true, opacity: 0.32 })
   );
-  scene.add(cage);
+  placeholder.add(cage);
 
   const halo = glowSprite(color, 6.5, 0.42);
+  halo.position.y = SUBJECT_Y;
   scene.add(halo);
   const l = new THREE.PointLight(color, 7, 22, 2);
+  l.position.y = SUBJECT_Y;
   scene.add(l);
 
   // 破裂した紙片。板を放射状にばら撒く
@@ -372,7 +397,7 @@ function buildReveal(opts: { color?: number } = {}): SceneDef {
     );
     const a = r() * Math.PI * 2, b = (r() - 0.5) * Math.PI;
     const d = 2.2 + r() * 5.2;
-    s.position.set(Math.cos(a) * Math.cos(b) * d, Math.sin(b) * d * 0.8, Math.sin(a) * Math.cos(b) * d * 0.5);
+    s.position.set(Math.cos(a) * Math.cos(b) * d, SUBJECT_Y + Math.sin(b) * d * 0.8, Math.sin(a) * Math.cos(b) * d * 0.5);
     s.rotation.set(r() * 6, r() * 6, r() * 6);
     shards.add(s);
   }
@@ -392,6 +417,7 @@ function buildReveal(opts: { color?: number } = {}): SceneDef {
     ray.rotation.z = (i / 10) * Math.PI * 2;
     rays.add(ray);
   }
+  rays.position.y = SUBJECT_Y;
   scene.add(rays);
 
   const motes = makeMotes(120, { x: 12, y: 10, z: 8 }, color, 0.07, 31);
@@ -399,8 +425,9 @@ function buildReveal(opts: { color?: number } = {}): SceneDef {
   scene.add(motes);
 
   return {
-    scene, cam,
+    scene, cam, mount, placeholder,
     update(t) {
+      for (const child of mount.children) animateModel(child, t);
       core.rotation.y = t * 0.55;
       core.rotation.x = Math.sin(t * 0.4) * 0.28;
       cage.rotation.y = -t * 0.32;
@@ -422,69 +449,54 @@ function buildPedestal(opts: { color?: number } = {}): SceneDef {
   scene.background = new THREE.Color(0x070910);
   scene.fog = new THREE.FogExp2(0x070910, 0.06);
 
-  // この画面の主役は一覧であって剣ではない。
-  // 3D は「背後で何かが光っている」程度に沈め、被写体は画面下寄りに置く
-  const cam = new THREE.PerspectiveCamera(44, 1, 0.1, 100);
-  cam.position.set(0, 3.4, 13);
-  cam.lookAt(0, 2.6, 0);
+  // 縦持ちなので、画面の下半分は必ず UI（明細板と ActionBar）が占める。
+  // 被写体は**上から1割〜5割**に収める。
+  //
+  // カメラは水平に構える。傾けると「高さ→画面位置」が非線形になり、
+  // 何度も勘で数字を動かす羽目になる。水平なら
+  //   ndc_y = (y - camY) / (距離 × tan(画角/2))
+  // で一意に決まるので、被写体の中心をどこに置けばよいかが計算できる。
+  // 距離10.3・画角40°で半分の高さが 3.75 ワールド単位。
+  // 中心を camera より 1.43 上に置くと、画面の +0.38（＝上から31%）に来る。
+  const cam = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+  cam.position.set(0, 0.4, 10.3);
+  cam.lookAt(0, 0.4, 0);
+  const SUBJECT_Y = 1.83;
 
-  scene.add(new THREE.AmbientLight(0x232b47, 1.0));
-  const key = new THREE.SpotLight(0xdfe8ff, 90, 18, 0.7, 0.5, 1.6);
-  key.position.set(2.6, 5.4, 4.6);
-  key.target.position.set(0, 1.0, 0);
+  // 台座は「背後で何かが光っている」程度に沈めていた名残で暗く、
+  // 実際に品を載せてみると鎧が影の塊になった。被写体を見せる明るさに上げる
+  scene.add(new THREE.AmbientLight(0x2e3960, 1.5));
+  const key = new THREE.SpotLight(0xdfe8ff, 170, 22, 0.8, 0.45, 1.4);
+  key.position.set(2.6, 5.6, 4.6);
+  key.target.position.set(0, 1.6, 0);
   scene.add(key);
   scene.add(key.target);
-  const rim = new THREE.PointLight(color, 14, 16, 2);
-  rim.position.set(-3.2, 2.2, -2.0);
+  const rim = new THREE.PointLight(color, 26, 18, 2);
+  rim.position.set(-3.2, 3.4, -1.2);
   scene.add(rim);
-  const fill = new THREE.PointLight(0x8ea6ff, 5, 16, 2);
-  fill.position.set(3.2, 0.4, 3.0);
+  const fill = new THREE.PointLight(0x8ea6ff, 14, 18, 2);
+  fill.position.set(3.2, 1.4, 3.6);
   scene.add(fill);
 
   const dais = new THREE.Mesh(
     new THREE.CylinderGeometry(1.9, 2.3, 0.42, 12),
     new THREE.MeshStandardMaterial({ color: 0x2a3048, roughness: 0.92, flatShading: true })
   );
-  dais.position.y = -0.9;
+  dais.position.y = SUBJECT_Y - MODEL_HEIGHT * 0.5 - 0.34;
+  dais.scale.setScalar(0.78);
   scene.add(dais);
 
-  // 剣。刃・鍔・柄・柄頭
-  const sword = new THREE.Group();
-  const blade = new THREE.Mesh(
-    new THREE.BoxGeometry(0.17, 3.1, 0.045),
-    new THREE.MeshStandardMaterial({ color: 0xcfd8ee, roughness: 0.22, metalness: 0.95 })
-  );
-  blade.position.y = 1.75;
-  sword.add(blade);
-  const tip = new THREE.Mesh(
-    new THREE.ConeGeometry(0.12, 0.5, 4),
-    new THREE.MeshStandardMaterial({ color: 0xcfd8ee, roughness: 0.22, metalness: 0.95 })
-  );
-  tip.position.y = 3.55;
-  sword.add(tip);
-  const guard = new THREE.Mesh(
-    new THREE.BoxGeometry(1.05, 0.16, 0.16),
-    new THREE.MeshStandardMaterial({ color: 0xb08a45, roughness: 0.4, metalness: 0.85 })
-  );
-  guard.position.y = 0.18;
-  sword.add(guard);
-  const grip = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.09, 0.09, 0.8, 8),
-    new THREE.MeshStandardMaterial({ color: 0x3a2418, roughness: 0.95 })
-  );
-  grip.position.y = -0.3;
-  sword.add(grip);
-  const pommel = new THREE.Mesh(
-    new THREE.OctahedronGeometry(0.17, 0),
-    new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.1, metalness: 0.8, roughness: 0.3 })
-  );
-  pommel.position.y = -0.78;
-  sword.add(pommel);
-  sword.position.y = -0.1;
-  scene.add(sword);
+  // 台の上は空にしておく。何を載せるかは画面が決める（Stage.setModel）。
+  // 品を選んでいないときのために、代わりの1本を置く
+  const mount = new THREE.Group();
+  mount.position.y = SUBJECT_Y;
+  scene.add(mount);
+  const placeholder = buildItemModel({ baseId: 'sword', rarity: 'common', element: 'physical' });
+  placeholder.position.y = SUBJECT_Y;
+  scene.add(placeholder);
 
   const halo = glowSprite(color, 6, 0.5);
-  halo.position.y = 0.9;
+  halo.position.y = SUBJECT_Y - 0.3;
   scene.add(halo);
 
   const motes = makeMotes(90, { x: 7, y: 7, z: 5 }, color, 0.055, 41);
@@ -492,16 +504,15 @@ function buildPedestal(opts: { color?: number } = {}): SceneDef {
   scene.add(motes);
 
   return {
-    scene, cam,
+    scene, cam, mount, placeholder,
     update(t) {
-      sword.rotation.y = t * 0.42;
-      sword.position.y = -0.1 + Math.sin(t * 1.1) * 0.11;
+      for (const child of mount.children) animateModel(child, t);
+      if (placeholder.visible) animateModel(placeholder, t);
       halo.scale.setScalar(5.6 + Math.sin(t * 2.1) * 0.5);
       driftMotes(motes, t, 0.26);
     }
   };
 }
-
 // ---------------------------------------------------------------- 実行系
 
 export const SCENES = {
@@ -519,13 +530,26 @@ export const SCENES = {
 
 export interface Stage {
   load(name: SceneName): void;
+  /**
+   * 3D 側に載せる装備。null で仮の姿へ戻す。
+   *
+   * 画面ごとに作り直すのではなく、Stage が1点だけ持つ。
+   * 開封で1個ずつ捲るたびに Group を作っては捨てるので、
+   * 前のものを確実に返さないと GPU 資源が積み上がる。
+   */
+  setModel(spec: ModelSpec | null): void;
   resize(w: number, h: number): void;
   renderAt(t: number): void;
   dispose(): void;
 }
 
 export function createStage(canvas: HTMLCanvasElement): Stage {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+  // 検証時だけ描画結果を読めるようにする（§7.1 U16）。
+  // 常時 true にすると毎フレームのコピーが増えるので、URL で明示したときだけ。
+  const readable = new URLSearchParams(location.search).get('probe') === '1';
+  const renderer = new THREE.WebGLRenderer({
+    canvas, antialias: true, alpha: false, preserveDrawingBuffer: readable
+  });
   renderer.setPixelRatio(1);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.12;
@@ -533,6 +557,37 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
   let current: SceneDef | null = null;
   let composer: EffectComposer | null = null;
   let w = 0, h = 0;
+  /** 今載せている装備。シーンを跨いでも同じものを見せ続ける */
+  let modelSpec: ModelSpec | null = null;
+  let model: THREE.Group | null = null;
+
+  function clearModel(): void {
+    if (!model) return;
+    model.removeFromParent();
+    disposeModel(model);
+    model = null;
+  }
+
+  /** 今のシーンに、今の装備を反映する。 */
+  function applyModel(): void {
+    clearModel();
+    if (!current?.mount) return;
+    if (modelSpec) {
+      model = buildItemModel(modelSpec);
+      current.mount.add(model);
+    }
+    if (current.placeholder) current.placeholder.visible = modelSpec === null;
+  }
+
+  function setModel(spec: ModelSpec | null): void {
+    const same = spec && modelSpec
+      && spec.baseId === modelSpec.baseId
+      && spec.rarity === modelSpec.rarity
+      && spec.element === modelSpec.element;
+    if (same || (!spec && !modelSpec)) return;
+    modelSpec = spec;
+    applyModel();
+  }
 
   function resize(nw: number, nh: number): void {
     w = nw; h = nh;
@@ -560,6 +615,7 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
     // 閾値を高く取り、「本当に光っているもの」だけを拾わせる
     composer.addPass(new UnrealBloomPass(new THREE.Vector2(w || 1, h || 1), 0.34, 0.75, 0.72));
     composer.setSize(w || 1, h || 1);
+    applyModel();
   }
 
   function renderAt(t: number): void {
@@ -570,6 +626,7 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
 
   /** 画面を離れるときにGPU資源を返す。放置すると遷移のたびに積み上がる。 */
   function dispose(): void {
+    clearModel();
     composer?.dispose();
     current?.scene.traverse(o => {
       const m = o as THREE.Mesh;
@@ -582,7 +639,7 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
     composer = null;
   }
 
-  return { load, resize, renderAt, dispose };
+  return { load, setModel, resize, renderAt, dispose };
 }
 
 export type SceneName = keyof typeof SCENES;

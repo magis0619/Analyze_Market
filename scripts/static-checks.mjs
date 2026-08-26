@@ -136,6 +136,37 @@ for (const f of allSrc) {
   console.log(`  tokens: ${defined} 件`);
 }
 
+// ---------------------------------------------------------------- UI-SPEC §4 重複
+// 同じセレクタを2箇所で定義していないか。
+// 後から書いたほうが勝つので画面は正しく見えるが、片方だけ直すと
+// 「直したのに変わらない」になる。実際 .reveal / .plate が
+// 二重に定義され、古いほうを直しても何も起きない状態だった。
+{
+  const css = readFileSync(join(root, 'src/ui2/tokens.css'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  // @media の中の上書きは重複ではない。入れ子の外側（深さ0）だけを見る
+  const seen = new Set();
+  const dup = [];
+  let depth = 0, buf = '';
+  for (const ch of css) {
+    if (ch === '{') {
+      const sel = buf.trim().replace(/\s+/g, ' ');
+      if (depth === 0 && sel && !sel.startsWith('@')) {
+        if (seen.has(sel)) dup.push(sel);
+        else seen.add(sel);
+      }
+      depth++; buf = '';
+    } else if (ch === '}') {
+      depth--; buf = '';
+    } else {
+      buf += ch;
+    }
+  }
+  if (dup.length > 0) {
+    fail(`[§4] FAIL: 同じセレクタを二度定義している ${dup.length} 件: ${[...new Set(dup)].join(' / ')}`);
+  }
+}
+
 // ---------------------------------------------------------------- UI-SPEC §6.1
 // World層（three.js）が文字を持っていないか。
 // 2層に分ける唯一の理由は「文字はすべて DOM 側にあり、測れる」ことなので、

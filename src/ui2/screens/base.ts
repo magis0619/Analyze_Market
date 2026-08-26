@@ -17,29 +17,74 @@ const JOB_ICON: Record<JobId, string> = {
   swordsman: '剣', guardian: '守', skirmisher: '遊'
 };
 
+interface Tile {
+  act: string;
+  en: string;
+  label: string;
+  /** 未処理の件数。0 なら押せない */
+  count?: (nav: Nav) => number;
+}
+
+/**
+ * 拠点のタイル（UI-SPEC §3.3）。
+ *
+ * 段は「重要度」で決まり、バッジは「件数」を言う——別の軸である。
+ * ActionBar が指している行き先のタイルだけを secondary にして、
+ * 「下のボタンはこれのことだ」と分かるようにする。
+ * 残りは枠を消して沈める。4枚が同じ顔で並んでいると、
+ * どれを押せばいいかを毎回プレイヤーが考えることになる。
+ */
+const TILES: readonly Tile[] = [
+  { act: 'dispatch', en: 'Dispatch', label: '派遣準備' },
+  { act: 'open', en: 'Unopened', label: '未鑑定品を開封', count: n => n.state.data.pending.length },
+  { act: 'report', en: 'Report', label: '帰還レポート', count: n => n.state.data.inbox.length },
+  { act: 'inventory', en: 'Inventory', label: 'インベントリ' }
+];
+
 export function baseScreen(nav: Nav): Screen {
+  /** 1枚ぶん。ActionBar が指しているものだけ段を1つ上げる */
+  function tile(t: Tile, cta: string): string {
+    const n = t.count ? t.count(nav) : -1;
+    const off = n === 0;
+    return `<button class="action ${t.act === cta ? 'secondary' : ''}"
+                    data-tap data-act="${t.act}"${off ? ' disabled' : ''}>
+      <span class="micro">${t.en}</span>${esc(t.label)}
+      ${when(n > 0, `<span class="badge">${n}</span>`)}
+    </button>`;
+  }
+
   const notices: string[] = [];
   let lastGold = nav.state.data.gold;
   let lastInbox = nav.state.data.inbox.length;
   let noticeT = 0;
 
   /**
-   * 画面下端に置く「次にやること」（設計書 §18「次に何をすればいいかが常に分かる」）。
+   * 画面下端に置く「次にやること」（UI-SPEC §3.3）。
    *
    * 拠点の主要動線は状況で変わる。固定の1つを置くと、
    * 未開封が7個あるのに「インベントリを開く」が主役、という嘘になる。
-   * 未開封 → 未読レポート → 待機中がいる → それ以外、の順で選ぶ。
+   *
+   * 順序は **待機中の冒険者 → 未鑑定品 → 未読レポート → 整理**。
+   * 以前は開封を先頭にしていたが、放置ゲームで最も高くつくのは
+   * 空いている生産枠のほうである——未鑑定品はいつ開けても中身は同じだが、
+   * 待機中の冒険者は待たせた分の時間がそのまま消える。
+   * 先に送り出せば、開封している間も裏で時間が進む。
    */
   function nextAction(): { label: string; act: string } {
     const st = nav.state;
+    const idle = st.availableJobs().filter(j => !st.isBusy(j));
+    if (idle.length > 0) {
+      return {
+        label: idle.length > 1 ? `冒険者${idle.length}人を送り出す` : '冒険者を送り出す',
+        act: 'dispatch'
+      };
+    }
     if (st.data.pending.length > 0) {
       return { label: `未鑑定品 ${st.data.pending.length}個を開封する`, act: 'open' };
     }
     if (st.data.inbox.length > 0) {
       return { label: '帰還レポートを読む', act: 'report' };
     }
-    const idle = st.availableJobs().filter(j => !st.isBusy(j));
-    if (idle.length > 0) return { label: '派遣の準備をする', act: 'dispatch' };
     return { label: '所持品を整理する', act: 'inventory' };
   }
 
@@ -73,7 +118,7 @@ export function baseScreen(nav: Nav): Screen {
           <div class="av">${JOB_ICON[jobId]}</div>
           <div class="who">
             <div class="n">${esc(job.name)}</div>
-            <div class="s warn">${weapon ? '防具が無い' : armor ? '武器が無い' : '装備が足りない'}</div>
+            <div class="s lack">${weapon ? '防具が無い' : armor ? '武器が無い' : '装備が足りない'}</div>
           </div>
           <div class="rt" style="color:var(--down)">整える ›</div>
         </div>
@@ -98,9 +143,8 @@ export function baseScreen(nav: Nav): Screen {
     render() {
       const st = nav.state;
       const jobs = st.availableJobs();
-      const inbox = st.data.inbox.length;
-      const pending = st.data.pending.length;
-      const next = st.nextSlot();
+      const hire = st.nextSlot();
+      const next = nextAction();
 
       return `
 ${topBar({
@@ -111,33 +155,24 @@ ${topBar({
   ${each(jobs, slot)}
 
   <div class="actiongrid">
-    <button class="action primary" data-tap data-act="open" ${pending === 0 ? 'disabled' : ''}>
-      <span class="micro">Unopened</span>未鑑定品を開封
-      ${when(pending > 0, `<span class="badge">${pending}</span>`)}
-    </button>
-    <button class="action" data-tap data-act="report" ${inbox === 0 ? 'disabled' : ''}>
-      <span class="micro">Report</span>帰還レポート
-      ${when(inbox > 0, `<span class="badge">${inbox}</span>`)}
-    </button>
-    <button class="action" data-tap data-act="dispatch"><span class="micro">Dispatch</span>派遣準備</button>
-    <button class="action" data-tap data-act="inventory"><span class="micro">Inventory</span>インベントリ</button>
+    ${each(TILES, t => tile(t, next.act))}
   </div>
 
-  ${when(next !== null, panel('', `
+  ${when(hire !== null, panel('', `
     <div class="slot">
       <div class="who">
-        <div class="n">${next ? next.index + 1 : 0}人目の冒険者</div>
-        <div class="s ${next?.stageDone ? 'idle' : 'warn'}">${
-          next?.stageDone
-            ? (next.affordable ? '雇う準備ができている' : '金が足りない')
-            : `ステージ${next?.needStage}を踏破すると雇える`
+        <div class="n">${hire ? hire.index + 1 : 0}人目の冒険者</div>
+        <div class="s ${hire?.stageDone ? (hire.affordable ? 'idle' : 'lack') : 'warn'}">${
+          hire?.stageDone
+            ? (hire.affordable ? '雇う準備ができている' : '金が足りない')
+            : `ステージ${hire?.needStage}を踏破すると雇える`
         }</div>
       </div>
-      <div class="rt"><b>${num(next?.cost ?? 0)}G</b></div>
+      <div class="rt"><b>${num(hire?.cost ?? 0)}G</b></div>
     </div>
-    ${when(next?.stageDone, button({
-        label: '雇う', act: 'hire', primary: true, block: true,
-        disabled: !next?.affordable
+    ${when(hire?.stageDone, button({
+        label: '雇う', act: 'hire', tier: 'secondary', block: true,
+        disabled: !hire?.affordable
       }))}
   `))}
 
@@ -150,7 +185,7 @@ ${topBar({
       <div class="v">${st.data.inventory.length}</div></div>
   </div>`)}
 </div>
-${actionBar(button({ ...nextAction(), primary: true, block: true, role: 'cta' }))}
+${actionBar(button({ ...next, tier: 'primary', block: true, role: 'cta' }))}
 ${toasts(notices)}`;
     },
 

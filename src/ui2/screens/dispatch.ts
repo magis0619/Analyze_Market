@@ -130,14 +130,14 @@ export function dispatchScreen(nav: Nav): Screen {
 </div>
 ${actionBar(candidate
         ? `<div class="pair">
-             <button class="btn" data-tap data-act="pick-back">戻る</button>
+             ${button({ label: '戻る', act: 'pick-back', tier: 'quiet' })}
              ${button({
                label: current?.id === candidate.id ? '装備中' : '装備する',
-               act: 'equip', primary: true, role: 'cta',
+               act: 'equip', tier: 'primary', role: 'cta',
                disabled: current?.id === candidate.id
              })}
            </div>`
-        : button({ label: '閉じる', act: 'pick-close', block: true, role: 'cta' }),
+        : button({ label: '閉じる', act: 'pick-close', tier: 'quiet', block: true, role: 'cta' }),
       candidate ? '別の行を叩けば比べ直せる' : 'タップで比較')}`;
   }
 
@@ -245,7 +245,7 @@ ${topBar({
         ? esc(`ステージ${stage.id - 1}の踏破が必要`)
         : st.data.gold >= stage.unlockCost ? '解放できる' : '金が足りない'}</div>
     ${button({
-      label: '解放する', act: 'unlock', primary: true, block: true,
+      label: '解放する', act: 'unlock', tier: 'primary', block: true,
       disabled: st.data.gold < stage.unlockCost
         || (stage.id > 1 && !st.data.clearedStages.includes(stage.id - 1))
     })}
@@ -253,7 +253,7 @@ ${topBar({
 </div>
 ${actionBar(button({
         label: busy ? 'この職は派遣中' : !w || !a ? '装備を選ぶ' : !unlocked ? 'このステージは未解放' : '派遣する',
-        act: 'go', primary: true, block: true, role: 'cta',
+        act: 'go', tier: 'primary', block: true, role: 'cta',
         disabled: busy || !w || !a || !unlocked
       }),
       `${stage.name} ・ ${retreatRuleDef(rule).name} ・ ${etaText}` +

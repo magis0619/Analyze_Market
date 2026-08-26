@@ -1,7 +1,8 @@
 import type { Item, Rarity, Slot } from '../../sim/types';
 import type { Nav, Screen } from '../shell';
+import type { ModelSpec } from '../../world/models';
 import { Prng } from '../../sim/prng';
-import { sellValue } from '../../sim/items';
+import { dominantElement, sellValue } from '../../sim/items';
 import {
   RARITY_LABEL, actionBar, button, equipCard, itemName, itemRow, itemScore, panel, tabs, toasts, topBar
 } from '../components';
@@ -77,6 +78,16 @@ export function inventoryScreen(nav: Nav): Screen {
   return {
     scene: 'vault',
 
+    /** 明細を開いている品だけを台座に載せる。一覧の間は何も載せない */
+    get model(): ModelSpec | null {
+      const it = selectedId ? st.itemById(selectedId) : null;
+      if (!it) return null;
+      return {
+        baseId: it.baseId, rarity: it.rarity,
+        element: it.slot === 'weapon' ? dominantElement(it.element) : 'physical'
+      };
+    },
+
     render() {
       const list = view();
       const eq = equippedIds();
@@ -102,8 +113,8 @@ export function inventoryScreen(nav: Nav): Screen {
       ロック品と装備中の品は含まれていない。この操作は戻せない。
     </div>
     <div class="pair" style="margin-top:var(--sp-4)">
-      <button class="btn" data-tap data-act="cancel">やめる</button>
-      ${button({ label: '売却する', act: 'do-sell', primary: true })}
+      ${button({ label: 'やめる', act: 'cancel', tier: 'primary' })}
+      ${button({ label: '売却する', act: 'do-sell', tier: 'danger' })}
     </div>
   </div>
 </div>`;
@@ -116,14 +127,14 @@ ${topBar({ title: itemName(sel), back: 'close', gold: st.data.gold, meta: RARITY
   <div class="sheet-compare">${equipCard({ item: sel, showSell: true })}</div>
 </div>
 ${actionBar(`<div class="trio">
-  <button class="btn" data-tap data-act="lock">${sel.locked ? '解除' : 'ロック'}</button>
+  ${button({ label: sel.locked ? '解除' : 'ロック', act: 'lock', tier: 'secondary' })}
   ${button({
           label: `振直 ${num(st.reidentifyCost(sel))}G`,
           act: 'reid', disabled: st.data.gold < st.reidentifyCost(sel)
         })}
   ${button({
           label: eq.has(sel.id) ? '装備中' : sel.locked ? 'ロック中' : `売却 ${num(sellValue(sel))}G`,
-          act: 'sell', primary: true, role: 'cta',
+          act: 'sell', tier: 'danger', role: 'cta',
           disabled: eq.has(sel.id) || sel.locked
         })}
 </div>`, '振直はアフィックスを引き直す（戻せない）')}
@@ -159,8 +170,8 @@ ${topBar({
 </div>
 ${actionBar(button({
         label: `表示中の ${bulk.length}個を売る ・ ${num(bulkGold)}G`,
-        act: 'bulk', block: true, role: 'cta', disabled: bulk.length === 0
-      }))}
+        act: 'bulk', tier: 'danger', block: true, disabled: bulk.length === 0
+      }), 'ロック品と装備中は含まれない')}
 ${modal}
 ${toasts(notices)}`;
     },

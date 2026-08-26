@@ -188,12 +188,56 @@ const PROBE = () => {
     }
   }
 
+  // U13/U14: ボタンの段（§3.3）。
+  //
+  // 「どれを押せばいいか分からない」は目で見ても言葉にしづらいが、
+  // 段の規則に落とせば表明で確かめられる。
+  //   1画面に primary はたかだか1つ
+  //   primary は ActionBar の中（本文に散らさない）
+  //   取り消せない操作は primary にしない（確認の中は例外）
+  const tiers = [...document.querySelectorAll('[data-tier]')].filter(vis);
+  const primaries = tiers.filter(el => el.dataset.tier === 'primary');
+  const inModal = (el) => !!el.closest('.modal');
+  const primaryOutside = primaries.filter(el => !el.closest('.actionbar') && !inModal(el));
+  const dangerAsPrimary = tiers.filter(el =>
+    el.dataset.tier === 'primary' && !inModal(el)
+    && /売却|売る|破棄|捨て/.test(el.textContent ?? ''));
+
+  // U16: World層が白飛びしていないか。
+  //
+  // 「眩しすぎる」は言葉にしづらいが、飽和した画素の割合なら測れる。
+  // 3D が白く飛ぶと、その上に載る文字が読めなくなるだけでなく、
+  // 見せているはずの形（鎧の胴・剣の刃）も消える。実際、鎧を出したとき
+  // ブルームに拾われて「形の分からない光の塊」になっていた。
+  let blown = -1;
+  const gl = document.getElementById('gl');
+  if (gl instanceof HTMLCanvasElement) {
+    try {
+      const c = document.createElement('canvas');
+      c.width = 128; c.height = 260;
+      const cx = c.getContext('2d', { willReadFrequently: true });
+      cx.drawImage(gl, 0, 0, c.width, c.height);
+      const px = cx.getImageData(0, 0, c.width, c.height).data;
+      let hot = 0;
+      for (let i = 0; i < px.length; i += 4) {
+        if (px[i] > 248 && px[i + 1] > 248 && px[i + 2] > 248) hot++;
+      }
+      blown = hot / (c.width * c.height);
+    } catch { blown = -1; }
+  }
+
   const hScroll = document.documentElement.scrollWidth > window.innerWidth + 1;
 
   return {
     overlaps, overflow, small, ctaMid, thumbTop: window.innerHeight * (2 / 3),
     gold: goldEl ? box(goldEl) : null, contrasts, rarity, covered, blocked, floated, hScroll,
     tapCount: [...document.querySelectorAll('[data-tap]')].filter(vis).length,
+    primaryCount: primaries.length,
+    primaryLabels: primaries.map(el => el.textContent.trim().slice(0, 14)),
+    primaryOutside: primaryOutside.map(el => el.textContent.trim().slice(0, 14)),
+    dangerAsPrimary: dangerAsPrimary.map(el => el.textContent.trim().slice(0, 14)),
+    tierCount: tiers.length,
+    blown,
     liveCount,
     toastCount: [...document.querySelectorAll('[data-role=toast]')].filter(vis).length,
     modal: !!modalEl,
@@ -225,6 +269,18 @@ async function probe(page, name, { needsTap = true } = {}) {
     `無効ラベルのコントラスト ${r.contrasts.map(c => c.toFixed(1)).join(',')}`);
   check('U8', name, r.covered.length === 0,
     `通知が文字を覆っている ${r.covered.length}件: ${r.covered.slice(0, 3).join(' / ')}`);
+  check('U13', name, r.primaryCount <= 1,
+    `primary が ${r.primaryCount} 個ある: ${r.primaryLabels.join(' / ')}`);
+  check('U13b', name, r.primaryOutside.length === 0,
+    `primary が ActionBar の外にある: ${r.primaryOutside.join(' / ')}`);
+  check('U14', name, r.dangerAsPrimary.length === 0,
+    `取り消せない操作が primary になっている: ${r.dangerAsPrimary.join(' / ')}`);
+  check('U15', name, r.tierCount > 0, '段を宣言したボタンが1つも無い');
+  // 3% を超えて真っ白なら、光ではなく白飛び
+  if (r.blown >= 0) {
+    check('U16', name, r.blown <= 0.03,
+      `3D の ${(r.blown * 100).toFixed(1)}% が白飛びしている`);
+  }
   check('U12', name, r.floated.length === 0,
     `浮かせた文字が他の文字を踏んでいる ${r.floated.length}件: ${r.floated.slice(0, 3).join(' / ')}`);
   check('U11', name, r.blocked.length === 0,
@@ -247,7 +303,7 @@ const page = await ctx.newPage();
 page.on('pageerror', e => { fail++; failures.push(`  JS例外: ${e.message}`); });
 
 const seed = '1a2b3c4d';
-const boot = `${URL}?reset=1&seed=${seed}&devitems=100&timescale=4000`;
+const boot = `${URL}?reset=1&seed=${seed}&devitems=100&timescale=4000&probe=1`;
 
 // --- タイトル
 await page.goto(boot, { waitUntil: 'networkidle' });
@@ -371,15 +427,28 @@ check('U9b', 'inventory',
   await page.evaluate(() => document.querySelectorAll('.vlist .item').length) < 60,
   '一覧の全件を DOM に置いている（仮想スクロールが効いていない）');
 
-// 明細シート
-await page.click('.vlist .item');
-await page.waitForTimeout(450);
-await probe(page, 'inventory');
-await page.click('[data-role=back]');
-await page.waitForTimeout(400);
+// 明細シート。武器と防具の両方を開く——
+// 3D は面積で受ける光の量が変わるので、細い剣で足りていても
+// 鎧では白く飛ぶ（実際そうなっていた）。U16 は両方で見ないと素通りする
+for (const [label, slotIndex] of [['武器', '1'], ['防具', '2']]) {
+  await page.click(`[data-act=slotf][data-i="${slotIndex}"]`);
+  await page.waitForTimeout(350);
+  const row = await page.$('.vlist .item');
+  check('T4', 'inventory', row !== null, `${label}が1件も無い`);
+  if (!row) continue;
+  await row.click();
+  await page.waitForTimeout(600);
+  await probe(page, 'inventory');
+  await page.click('[data-role=back]');
+  await page.waitForTimeout(400);
+}
+await page.click('[data-act=slotf][data-i="0"]');
+await page.waitForTimeout(350);
 
-// 一括売却の確認（戻せない操作）
-await page.click('[data-role=cta]');
+// 一括売却の確認（戻せない操作）。
+// 所持品は「整理する画面」なので primary を持たない（§3.3 規則3）——
+// data-role=cta では引けないので、行き先そのもので引く
+await page.click('[data-act=bulk]');
 await page.waitForTimeout(400);
 const sellConfirm = await probe(page, 'inventory');
 check('T2', 'inventory', sellConfirm.modal, '売却の確認が出ていない');

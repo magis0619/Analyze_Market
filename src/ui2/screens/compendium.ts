@@ -103,7 +103,7 @@ ${topBar({ title: b.name, back: 'close', gold: st.data.gold,
     </div>`)}
   </div>
 </div>
-${actionBar(button({ label: '閉じる', act: 'close', block: true, role: 'cta' }))}`;
+${actionBar(button({ label: '閉じる', act: 'close', tier: 'quiet', block: true, role: 'cta' }))}`;
     }
 
     const u = uniqueDef(picked.slice(3) as Parameters<typeof uniqueDef>[0]);
@@ -123,7 +123,7 @@ ${topBar({ title: e ? u.name : '未発見', back: 'close', gold: st.data.gold,
       : '<div class="empty">まだ手にしていない</div>')}
   </div>
 </div>
-${actionBar(button({ label: '閉じる', act: 'close', block: true, role: 'cta' }))}`;
+${actionBar(button({ label: '閉じる', act: 'close', tier: 'quiet', block: true, role: 'cta' }))}`;
   }
 
   return {
@@ -148,7 +148,7 @@ ${topBar({ title: '図鑑', back: 'back', gold: st.data.gold, meta: `${found} / 
         : `残り${all - found}種。深いステージほど出やすい`}
   </div>
 </div>
-${actionBar(button({ label: '拠点へ戻る', act: 'back', primary: true, block: true, role: 'cta' }))}`;
+${actionBar(button({ label: '拠点へ戻る', act: 'back', tier: 'quiet', block: true, role: 'cta' }))}`;
     },
 
     act(action, el) {

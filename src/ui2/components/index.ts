@@ -117,20 +117,36 @@ export function panel(label: string, body: string, cls = ''): string {
 
 // ---------------------------------------------------------------- Button
 
+/**
+ * ボタンの段（§3.3）。
+ *
+ *   primary   … いま押すべきもの。1画面にたかだか1つ、必ず ActionBar に置く
+ *   secondary … 同じ場面で選べる別の道
+ *   quiet     … 戻る・閉じる・やめる
+ *   danger    … 取り消せない操作。**確認の中以外では primary にしない**
+ */
+export type ButtonTier = 'primary' | 'secondary' | 'quiet' | 'danger';
+
 export interface ButtonProps {
   label: string;
   act: string;
-  primary?: boolean;
+  tier?: ButtonTier;
   disabled?: boolean;
   block?: boolean;
   role?: string;
+  /** 未処理の件数。段は上げず、件数だけを言う（§3.3 規則4） */
+  badge?: number;
 }
 
 export function button(p: ButtonProps): string {
-  const cls = ['btn', p.primary ? 'primary' : '', p.block ? 'block' : ''].filter(Boolean).join(' ');
-  return `<button class="${cls}" data-tap data-act="${esc(p.act)}"` +
+  const tier = p.tier ?? 'secondary';
+  const cls = ['btn', tier, p.block ? 'block' : ''].filter(Boolean).join(' ');
+  // 段を検証できるように属性へ出す。見た目のクラスだけだと、
+  // 「primary が2つある」を表明で確かめられない（§7.1 U13）
+  return `<button class="${cls}" data-tap data-tier="${tier}" data-act="${esc(p.act)}"` +
     `${when(p.role, ` data-role="${esc(p.role ?? '')}"`)}` +
-    `${p.disabled ? ' disabled' : ''}>${esc(p.label)}</button>`;
+    `${p.disabled ? ' disabled' : ''}>${esc(p.label)}` +
+    `${when(p.badge, `<span class="badge">${p.badge}</span>`)}</button>`;
 }
 
 /** 画面下端の主要動線（親指到達域・§2.0）。 */

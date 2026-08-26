@@ -70,12 +70,14 @@ export function reportScreen(nav: Nav, dispatchId: string): Screen {
       if (!result) {
         return `${topBar({ title: '帰還レポート', gold: st.data.gold })}
 <div class="stack"><div class="panel"><div class="body">レポートが見つからない</div></div></div>
-${actionBar(button({ label: '拠点へ戻る', act: 'done', primary: true, block: true, role: 'cta' }))}`;
+${actionBar(button({ label: '拠点へ戻る', act: 'done', tier: 'quiet', block: true, role: 'cta' }))}`;
       }
 
       const r = result;
       const lost: Item[] = st.data.lost[dispatchId] ?? [];
       const tips = advice();
+      // 戦利品があるなら開封が次の一手。無ければ帰るだけなので段を落とす
+      const hasLoot = !died && r.loot.length > 0;
       const tone = died ? 'down' : r.bossDefeated ? 'up' : 'gold';
 
       return `
@@ -147,8 +149,8 @@ ${topBar({ title: '帰還レポート', gold: st.data.gold, meta: stage.name })}
   </div>`)}
 </div>
 ${actionBar(button({
-        label: !died && r.loot.length > 0 ? `未鑑定品 ${r.loot.length}個を開封する` : '拠点へ戻る',
-        act: 'done', primary: true, block: true, role: 'cta'
+        label: hasLoot ? `未鑑定品 ${r.loot.length}個を開封する` : '拠点へ戻る',
+        act: 'done', tier: hasLoot ? 'primary' : 'quiet', block: true, role: 'cta'
       }))}
 ${toasts(notices)}`;
     },

@@ -1,9 +1,10 @@
 import type { Item, Rarity } from '../../sim/types';
 import type { SceneName } from '../../world/scenes';
+import type { ModelSpec } from '../../world/models';
 import type { Nav, Screen } from '../shell';
 import { baseDef } from '../../data/bases';
 import { uniqueDef } from '../../data/uniques';
-import { sellValue } from '../../sim/items';
+import { dominantElement, sellValue } from '../../sim/items';
 import {
   RARITY_LABEL, actionBar, affixText, button, itemRow, itemScore, panel, topBar
 } from '../components';
@@ -143,6 +144,21 @@ export function openingScreen(nav: Nav, items: Item[]): Screen {
       return 'vault';
     },
 
+    /**
+     * 3D 側に載せる品。
+     *
+     * 溜めの間は**まだ見せない**。何が出るか分かってしまうと、
+     * カットインを挟む意味がなくなる（§7.4 開けるまで分からないこと）。
+     */
+    get model(): ModelSpec | null {
+      const it = current();
+      if (!it || phase !== 'reveal') return null;
+      return {
+        baseId: it.baseId, rarity: it.rarity,
+        element: it.slot === 'weapon' ? dominantElement(it.element) : 'physical'
+      };
+    },
+
     render() {
       const it = current();
       const total = queue.length;
@@ -159,7 +175,7 @@ ${when(phase === 'charge', `<div class="reveal"><div class="charge-hint">${
 ${actionBar(button({
           label: phase === 'reveal' ? '次へ' : 'スキップ',
           act: phase === 'reveal' ? 'next' : 'skip-cut',
-          primary: phase === 'reveal', block: true, role: 'cta'
+          tier: phase === 'reveal' ? 'primary' : 'secondary', block: true, role: 'cta'
         }), `${count} / ${total}`)}`;
       }
 
@@ -183,12 +199,12 @@ ${topBar({ title: '開封', gold: nav.state.data.gold, meta: `${count} / ${total
 </div>
 ${actionBar(
         phase === 'done'
-          ? button({ label: '拠点へ戻る', act: 'home', primary: true, block: true, role: 'cta' })
+          ? button({ label: '拠点へ戻る', act: 'home', tier: 'primary', block: true, role: 'cta' })
           : `<div class="pair">
-               <button class="btn" data-tap data-act="skip-all">全部開ける</button>
+               ${button({ label: '全部開ける', act: 'skip-all', tier: 'quiet' })}
                ${button({
                  label: idx < 0 ? `未鑑定品 ${total}個を開封する` : '次を開ける',
-                 act: 'next', primary: true, role: 'cta'
+                 act: 'next', tier: 'primary', role: 'cta'
                })}
              </div>`)}`;
     },

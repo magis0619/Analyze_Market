@@ -1,6 +1,7 @@
 import type { Item } from '../sim/types';
 import type { GameState } from '../game/state';
 import type { SceneName, Stage } from '../world/scenes';
+import type { ModelSpec } from '../world/models';
 import { createStage } from '../world/scenes';
 import { bindPressFeedback, onAct, qs } from './dom';
 
@@ -15,6 +16,14 @@ import { bindPressFeedback, onAct, qs } from './dom';
 export interface Screen {
   /** 背後に置く3Dシーン */
   readonly scene: SceneName;
+  /**
+   * 3D 側に見せる装備。持たない画面は undefined。
+   *
+   * 画面が three.js に触らずに済むよう、**仕様だけ**を返す。
+   * 画面側が Group を作り始めると、そこから World 層と Interface 層の
+   * 境目が溶けて、文字が3D側に漏れる道ができる（§6.1）。
+   */
+  readonly model?: ModelSpec | null;
   /** 画面の全HTML。状態から一意に決まること（同じ状態なら同じ文字列） */
   render(): string;
   /** data-act のタップ。true を返したら再描画する */
@@ -136,6 +145,7 @@ export class Shell implements Nav {
   private mount(): void {
     this.sceneName = this.screen.scene;
     this.stage.load(this.sceneName);
+    this.stage.setModel(this.screen.model ?? null);
     // 検証スクリプトがここを読んで「今どの画面か」を確認する（§7.2）。
     // 座標決め打ちのスクリプトが別画面を測り続ける事故を、構造で防ぐ
     document.documentElement.dataset.screen = this.screenName;
@@ -194,10 +204,23 @@ export class Shell implements Nav {
       this.sceneName = this.screen.scene;
       this.stage.load(this.sceneName);
     }
+    // 見せている装備も画面の中で変わる（開封で1個ずつ捲る・一覧で選び直す）。
+    // 同じ仕様なら setModel 側が何もしないので、毎フレーム渡してよい
+    this.stage.setModel(this.screen.model ?? null);
     if (this.dirty) this.redraw();
     this.stage.renderAt(this.t);
   };
   private lastMs = performance.now();
+
+  /**
+   * 開発用。遷移表に無い画面を差し込む（装備モデルの見本帳など）。
+   *
+   * 遊びの画面への近道ではない。ここから入れるのは
+   * 「ゲームの状態に触らない下見用の画面」だけにすること。
+   */
+  mountAdHoc(name: string, screen: Screen): void {
+    this.go(name, screen);
+  }
 
   /** テスト用。外から強制的に再描画させる。 */
   invalidate(): void { this.dirty = true; }

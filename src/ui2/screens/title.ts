@@ -20,7 +20,7 @@ ${topBar({ title: '' })}
 </div>
 ${actionBar(button({
         label: hasSave ? 'つづきから' : 'はじめる',
-        act: 'start', primary: true, block: true, role: 'cta'
+        act: 'start', tier: 'primary', block: true, role: 'cta'
       }))}
 <div class="seed">seed: ${esc(nav.state.data.seed.toString(16))}</div>`;
     },

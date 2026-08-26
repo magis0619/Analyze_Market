@@ -8,6 +8,7 @@ import { reportScreen } from './ui2/screens/report';
 import { openingScreen } from './ui2/screens/opening';
 import { inventoryScreen } from './ui2/screens/inventory';
 import { compendiumScreen } from './ui2/screens/compendium';
+import { modelbookScreen } from './ui2/screens/modelbook';
 
 // 入口。
 //
@@ -20,6 +21,7 @@ import { compendiumScreen } from './ui2/screens/compendium';
 //   ?s=base         タイトルを飛ばして拠点から
 //   ?devitems=<n>   所持品を水増しする（一覧の性能確認用）
 //   ?timescale=<n>  時間を早送りする（帰還を待たずに確かめる用）
+//   ?models=1       装備モデルの見本帳（9ベース×4レア×5属性を切り替えて見る）
 
 const params = new URLSearchParams(location.search);
 const seedParam = params.get('seed');
@@ -54,6 +56,12 @@ const shell = new Shell(root, state, {
   opening: openingScreen,
   report: reportScreen
 }, params.get('s') === 'base' ? 'base' : 'title');
+
+// 装備モデルの下見（開発用）。遊びの画面への近道ではないので、
+// 通常の遷移からは辿り着けない場所に置く
+if (params.get('models') === '1') {
+  shell.mountAdHoc('modelbook', modelbookScreen(shell));
+}
 
 const ts = parseFloat(params.get('timescale') ?? '1');
 shell.timeScale = Number.isFinite(ts) && ts >= 1 ? Math.min(20000, ts) : 1;
