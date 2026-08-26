@@ -7,11 +7,17 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node scripts/static-checks.mjs && tsx test/run-tests.ts"
+    "test": "node scripts/static-checks.mjs && tsx test/run-tests.ts",
+    "island:dev": "vite --config island/vite.config.ts",
+    "island:build": "tsc --noEmit -p island/tsconfig.json && vite build --config island/vite.config.ts",
+    "island:shots": "node island/scripts/shots.mjs",
+    "island:critique": "node island/scripts/critique.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
+    "@types/three": "^0.180.0",
     "playwright": "^1.62.1",
+    "three": "^0.180.0",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vite": "^6.0.5"
