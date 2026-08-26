@@ -239,6 +239,20 @@ button { font: inherit; color: inherit; background: none; border: none; }
 .btn > .badge { top: -7px; right: -5px; }
 
 /* ---------------------------------------------------- ActionGrid（拠点の動線） */
+/* 「次にやること」の理由（指示書 §3）。
+ *
+ * 操作そのものは下端（親指到達域）に置く——ここは**読み物**で、
+ * 「なぜ今それなのか」を1行だけ言う。理由が無いまま指示だけ出ると、
+ * プレイヤーは言われた通りに押すだけの人になる。 */
+.nextbanner {
+  padding: var(--sp-3); border-radius: var(--r-md);
+  border: var(--bw) solid rgba(233,190,116,0.28);
+  background: linear-gradient(150deg, rgba(233,190,116,0.10), rgba(233,190,116,0.02));
+  display: flex; flex-direction: column; gap: 3px;
+}
+.nextbanner .micro { color: var(--gold); }
+.nextbanner .t { font-size: var(--fs-label); color: var(--text); line-height: 1.5; }
+
 /* タイルも §3.3 の段に従う。
  * 以前は4枚が同じ大きさ・同じ色で並び、未開封が7個あるときも
  * 何も無いときも同じ顔をしていた——「次に何をすればいいか」を
@@ -262,12 +276,19 @@ button { font: inherit; color: inherit; background: none; border: none; }
 .action[disabled] { opacity: 0.42; }
 /* 未処理があるタイルは、段は上げずに件数だけを主張する */
 .action:has(.badge) { border-color: var(--line); background: var(--surface); color: var(--text); }
+/* 件数バッジ。段は上げないが、「そこに未処理がある」ことには
+   気づいてほしいので軽く脈打たせる（指示書 §3） */
 .badge {
   position: absolute; top: -8px; right: -6px;
   min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px;
   background: var(--down); color: #fff; font-size: var(--fs-label);
   display: grid; place-items: center;
   box-shadow: 0 3px 10px rgba(255,95,112,0.5);
+  animation: badge-pulse 2.2s ease-in-out infinite;
+}
+@keyframes badge-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 3px 10px rgba(255,95,112,0.5); }
+  50% { transform: scale(1.12); box-shadow: 0 3px 16px rgba(255,95,112,0.85); }
 }
 
 /* ---------------------------------------------------- DispatchSlot */
@@ -289,9 +310,34 @@ button { font: inherit; color: inherit; background: none; border: none; }
 .slot .rt { text-align: right; font-size: var(--fs-label); color: var(--dim); }
 .slot .rt b { display: block; font-size: var(--fs-title); color: var(--gold); }
 
-.progress { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.09); margin-top: var(--sp-2); position: relative; overflow: hidden; }
+.progress {
+  height: 4px; border-radius: 2px; background: rgba(255,255,255,0.09);
+  margin-top: var(--sp-2); position: relative;
+  /* 出来事の印はバーの上下にはみ出す。ここを hidden にすると印が切れる */
+  overflow: visible;
+}
 .progress > i { display: block; height: 100%; background: linear-gradient(90deg, var(--ember), var(--gold)); box-shadow: 0 0 10px rgba(233,190,116,0.55); }
 .progress > u { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #fff; }
+/* 進行バー上の出来事（指示書 §4）。通過したものだけが灯る。
+   先の出来事は結果が確定していても伏せる——見えたら待つ意味が無くなる */
+.progress > .mk {
+  position: absolute; top: -3px; width: 3px; height: 10px; border-radius: 2px;
+  transform: translateX(-1px); background: var(--dim);
+}
+.progress > .mk-hurt { background: var(--down); box-shadow: 0 0 8px var(--down); }
+.progress > .mk-rally { background: var(--up); box-shadow: 0 0 8px var(--up); }
+.progress > .mk-boss { background: var(--gold); box-shadow: 0 0 10px var(--gold); }
+.progress > .mk-fall { background: var(--down); box-shadow: 0 0 10px var(--down); }
+
+/* 直近の出来事。1行だけ出す（放置して眺めるものなので、積み上げない） */
+.beat-now {
+  margin-top: var(--sp-2); font-size: var(--fs-label); line-height: 1.5;
+  display: flex; align-items: baseline; gap: var(--sp-2);
+}
+.beat-now > i {
+  width: 5px; height: 5px; border-radius: 50%; flex: 0 0 auto;
+  background: currentColor;
+}
 
 /* ---------------------------------------------------- Card / EquipCard */
 .card {
@@ -390,6 +436,19 @@ button { font: inherit; color: inherit; background: none; border: none; }
 .vlist .item .tx .m { margin-top: 1px; }
 /* 種別が一目で分かるように、アイコンは行の高さいっぱいに大きく取る */
 .vlist .item .ic { width: 36px; height: 36px; font-size: 15px; }
+
+/* 道中の足取り（指示書 §4）。派遣中は1行ずつ、帰還後にまとめて見せる */
+.trail { display: flex; flex-direction: column; gap: var(--sp-2); }
+.tr {
+  display: flex; align-items: baseline; gap: var(--sp-2);
+  font-size: var(--fs-label); line-height: 1.5;
+}
+.tr > i { width: 5px; height: 5px; border-radius: 50%; flex: 0 0 auto; background: currentColor; }
+.tr > .d {
+  min-width: 22px; text-align: right; font-family: var(--ff-en);
+  color: var(--faint); flex: 0 0 auto;
+}
+.tr > span:last-child { color: var(--dim); }
 
 /* ---------------------------------------------------- Beats / Figures */
 .beats { display: flex; flex-direction: column; gap: var(--sp-2); }

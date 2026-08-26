@@ -303,7 +303,10 @@ const page = await ctx.newPage();
 page.on('pageerror', e => { fail++; failures.push(`  JS例外: ${e.message}`); });
 
 const seed = '1a2b3c4d';
-const boot = `${URL}?reset=1&seed=${seed}&devitems=100&timescale=4000&probe=1`;
+// 早送りは控えめに。4000倍だと派遣が最初の観測より先に終わってしまい、
+// 派遣中の表示（進行バー・出来事の印）を一度も見られない。
+// 60倍なら5分の派遣が5秒で終わり、途中も観測できる
+const boot = `${URL}?reset=1&seed=${seed}&devitems=100&timescale=60&probe=1`;
 
 // --- タイトル
 await page.goto(boot, { waitUntil: 'networkidle' });
@@ -331,18 +334,50 @@ if (await page.$('.sheet')) {
     await page.click('.sheet-list .item');
     await page.waitForTimeout(600);
     await probe(page, 'dispatch');
+    // 実際に装備する。初期装備のままだと派遣が数秒で終わってしまい、
+    // 派遣中の表示（§4）を一度も観測できない
+    if (await page.$('[data-act=equip]:not([disabled])')) {
+      await page.click('[data-act=equip]');
+      await page.waitForTimeout(500);
+    }
   }
-  await page.click('[data-act=pick-close]');
-  await page.waitForTimeout(350);
+  if (await page.$('[data-act=pick-close]')) {
+    await page.click('[data-act=pick-close]');
+    await page.waitForTimeout(350);
+  }
 }
 
 // --- 派遣して、本物のシミュレーションが返ってくるのを待つ
 await page.click('[data-role=cta]');
 await page.waitForTimeout(600);
-for (let i = 0; i < 60; i++) {
-  await page.waitForTimeout(250);
+
+// T9: 派遣中、**進行率より先の出来事は見えてはいけない**（指示書 §4）。
+//
+// 結果は派遣した時点で確定しているので、うっかり全部出すことができてしまう。
+// 出たら待つ意味が無くなる。印の位置がバーの伸びを追い越していないかを
+// 幾何で見る——「何件見えるべきか」を数えるより、この不等式のほうが直接的。
+let sawRun = false;
+for (let i = 0; i < 80; i++) {
+  await page.waitForTimeout(200);
+  const m = await page.evaluate(() => {
+    const bar = document.querySelector('.progress');
+    const fill = bar?.querySelector('i');
+    if (!bar || !fill) return null;
+    const w = bar.getBoundingClientRect().width;
+    const done = fill.getBoundingClientRect().width;
+    const marks = [...bar.querySelectorAll('.mk')]
+      .map(e => (e.getBoundingClientRect().left - bar.getBoundingClientRect().left));
+    return { w, done, ahead: marks.filter(x => x > done + 2).length, n: marks.length,
+             toasts: document.querySelectorAll('[data-role=toast]').length };
+  });
+  if (m && m.w > 0) {
+    sawRun = true;
+    check('T9', 'base', m.ahead === 0, `先の出来事が ${m.ahead} 件見えている`);
+    check('T10', 'base', m.toasts <= 2, `通知が ${m.toasts} 件積み上がっている`);
+  }
   if (await page.evaluate(() => window.__delvers.state.data.inbox.length > 0)) break;
 }
+check('T11', 'base', sawRun, '派遣中の進行バーを一度も観測できなかった');
 check('SIM', '通し', await page.evaluate(() => window.__delvers.state.data.inbox.length > 0),
   '派遣した冒険者が帰ってこなかった');
 await page.waitForTimeout(400);
@@ -471,9 +506,22 @@ for (let i = 0; i < 40; i++) {
   }));
   check('T7', 'inventory', t.rows > 0 && t.shot === t.rows,
     `サムネが焼けていない行がある（${t.shot} / ${t.rows}）`);
-  // 組み合わせごとに一度だけ焼く。行数ぶん焼いていたら仕組みが効いていない
-  check('T8', 'inventory', t.baked > 0 && t.baked <= 60,
-    `焼いた枚数が ${t.baked}。組み合わせ単位のキャッシュが効いていない`);
+  // 組み合わせごとに一度だけ焼く。**上限を勘で置かない**——
+  // 所持品から実際の組み合わせ数を数えて、それを超えていないかを見る
+  const combos = await page.evaluate(() => {
+    const set = new Set();
+    for (const it of window.__delvers.state.data.inventory) {
+      const el = it.slot === 'weapon'
+        ? Object.entries(it.element).sort((a, b) => b[1] - a[1])[0][0]
+        : 'physical';
+      set.add(`${it.baseId}|${it.rarity}|${el}`);
+    }
+    return set.size;
+  });
+  check('T8', 'inventory', t.baked > 0 && t.baked <= combos,
+    `焼いた枚数 ${t.baked} が、所持品の組み合わせ数 ${combos} を超えている`);
+  check('T8b', 'inventory', combos < t.rows * 4,
+    `組み合わせ数 ${combos} の数え方が壊れている`);
 }
 check('U9b', 'inventory',
   await page.evaluate(() => document.querySelectorAll('.vlist .item').length) < 60,

@@ -6,6 +6,7 @@ import { dominantElement } from '../../sim/items';
 import {
   actionBar, button, elementLabel, figures, itemRow, panel, toasts, topBar
 } from '../components';
+import { BEAT_TONE, beatsOf } from '../expedition';
 import { each, esc, num, when } from '../dom';
 
 // 帰還レポート（docs/UI-SPEC.md §2.5）。
@@ -74,6 +75,9 @@ ${actionBar(button({ label: '拠点へ戻る', act: 'done', tier: 'quiet', block
       }
 
       const r = result;
+      // §4「帰還後に見せるだけ」。派遣中に操作は求めないが、
+      // どこで何が起きたかは後から辿れるようにする
+      const beats = beatsOf(r, stage);
       const lost: Item[] = st.data.lost[dispatchId] ?? [];
       const tips = advice();
       // 戦利品があるなら開封が次の一手。無ければ帰るだけなので段を落とす
@@ -99,6 +103,12 @@ ${topBar({ title: '帰還レポート', gold: st.data.gold, meta: stage.name })}
 
   ${panel('見どころ', `<div class="beats">${each(r.highlights, (h, i) =>
         `<div class="beat ${i === 0 ? 'key' : ''}"><i></i><span>${esc(h)}</span></div>`)}</div>`)}
+
+  ${when(beats.length > 2, panel('道中', `
+    <div class="trail">${each(beats, b =>
+        `<div class="tr" style="color:var(--${BEAT_TONE[b.kind]})"><i></i>
+           <span class="d">${b.depth}</span><span>${esc(b.text)}</span></div>`)}</div>
+  `))}
 
   ${panel('この回の数字', figures([
         ['与えた', num(r.stats.dealt)],

@@ -188,10 +188,22 @@ export function tag(label: string, element: string): string {
   return `<span class="tag ${elementClass(element)}">${esc(label)}</span>`;
 }
 
-export function progress(ratio: number, threshold?: number): string {
+export interface ProgressMark {
+  at: number;
+  kind: string;
+  /** 通過済みか。まだなら印を出さない（先の出来事は伏せる） */
+  passed: boolean;
+}
+
+export function progress(
+  ratio: number, threshold?: number, marks: readonly ProgressMark[] = []
+): string {
   const r = Math.max(0, Math.min(1, ratio));
   return `<div class="progress"><i style="width:${(r * 100).toFixed(1)}%"></i>` +
-    `${when(threshold, `<u style="left:${((threshold ?? 0) * 100).toFixed(0)}%"></u>`)}</div>`;
+    `${when(threshold, `<u style="left:${((threshold ?? 0) * 100).toFixed(0)}%"></u>`)}` +
+    each(marks.filter(m => m.passed), m =>
+      `<b class="mk mk-${esc(m.kind)}" style="left:${(m.at * 100).toFixed(1)}%"></b>`) +
+    `</div>`;
 }
 
 export function tabs(items: readonly string[], selected: number, act: string): string {
@@ -207,9 +219,15 @@ export function figures(cells: ReadonlyArray<[string, string, string?]>): string
   )}</div>`;
 }
 
+/** 一度に見せる通知の上限。積み上がると帯が画面を食う（§5） */
+const TOAST_MAX = 2;
+
 export function toasts(list: readonly string[]): string {
   if (list.length === 0) return '';
-  return `<div class="toasts">${each(list, t =>
+  // 出したぶんを全部並べると、派遣中に4件・5件と伸びて
+  // 一覧を押し出していた。新しいものだけ残す
+  const shown = list.slice(-TOAST_MAX);
+  return `<div class="toasts">${each(shown, t =>
     `<div class="toast gold" data-role="toast">${esc(t)}</div>`)}</div>`;
 }
 

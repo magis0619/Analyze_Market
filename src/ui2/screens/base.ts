@@ -3,6 +3,7 @@ import type { Nav, Screen } from '../shell';
 import { jobDef } from '../../data/jobs';
 import { stageDef, STAGES } from '../../data/stages';
 import { actionBar, button, itemIcon, panel, progress, toasts, topBar } from '../components';
+import { BEAT_TONE, beatsSoFar, dispatchBeats } from '../expedition';
 import { duration, each, esc, num, when } from '../dom';
 
 // 拠点（docs/UI-SPEC.md §2.2）。
@@ -57,6 +58,15 @@ export function baseScreen(nav: Nav): Screen {
   let lastGold = nav.state.data.gold;
   let lastInbox = nav.state.data.inbox.length;
   let noticeT = 0;
+  /** 派遣ごとに、どこまでの出来事を通知したか。同じ場面を二度言わない */
+  const toldUpTo = new Map<string, number>();
+
+  /** 通知を積み上げない。古いものは押し出す */
+  function notify(text: string): void {
+    notices.push(text);
+    while (notices.length > 2) notices.shift();
+    noticeT = 3.2;
+  }
 
   /**
    * 画面下端に置く「次にやること」（UI-SPEC §3.3）。
@@ -70,22 +80,34 @@ export function baseScreen(nav: Nav): Screen {
    * 待機中の冒険者は待たせた分の時間がそのまま消える。
    * 先に送り出せば、開封している間も裏で時間が進む。
    */
-  function nextAction(): { label: string; act: string } {
+  function nextAction(): { label: string; act: string; why: string } {
     const st = nav.state;
     const idle = st.availableJobs().filter(j => !st.isBusy(j));
     if (idle.length > 0) {
       return {
         label: idle.length > 1 ? `冒険者${idle.length}人を送り出す` : '冒険者を送り出す',
-        act: 'dispatch'
+        act: 'dispatch',
+        why: idle.length > 1
+          ? `${idle.length}人が手を空けている。送り出すまで時間は進まない`
+          : '冒険者が手を空けている。送り出すまで時間は進まない'
       };
     }
     if (st.data.pending.length > 0) {
-      return { label: `未鑑定品 ${st.data.pending.length}個を開封する`, act: 'open' };
+      return {
+        label: `未鑑定品 ${st.data.pending.length}個を開封する`, act: 'open',
+        why: `未鑑定のまま ${st.data.pending.length}個ある。中身は開けるまで分からない`
+      };
     }
     if (st.data.inbox.length > 0) {
-      return { label: '帰還レポートを読む', act: 'report' };
+      return {
+        label: '帰還レポートを読む', act: 'report',
+        why: `未読のレポートが ${st.data.inbox.length}件。次の装備の手がかりが書いてある`
+      };
     }
-    return { label: '所持品を整理する', act: 'inventory' };
+    return {
+      label: '所持品を整理する', act: 'inventory',
+      why: '全員が潜っている。戻るまでに手持ちを見直しておける'
+    };
   }
 
   /** 冒険者1人ぶん。状態は3つだけ（潜行中／待機中／装備不足）。 */
@@ -100,16 +122,24 @@ export function baseScreen(nav: Nav): Screen {
     if (run) {
       const p = st.progressOf(run);
       const stage = stageDef(run.stageId);
+      // 出来事は派遣した時点で確定している（§4）。進行率までのぶんだけ見せる
+      const beats = dispatchBeats(run, st.data.results, stage);
+      const done = beatsSoFar(beats, p.ratio);
+      const now = done[done.length - 1];
       return panel('探索中', `
         <div class="slot">
           <div class="av">${JOB_ICON[jobId]}</div>
           <div class="who">
             <div class="n">${esc(job.name)}</div>
-            <div class="s">${esc(stage.name)} へ潜行中</div>
+            <div class="s">${esc(stage.name)} ・ ${done.length > 1 ? `${now?.depth ?? 0}層` : '入口'}</div>
           </div>
           <div class="rt">残り<b>${esc(duration(p.remainingSec))}</b></div>
         </div>
-        ${progress(p.ratio)}
+        ${progress(p.ratio, undefined,
+          beats.map(b => ({ at: b.at, kind: b.kind, passed: b.at <= p.ratio + 1e-6 })))}
+        ${when(now, `<div class="beat-now" style="color:var(--${BEAT_TONE[now?.kind ?? 'fight']})">
+          <i></i><span>${when(now && now.depth > 0, `${now?.depth}層 ・ `)}${esc(now?.text ?? '')}</span>
+        </div>`)}
       `);
     }
     if (!weapon || !armor) {
@@ -152,6 +182,11 @@ ${topBar({
         running: st.data.dispatches.length
       })}
 <div class="stack anchor-bottom">
+  <div class="nextbanner" data-role="next-why">
+    <span class="micro">次にやること</span>
+    <span class="t">${esc(next.why)}</span>
+  </div>
+
   ${each(jobs, slot)}
 
   <div class="actiongrid">
@@ -204,8 +239,7 @@ ${toasts(notices)}`;
         case 'inventory': nav.goInventory(); return;
         case 'compendium': nav.goCompendium(); return;
         case 'hire':
-          if (st.unlockSlot()) notices.push('冒険者を雇った');
-          noticeT = 2.4;
+          if (st.unlockSlot()) notify('冒険者を雇った');
           return;
       }
     },
@@ -217,13 +251,33 @@ ${toasts(notices)}`;
       let changed = false;
       // §5 数値変化はイベントとして扱う。帰還は見ていない間にも起こる
       if (st.data.inbox.length > lastInbox) {
-        notices.push('冒険者が帰還した');
-        noticeT = 2.4;
+        notify('冒険者が帰還した');
         changed = true;
       }
       if (st.data.gold !== lastGold) changed = true;
       lastInbox = st.data.inbox.length;
       lastGold = st.data.gold;
+
+      // §4 出来事を通過したら軽く知らせる。**操作は求めない**
+      for (const d of st.data.dispatches) {
+        const beats = dispatchBeats(d, st.data.results, stageDef(d.stageId));
+        if (beats.length === 0) continue;
+        const n = beatsSoFar(beats, st.progressOf(d).ratio).length;
+        const told = toldUpTo.get(d.id) ?? 1;
+        if (n > told) {
+          const b = beats[n - 1];
+          // 出発の1行目は通知しない（自分で押した直後なので分かっている）
+          if (b && n > 1) {
+            notify(b.depth > 0 ? `${b.depth}層 ・ ${b.text}` : b.text);
+            changed = true;
+          }
+          toldUpTo.set(d.id, n);
+        }
+      }
+      // 帰ってきた派遣の記録は捨てる
+      for (const id of [...toldUpTo.keys()]) {
+        if (!st.data.dispatches.some(d => d.id === id)) toldUpTo.delete(id);
+      }
 
       if (noticeT > 0) {
         noticeT -= dt;
