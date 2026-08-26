@@ -129,8 +129,9 @@ export function createTerrain(env: Env): TerrainResult {
         vec3 stoneSide = texture2D(uStone, uvSide).rgb;
         vec3 stoneN = texture2D(uStoneN, mix(uvSide, uvTop, flat_)).rgb * 2.0 - 1.0;
         float stoneV = mix(stoneSide.r, stoneTop.r, flat_);
-        vec3 rockCol = sRGB(92.0, 88.0, 80.0) * (0.48 + 0.78 * stoneV);
-        rockCol = mix(rockCol, sRGB(70.0, 66.0, 60.0), sat(0.5 + 0.5 * n2));
+        // 琉球石灰岩。白っぽい地に、割れ目と孔が暗く落ちる
+        vec3 rockCol = sRGB(206.0, 197.0, 174.0) * (0.42 + 0.76 * stoneV);
+        rockCol = mix(rockCol, sRGB(120.0, 114.0, 98.0), sat(0.30 + 0.45 * n2));
 
         // --- 白砂 ---
         // 平坦な単色だと作り物に見えるので、風紋くらいの起伏を色と法線に入れる
@@ -144,12 +145,16 @@ export function createTerrain(env: Env): TerrainResult {
         vec3 vegCol = mix(sRGB(40.0, 74.0, 34.0), sRGB(100.0, 126.0, 58.0), vmix);
         vegCol = mix(vegCol, sRGB(62.0, 98.0, 44.0), sat(fbm3(xz * 0.11) * 0.5 + 0.5));
 
-        // 海際は波に洗われて岩が出る。上のほうは土が乗って緑になる。
+        // 海際は波に洗われて岩が出る。高いところは土が乗って緑に覆われる。
+        // 参考画像の岬はどれも緑が濃く、白い石灰岩が覗くのは波打ち際だけ。
         float seaCliff = smoothstep(0.26, 0.60, slope) * (1.0 - smoothstep(2.0, 13.0, vWorld.y));
-        float rockM = sat(smoothstep(0.62, 1.05, slope) + seaCliff + smoothstep(0.90, 1.0, vRock) * 0.25);
+        float highGreen = 1.0 - smoothstep(6.0, 20.0, vWorld.y) * 0.78;
+        float rockM = sat(smoothstep(0.46, 0.92, slope) * highGreen
+                        + seaCliff + smoothstep(0.88, 1.0, vRock) * 0.30 * highGreen);
         // しきい値のほうを揺らす。高さに直接ノイズを足すと、平らな砂浜にまで
         // 緑が滲み出して浜が茶色くなる
-        float vegM = (1.0 - rockM * 0.45) * smoothstep(2.2 + n1 * 1.0, 5.2 + n1 * 1.0, vWorld.y);
+        // 浜と砂丘は砂のまま残す。中途半端に緑を混ぜると泥の色になる
+        float vegM = (1.0 - rockM * 0.45) * smoothstep(4.6 + n1 * 1.7, 8.6 + n1 * 1.7, vWorld.y);
 
         // 緑が茂っているところは、多少斜面でも土と草が岩を覆う
         rockM *= 1.0 - sat(vegM) * 0.55;
@@ -189,7 +194,7 @@ export function createTerrain(env: Env): TerrainResult {
 
         col = applyFog(col, dist, vWorld - uCamPos);
         col = desaturate(col, uWeather * 0.45);
-        gl_FragColor = vec4(col, 1.0);
+        gl_FragColor = vec4(grade(col), 1.0);
         #include <colorspace_fragment>
       }
     `

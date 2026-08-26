@@ -25,7 +25,7 @@ export function createSky(env: Env): THREE.Group {
     fragmentShader: COMMON + SKY + /* glsl */ `
       varying vec3 vDir;
       void main() {
-        gl_FragColor = vec4(skyColor(normalize(vDir), 1.0), 1.0);
+        gl_FragColor = vec4(grade(skyColor(normalize(vDir), 1.0)), 1.0);
         #include <colorspace_fragment>
       }
     `
@@ -95,13 +95,14 @@ function createStars(env: Env): THREE.Points {
       }
     `,
     fragmentShader: /* glsl */ `
+      uniform float uArrive;
       varying vec3 vCol;
       void main() {
         vec2 d = gl_PointCoord - 0.5;
         float r = dot(d, d) * 4.0;
         float a = exp(-r * 4.0);
         if (a < 0.01) discard;
-        gl_FragColor = vec4(vCol * a, 1.0);
+        gl_FragColor = vec4(vCol * a * uArrive, 1.0);
         #include <colorspace_fragment>
       }
     `

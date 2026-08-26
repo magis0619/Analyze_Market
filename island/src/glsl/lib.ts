@@ -54,6 +54,19 @@ vec3 desaturate(vec3 c, float amount) {
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   return mix(c, vec3(l), amount);
 }
+
+// 到着／退出。0 は「オフィスの残響」、1 は着いた島。
+// 起動直後と、画面から離れたときにだけ 1 から外れる。
+uniform float uArrive;
+vec3 grade(vec3 c) {
+  if (uArrive > 0.999) return c;
+  float t = sat(uArrive);
+  // 彩度が満ちる前に、まず明るさが戻る
+  vec3 g = desaturate(c, (1.0 - t) * 0.86);
+  // 残響は青白く、少し眠い
+  g = mix(g * vec3(0.80, 0.85, 0.96) + vec3(0.020, 0.024, 0.032), g, t);
+  return g * mix(0.55, 1.0, t);
+}
 `;
 
 /**
