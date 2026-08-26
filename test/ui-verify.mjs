@@ -9,11 +9,11 @@ import { chromium } from 'playwright';
 // 通った先の画面をそのまま測る。
 //
 //   node test/ui-verify.mjs
-//   URL=http://localhost:4173/index2.html node test/ui-verify.mjs
+//   URL=http://localhost:5173/ node test/ui-verify.mjs
 //
 // 前提: `npx vite build` 済み、`npx vite preview` が動いていること。
 
-const URL = process.env.URL ?? 'http://localhost:4173/index2.html';
+const URL = process.env.URL ?? "http://localhost:4173/";
 
 let pass = 0, fail = 0;
 const failures = [];
@@ -272,11 +272,17 @@ await probe(page, 'base');
 
 // --- 帰還レポート（通知が出ている間に測る）
 await page.click('[data-act=report]');
-// 通知が出るまで待つ。U8 は通知が画面に無いと素通りしてしまうので、
-// 「たぶん出ているはず」で測らない（実際、待ち時間固定だと出る前に測っていた）
-for (let i = 0; i < 40; i++) {
-  await page.waitForTimeout(200);
-  if (await page.$('[data-role=toast]')) break;
+// 通知が**出切る**まで待つ。U8 は通知が画面に無いと素通りしてしまうので、
+// 「たぶん出ているはず」では測らない。
+// DOM にある＝見えている、でもない——出現アニメの最初の数フレームは
+// opacity:0 で、測定側はそれを（正しく）見えていないと判定する。
+for (let i = 0; i < 60; i++) {
+  await page.waitForTimeout(150);
+  const ready = await page.evaluate(() => {
+    const t = document.querySelector('[data-role=toast]');
+    return !!t && parseFloat(getComputedStyle(t).opacity) > 0.9;
+  });
+  if (ready) break;
 }
 const rep = await probe(page, 'report');
 check('T1', 'report', rep.toastCount > 0, '通知が出ていない。U8 が素通りしている');

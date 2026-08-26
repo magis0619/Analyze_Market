@@ -9,7 +9,7 @@ import { generateItem, sellValue } from '../src/sim/items';
 import { stageDef, itemPowerFor } from '../src/data/stages';
 import { jobDef, retreatRuleDef, canEquipArmor } from '../src/data/jobs';
 import { baseDef } from '../src/data/bases';
-import { itemName } from '../src/ui/itemview';
+import { itemName } from '../src/ui2/components';
 import type { Item, JobId, RetreatRule } from '../src/sim/types';
 
 const RUNS = 20;

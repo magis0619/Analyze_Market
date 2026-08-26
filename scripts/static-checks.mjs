@@ -1,9 +1,11 @@
 // 静的検査（仕様書 §11.3）:
 //  C2:  src/sim/ と src/data/ に Math.random が混入していないか（1件でも不合格）
-//  C6:  src/sim/ が Canvas / DOM / render / ui を import していないか
+//  C6:  src/sim/ が Canvas / DOM / 描画層を import していないか
 //  C9:  回復アフィックスが武器側に無いか（データ定義の検査）
 //  C11: 破棄したはずの v1(OUTFITTER) コードが残存していないか
-//  補助: imageSmoothingEnabled = true を書いていないか（§9.3）
+//  UI-SPEC §4:   色を TypeScript に直書きしていないか
+//  UI-SPEC §6.1: World層（three.js）が文字を持っていないか
+//  UI-SPEC §3:   画面が DOM を直接いじっていないか
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -104,63 +106,66 @@ for (const f of allSrc) {
   }
 }
 
-// ---------------------------------------------------------------- §9.3 色数
-// 「同時に使う色は32色まで」。数え上げを人任せにすると必ず膨らむので、
-// (1) パレットの定義が32色以内か、(2) パレットの外で色リテラルを
-// 書いていないか、の2点を機械的に見る。
+// ---------------------------------------------------------------- UI-SPEC §4.3 色
+// 役割色は CSS カスタムプロパティ1箇所で決める（docs/UI-SPEC.md §4）。
+// ドット絵時代のパレット検査（32色上限・render/palette.ts）はレンダラごと
+// 廃止したが、「色をその場で決めない」という縛りは残す価値がある——
+// 同じ「攻撃」が画面ごとに違う赤になるのを、目で見て防ぐのは無理だから。
 {
-  const palettePath = join(root, 'src/render/palette.ts');
-  const paletteSrc = readFileSync(palettePath, 'utf8');
-  const colorsBlock = paletteSrc.slice(
-    paletteSrc.indexOf('export const COLORS'),
-    paletteSrc.indexOf('} as const;')
-  );
-  const defined = new Set((colorsBlock.match(/#[0-9a-fA-F]{6}/g) ?? []).map(c => c.toLowerCase()));
-  if (defined.size === 0) fail('[§9.3] FAIL: COLORS から色を1つも読み取れなかった');
-  if (defined.size > 32) {
-    fail(`[§9.3] FAIL: パレットが ${defined.size} 色ある（上限32）`);
-  }
+  const tokensPath = join(root, 'src/ui2/tokens.css');
+  const tokens = readFileSync(tokensPath, 'utf8');
+  const rootBlock = tokens.slice(0, tokens.indexOf('}'));
+  const defined = (rootBlock.match(/^\s*--[\w-]+:/gm) ?? []).length;
+  if (defined < 20) fail(`[§4] FAIL: :root のトークンが ${defined} 件しかない（定義場所が散っていないか）`);
 
-  // パレット以外のファイルに直書きされた色。混色を生む rgba() も禁止する
+  // TypeScript 側に色を直接書いていないか。色は必ず var(--…) で参照する
   const stray = [];
   for (const f of allSrc) {
-    if (f.endsWith('render/palette.ts')) continue;
+    if (!f.endsWith('.ts')) continue;
     const body = codeOf(f);
-    for (const lit of body.match(/#[0-9a-fA-F]{6}/g) ?? []) {
-      if (!defined.has(lit.toLowerCase())) stray.push(`${lit} @ ${f}`);
-    }
-    if (/rgba\s*\(/.test(body)) {
-      fail(`[§9.3] FAIL: rgba() による混色が ${f} にある（fillScrim を使うこと）`);
+    // 直書きの色だけを見る。rgba(`${rgb}`,…) のように
+    // 引数から組み立てているものは「その場で決めている」わけではない
+    for (const lit of body.match(/#[0-9a-fA-F]{3,8}\b|\brgba?\s*\(\s*\d/g) ?? []) {
+      stray.push(`${lit.trim()} @ ${f.slice(root.length)}`);
     }
   }
   if (stray.length > 0) {
-    fail(`[§9.3] FAIL: パレット外の色が ${stray.length} 件ある\n  ${stray.join('\n  ')}`);
+    fail(`[§4] FAIL: TypeScript に色が直書きされている ${stray.length} 件\n  ${stray.join('\n  ')}\n`
+      + '       色は src/ui2/tokens.css の変数を var(--…) で参照すること');
   }
-  console.log(`  palette: ${defined.size} colors`);
+  console.log(`  tokens: ${defined} 件`);
 }
 
-// ---------------------------------------------------------------- §9.2 フォント
-// ソースに書いた文字がビットマップアトラスに入っているか。
-// 入っていない文字は画面で四角い箱になる（実際に「損」「触」「頼」が
-// 箱になっていた）。文言を足したら node scripts/gen-font.mjs を回すこと。
+// ---------------------------------------------------------------- UI-SPEC §6.1
+// World層（three.js）が文字を持っていないか。
+// 2層に分ける唯一の理由は「文字はすべて DOM 側にあり、測れる」ことなので、
+// 3D側にテキストが1つでも紛れ込むとこの前提が崩れる。
 {
-  const fontData = readFileSync(join(root, 'src/render/fontdata.ts'), 'utf8');
-  const covered = new Set();
-  for (const m of fontData.matchAll(/chars: "((?:[^"\\]|\\.)*)"/g)) {
-    for (const ch of JSON.parse(`"${m[1]}"`)) covered.add(ch);
-  }
-  if (covered.size === 0) fail('[§9.2] FAIL: フォントアトラスから収録文字を読み取れなかった');
-  const missing = new Set();
-  for (const f of allSrc) {
-    if (f.endsWith('render/fontdata.ts')) continue;
-    for (const ch of readFileSync(f, 'utf8')) {
-      const code = ch.codePointAt(0);
-      if (code > 0x2000 && !covered.has(ch)) missing.add(ch);
+  for (const f of walk(join(root, 'src/world'))) {
+    const body = codeOf(f);
+    // CanvasTexture そのものは光のにじみを焼くのにも使う。
+    // 禁じたいのは**文字を描くこと**なので、文字を出す手段だけを見る
+    for (const bad of ['TextGeometry', 'fillText', 'strokeText', 'SpriteText', 'troika']) {
+      if (new RegExp(`\\b${bad}\\b`).test(body)) {
+        fail(`[§6.1] FAIL: World層に文字を描く手段 ${bad} が ${f.slice(root.length)} にある`);
+      }
     }
   }
-  if (missing.size > 0) {
-    fail(`[§9.2] FAIL: アトラスに無い文字が ${missing.size} 種ある: ${[...missing].join('')}\n`
-      + '       node scripts/gen-font.mjs を実行して再生成すること');
+}
+
+// ---------------------------------------------------------------- UI-SPEC §3
+// 画面が DOM を直接いじっていないか。
+// 画面は「状態から一意に決まる HTML 文字列」を返すだけ、という約束で
+// 検証が成り立っている。個別に textContent を書き換え始めると、
+// 同じ状態から同じ画面になる保証が消える。
+{
+  for (const f of walk(join(root, 'src/ui2/screens'))) {
+    const body = codeOf(f);
+    for (const bad of ['innerHTML =', 'textContent =', 'createElement', 'appendChild']) {
+      if (body.includes(bad)) {
+        fail(`[§3] FAIL: 画面が DOM を直接操作している（${bad}）: ${f.slice(root.length)}`);
+      }
+    }
   }
 }
 

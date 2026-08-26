@@ -1,26 +1,29 @@
-import { Screen } from './render/screen';
-import { initSprites } from './render/sprites';
-import { App } from './game/app';
+import './ui2/tokens.css';
 import { GameState, debugLoot } from './game/state';
-import { TitleScreen } from './ui/title';
-import { BaseScreen } from './ui/base';
-import { DispatchScreen } from './ui/dispatch';
-import { InventoryScreen } from './ui/inventory';
-import { CompendiumScreen } from './ui/compendium';
-import { OpeningScreen } from './ui/opening';
-import { ReportScreen } from './ui/report';
+import { Shell } from './ui2/shell';
+import { titleScreen } from './ui2/screens/title';
+import { baseScreen } from './ui2/screens/base';
+import { dispatchScreen } from './ui2/screens/dispatch';
+import { reportScreen } from './ui2/screens/report';
+import { openingScreen } from './ui2/screens/opening';
+import { inventoryScreen } from './ui2/screens/inventory';
+import { compendiumScreen } from './ui2/screens/compendium';
 
-// ブート。描画は 360×640 の内部解像度 → 整数倍スケール。
+// 入口。
+//
+// World層（three.js）と Interface層（DOM）を Shell が束ねる。
+// 画面はどれも「HTMLを返す」「イベントを受ける」「毎フレーム更新する」の3つだけ。
+//
+// URLパラメータ（開発用）:
+//   ?reset=1        セーブを消して始める
+//   ?seed=<16進>    乱数の種を固定する
+//   ?s=base         タイトルを飛ばして拠点から
+//   ?devitems=<n>   所持品を水増しする（一覧の性能確認用）
+//   ?timescale=<n>  時間を早送りする（帰還を待たずに確かめる用）
 
 const params = new URLSearchParams(location.search);
 const seedParam = params.get('seed');
 const seed = seedParam !== null ? (parseInt(seedParam, 16) >>> 0) : (Date.now() >>> 0);
-
-initSprites();
-
-const canvas = document.getElementById('game') as HTMLCanvasElement | null;
-if (!canvas) throw new Error('canvas not found');
-const screen = new Screen(canvas);
 
 if (params.get('reset') === '1') {
   try { localStorage.removeItem('delvers.save.v1'); } catch { /* 続行 */ }
@@ -28,80 +31,31 @@ if (params.get('reset') === '1') {
 
 const state = new GameState(seed, Date.now());
 
-// 開発用: インベントリに任意個の装備を積む（?devitems=200）。
-// C10（200個所持時の操作性）の確認と、画面の詰まり具合を実機で見るために使う。
 const devItems = parseInt(params.get('devitems') ?? '0', 10);
 if (Number.isFinite(devItems) && devItems > 0) {
-  const n = Math.min(2000, devItems);
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < Math.min(2000, devItems); i++) {
     const stageId = 1 + (i % 10);
-    // debugLoot は `i % 2` でスロットを振るので、count=1 だと **武器しか作らない**。
-    // 以前これで「200個所持」の検証をしていたが、実際は武器201・防具1で、
-    // 防具のフィルタもピッカーも空のまま撮っていた。2個ずつ作って両方入れる。
     state.data.inventory.push(...debugLoot(seed ^ (i * 7919), stageId, 2)
       .map((it, k) => ({ ...it, id: `dev-${i}-${k}`, identified: true })));
   }
   state.data.gold += 50000;
   state.save();
 }
-const app = new App(state, {
-  base: nav => new BaseScreen(nav),
-  dispatch: nav => new DispatchScreen(nav),
-  inventory: nav => new InventoryScreen(nav),
-  compendium: nav => new CompendiumScreen(nav),
-  opening: (nav, items) => new OpeningScreen(nav, items),
-  report: (nav, id) => new ReportScreen(nav, id)
-}, nav => new TitleScreen(nav));
 
-// 実時間の倍率（開発時の確認用。本番は 1）。
+const root = document.getElementById('app');
+if (!root) throw new Error('#app が無い');
+
+const shell = new Shell(root, state, {
+  title: titleScreen,
+  base: baseScreen,
+  dispatch: dispatchScreen,
+  inventory: inventoryScreen,
+  compendium: compendiumScreen,
+  opening: openingScreen,
+  report: reportScreen
+}, params.get('s') === 'base' ? 'base' : 'title');
+
 const ts = parseFloat(params.get('timescale') ?? '1');
-app.timeScale = Number.isFinite(ts) && ts >= 1 ? Math.min(20000, ts) : 1;
+shell.timeScale = Number.isFinite(ts) && ts >= 1 ? Math.min(20000, ts) : 1;
 
-let dragging = false;
-canvas.addEventListener('pointerdown', (e) => {
-  const p = screen.toInternal(e.clientX, e.clientY);
-  dragging = true;
-  app.notePointerDown();
-  app.screen.pointerDown?.(p.x, p.y);
-});
-canvas.addEventListener('pointermove', (e) => {
-  if (!dragging) return;
-  // 画面が切り替わった直後の move も、押した覚えのない操作になるので捨てる
-  if (app.pendingSwallow()) return;
-  const p = screen.toInternal(e.clientX, e.clientY);
-  app.screen.pointerMove?.(p.x, p.y);
-});
-const endDrag = (e: PointerEvent): void => {
-  if (!dragging) return;
-  dragging = false;
-  app.notePointerUp();
-  // pointerDown で画面が切り替わっていたら、この up は前の画面のもの。
-  // 新しい画面に渡すと押した覚えのない操作が1回入る
-  if (app.consumeSwallowedUp()) return;
-  const p = screen.toInternal(e.clientX, e.clientY);
-  app.screen.pointerUp?.(p.x, p.y);
-};
-canvas.addEventListener('pointerup', endDrag);
-canvas.addEventListener('pointercancel', endDrag);
-
-// フレーム計測（C軸のfps検査用に window へ公開）
-const frameStats = { frames: 0, over17_5: 0, over33_4: 0, worst: 0 };
-(window as unknown as { __delvers: unknown }).__delvers = { app, state, frameStats };
-
-let last = performance.now();
-function loop(now: number): void {
-  const dtMs = now - last;
-  last = now;
-  if (dtMs > 0 && dtMs < 1000) {
-    frameStats.frames++;
-    if (dtMs > 17.5) frameStats.over17_5++;
-    if (dtMs > 33.4) frameStats.over33_4++;
-    frameStats.worst = Math.max(frameStats.worst, dtMs);
-  }
-  const dt = Math.min(0.1, Math.max(0, dtMs / 1000));
-  app.screen.update(dt);
-  app.screen.draw(screen.ctx);
-  screen.present();
-  requestAnimationFrame(loop);
-}
-requestAnimationFrame(loop);
+(window as unknown as { __delvers: unknown }).__delvers = { shell, state };

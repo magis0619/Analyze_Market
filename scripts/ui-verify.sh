@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 PORT="${PORT:-4173}"
-URL="http://localhost:${PORT}/index2.html"
+URL="http://localhost:${PORT}/"
 OWN=0
 
 if ! curl -sf -o /dev/null "http://localhost:${PORT}/" 2>/dev/null; then
