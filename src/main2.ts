@@ -7,6 +7,7 @@ import { dispatchScreen } from './ui2/screens/dispatch';
 import { reportScreen } from './ui2/screens/report';
 import { openingScreen } from './ui2/screens/opening';
 import { inventoryScreen } from './ui2/screens/inventory';
+import { compendiumScreen } from './ui2/screens/compendium';
 
 // 移行中の入口。全画面が揃うまでは main.ts（canvas版）と併存させる。
 
@@ -34,19 +35,12 @@ if (Number.isFinite(devItems) && devItems > 0) {
 const root = document.getElementById('app');
 if (!root) throw new Error('#app が無い');
 
-// 未移行の画面は、移行済みの画面へ暫定的に逃がす
-const notYet = (nav: import('./ui2/shell').Nav): import('./ui2/shell').Screen => ({
-  scene: 'base',
-  render: () => '<div class="stack"><div class="panel"><div class="body">この画面は移行中</div></div></div>',
-  act: () => { nav.goBase(); }
-});
-
 const shell = new Shell(root, state, {
   title: titleScreen,
   base: baseScreen,
   dispatch: dispatchScreen,
   inventory: inventoryScreen,
-  compendium: notYet,
+  compendium: compendiumScreen,
   opening: openingScreen,
   report: reportScreen
 }, params.get('s') === 'base' ? 'base' : 'title');

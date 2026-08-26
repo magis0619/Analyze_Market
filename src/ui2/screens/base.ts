@@ -2,7 +2,7 @@ import type { JobId } from '../../sim/types';
 import type { Nav, Screen } from '../shell';
 import { jobDef } from '../../data/jobs';
 import { stageDef, STAGES } from '../../data/stages';
-import { actionBar, button, figures, itemIcon, panel, progress, toasts, topBar } from '../components';
+import { actionBar, button, itemIcon, panel, progress, toasts, topBar } from '../components';
 import { duration, each, esc, num, when } from '../dom';
 
 // 拠点（docs/UI-SPEC.md §2.2）。
@@ -139,11 +139,14 @@ ${topBar({
       }))}
   `))}
 
-  ${panel('', figures([
-        ['踏破', `${st.data.clearedStages.length}/${STAGES.length}`, 'up'],
-        ['図鑑', `${Object.keys(st.data.compendium).length}`],
-        ['所持', `${st.data.inventory.length}`]
-      ]))}
+  ${panel('', `<div class="figs">
+    <div class="fig"><div class="micro">踏破</div>
+      <div class="v" style="color:var(--up)">${st.data.clearedStages.length}/${STAGES.length}</div></div>
+    <div class="fig" data-tap data-act="compendium"><div class="micro">図鑑 ›</div>
+      <div class="v">${Object.keys(st.data.compendium).length}</div></div>
+    <div class="fig" data-tap data-act="inventory"><div class="micro">所持 ›</div>
+      <div class="v">${st.data.inventory.length}</div></div>
+  </div>`)}
 </div>
 ${actionBar(button({ ...nextAction(), primary: true, block: true, role: 'cta' }))}
 ${toasts(notices)}`;

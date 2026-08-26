@@ -59,14 +59,59 @@ export function onAct(
   root: HTMLElement,
   handler: (act: string, el: HTMLElement, ev: PointerEvent) => void
 ): () => void {
-  const fn = (ev: Event): void => {
-    const t = (ev.target as HTMLElement | null)?.closest<HTMLElement>('[data-act]');
-    if (!t || t.hasAttribute('disabled')) return;
-    const act = t.dataset.act;
-    if (act) handler(act, t, ev as PointerEvent);
+  // 委譲。ただし **click イベントには頼れない**。
+  //
+  // 画面は毎フレーム innerHTML を丸ごと書き換えうる（拠点は残り時間のため毎秒）。
+  // pointerdown と pointerup の間に書き換えが挟まると、押した要素はもう
+  // 存在しないので、ブラウザは click を共通の祖先——つまり #ui——へ投げる。
+  // closest('[data-act]') は null になり、タップは**黙って消える**。
+  // 「たまに押しても何も起きない」という、最も報告されにくい壊れ方になる。
+  //
+  // そこで pointerup の座標で引き直す。DOM が入れ替わっていても、
+  // 指の下にあるものを新しい木から取り直せる。押し始めと同じ act の
+  // ときだけ発火させるので、書き換えで別のボタンが滑り込んでも誤爆しない。
+  let downAct: string | null = null;
+  let downPointer = -1;
+  let fired = false;
+
+  const pick = (el: Element | null): HTMLElement | null => {
+    const t = (el as HTMLElement | null)?.closest<HTMLElement>('[data-act]') ?? null;
+    return t && !t.hasAttribute('disabled') ? t : null;
   };
-  root.addEventListener('click', fn);
-  return () => root.removeEventListener('click', fn);
+
+  const down = (ev: PointerEvent): void => {
+    fired = false;
+    downPointer = ev.pointerId;
+    downAct = pick(ev.target as Element | null)?.dataset.act ?? null;
+  };
+
+  const up = (ev: PointerEvent): void => {
+    if (downAct === null || ev.pointerId !== downPointer) return;
+    const act = downAct;
+    downAct = null;
+    const t = pick(document.elementFromPoint(ev.clientX, ev.clientY));
+    if (!t || t.dataset.act !== act) return;
+    fired = true;
+    handler(act, t, ev);
+  };
+
+  // 合成 click（テストや支援技術）用の保険。
+  // pointerup で処理済みなら二重に呼ばない
+  const onClick = (ev: Event): void => {
+    if (fired) { fired = false; return; }
+    const t = pick(ev.target as Element | null);
+    const act = t?.dataset.act;
+    if (t && act) handler(act, t, ev as PointerEvent);
+  };
+
+  root.addEventListener('pointerdown', down);
+  window.addEventListener('pointerup', up);
+  root.addEventListener('click', onClick);
+  return () => {
+    root.removeEventListener('pointerdown', down);
+    window.removeEventListener('pointerup', up);
+    root.removeEventListener('click', onClick);
+  };
 }
 
 /** 押下中の見た目（§3.1 の pressed）。CSS の :active では足りない場面用。 */

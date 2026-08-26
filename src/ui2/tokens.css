@@ -271,25 +271,28 @@ button { font: inherit; color: inherit; background: none; border: none; }
 .card .tier { color: var(--rc); }
 .card .nm { font-size: var(--fs-body); margin: 3px 0 var(--sp-2); }
 .card .base { font-size: var(--fs-label); color: var(--faint); }
-.card .row {
+/* ラベル左・値右の1行。カード専用だったが、パネルの中でも使う。
+   .card 配下だけに書いていたせいで、帰還レポートの「持ち帰った金」や
+   図鑑の内訳がただの地の文になっていた */
+.row {
   display: flex; justify-content: space-between; align-items: baseline;
   gap: var(--sp-2); padding: 3px 0; font-size: var(--fs-body);
 }
-.card .row .l { color: var(--faint); font-size: var(--fs-label); }
-.card .row .r { display: flex; align-items: baseline; gap: var(--sp-2); }
+.row .l { color: var(--faint); font-size: var(--fs-label); }
+.row .r { display: flex; align-items: baseline; gap: var(--sp-2); }
 .card .d { font-size: var(--fs-label); }
 .d.up { color: var(--up) } .d.dn { color: var(--down) }
-.card .fx { margin-top: var(--sp-2); padding-top: var(--sp-2); border-top: 1px solid var(--line); }
-.card .fx > div {
+.fx { margin-top: var(--sp-2); padding-top: var(--sp-2); border-top: 1px solid var(--line); }
+.fx > div {
   display: flex; justify-content: space-between; gap: var(--sp-2);
   font-size: var(--fs-label); color: var(--dim); padding: 2px 0;
 }
-.card .uq {
+.uq {
   margin-top: var(--sp-2); padding: var(--sp-2); border-radius: var(--r-sm);
   background: rgba(233,190,116,0.09); border: 1px solid rgba(233,190,116,0.26);
 }
-.card .uq b { display: block; font-size: var(--fs-label); color: var(--gold-hi); margin-bottom: 3px; }
-.card .uq span { font-size: var(--fs-label); color: var(--dim); line-height: 1.5; }
+.uq b { display: block; font-size: var(--fs-label); color: var(--gold-hi); margin-bottom: 3px; }
+.uq span { font-size: var(--fs-label); color: var(--dim); line-height: 1.5; }
 
 .verdict {
   text-align: center; font-size: var(--fs-body); padding: var(--sp-2);
@@ -352,6 +355,8 @@ button { font: inherit; color: inherit; background: none; border: none; }
 
 .figs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 1px; background: var(--line); border-radius: var(--r-sm); overflow: hidden; }
 .fig { background: rgba(14,18,30,0.85); padding: var(--sp-2) var(--sp-1); text-align: center; }
+.fig[data-act] { cursor: pointer; }
+.fig[data-act] .micro { color: var(--gold); }
 .fig .v { font-size: var(--fs-title); margin-top: 3px; }
 
 /* ---------------------------------------------------- Stage / Rule / Tag */
@@ -387,10 +392,15 @@ button { font: inherit; color: inherit; background: none; border: none; }
 .tab.on { color: var(--gold); border-color: rgba(233,190,116,0.45); background: var(--surface-2); }
 
 .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--sp-1); }
+.grid.wide { grid-template-columns: repeat(4, 1fr); }
 .cell {
   aspect-ratio: 1; border-radius: var(--r-sm); display: grid; place-items: center;
   border: var(--bw) solid var(--line); background: rgba(14,18,30,0.7);
-  font-size: var(--fs-body); position: relative;
+  font-size: var(--fs-label); position: relative;
+  /* 名前は2行になることがある（「強欲の器」など）。
+     枠から溢れると隣の行に重なるので、必ず内側で折る */
+  overflow: hidden; padding: 0 3px 5px;
+  text-align: center; line-height: 1.25; word-break: break-all;
 }
 .cell.found { border-color: var(--rc); }
 .cell.found::after {
@@ -416,20 +426,25 @@ button { font: inherit; color: inherit; background: none; border: none; }
 /* 通知は重ねるだけでは必ず何かを覆う。
  * 覆わせないために、通知を出す画面では下端に帯を予約しておく。
  * ActionBar がある画面はその上、無い画面は下端の予約帯に置く。 */
-#ui:has(.toasts) .stack { padding-bottom: 52px; }
-#ui:has(.toasts):has(.actionbar) .stack { padding-bottom: var(--sp-3); }
-
+/* トーストは**浮かせない**。
+ *
+ * 以前は position:absolute で ActionBar の上に重ねていた。スクロールできる
+ * 一覧の上に浮くので、帰還レポートで「+27G」が戦利品の行に被っていた——
+ * 文字の上に文字を置かない（§7.1 U8）に真正面から違反していた。
+ * .stack と ActionBar の間に段を作り、出ている間だけ場所を取る。 */
 .toasts {
-  position: absolute; left: 0; right: 0; z-index: var(--z-toast);
-  bottom: var(--sp-4);
+  flex: 0 0 auto; order: 1;
+  padding: var(--sp-2) var(--sp-4) 0;
   display: flex; flex-direction: column; align-items: center; gap: var(--sp-1);
   pointer-events: none;
 }
-#ui:has(.actionbar) .toasts { bottom: 104px; }
+.actionbar { order: 2; }
 .toast {
   font-size: var(--fs-label); padding: var(--sp-2) var(--sp-3); border-radius: 999px;
   background: rgba(8,10,17,0.92); border: 1px solid var(--line-hi); color: var(--dim);
+  animation: toast-in var(--d-pop) var(--e-out) both;
 }
+@keyframes toast-in { from { transform: translateY(8px); opacity: 0 } to { transform: none; opacity: 1 } }
 .toast.gold { color: var(--gold); border-color: rgba(233,190,116,0.45); }
 .float {
   position: absolute; z-index: var(--z-toast); font-size: var(--fs-body);
@@ -453,10 +468,12 @@ button { font: inherit; color: inherit; background: none; border: none; }
  * 出さないと、ボタンは見えているのに暗幕がタップを飲み込む——
  * 「見た目は正常なのに押せない」という、スクリーンショットでは
  * 絶対に分からない壊れ方になる（Playwright の到達可能性判定が検出した）。 */
-#ui:has(.sheet) .actionbar { position: relative; z-index: calc(var(--z-sheet) + 2); }
+#ui:has(.sheet) .actionbar,
+#ui:has(.sheet) .topbar { position: relative; z-index: calc(var(--z-sheet) + 2); }
 /* モーダルを出している間は ActionBar を暗幕の後ろへ戻す。
    「売るのをやめる」と言いながら裏の売却ボタンが押せる状態にしない */
-#ui:has(.modal) .actionbar { position: relative; z-index: 0; }
+#ui:has(.modal) .actionbar,
+#ui:has(.modal) .topbar { position: relative; z-index: 0; }
 .sheet {
   position: relative; z-index: calc(var(--z-sheet) + 1);
   flex: 1 1 auto; min-height: 0;
