@@ -4,6 +4,9 @@ import { Shell } from './ui2/shell';
 import { titleScreen } from './ui2/screens/title';
 import { baseScreen } from './ui2/screens/base';
 import { dispatchScreen } from './ui2/screens/dispatch';
+import { reportScreen } from './ui2/screens/report';
+import { openingScreen } from './ui2/screens/opening';
+import { inventoryScreen } from './ui2/screens/inventory';
 
 // 移行中の入口。全画面が揃うまでは main.ts（canvas版）と併存させる。
 
@@ -42,10 +45,10 @@ const shell = new Shell(root, state, {
   title: titleScreen,
   base: baseScreen,
   dispatch: dispatchScreen,
-  inventory: notYet,
+  inventory: inventoryScreen,
   compendium: notYet,
-  opening: notYet,
-  report: notYet
+  opening: openingScreen,
+  report: reportScreen
 }, params.get('s') === 'base' ? 'base' : 'title');
 
 const ts = parseFloat(params.get('timescale') ?? '1');

@@ -24,6 +24,10 @@
   --bg: #080a11;
   --surface: rgba(24, 30, 48, 0.72);
   --surface-2: rgba(38, 46, 72, 0.82);
+  /* 長い一覧用。数百行に blur を敷くのは重いし、行の裏で3Dが動くと
+     文字が読みにくい。ここだけは背景を透かさない（§6.1 World層は雰囲気だけ） */
+  --surface-solid: #181e30;
+  --surface-2-solid: #262e48;
   --line: rgba(150, 170, 220, 0.16);
   --line-hi: rgba(210, 225, 255, 0.32);
 
@@ -174,6 +178,7 @@ button { font: inherit; color: inherit; background: none; border: none; }
   margin-bottom: var(--sp-2);
 }
 .actionbar .pair { display: grid; grid-template-columns: 1fr 2fr; gap: var(--sp-2); }
+.actionbar .trio { display: grid; grid-template-columns: 1fr 1fr 1.6fr; gap: var(--sp-2); }
 
 /* ---------------------------------------------------- Panel */
 .panel {
@@ -308,10 +313,35 @@ button { font: inherit; color: inherit; background: none; border: none; }
   background: linear-gradient(150deg, #232b45, #131828);
   display: grid; place-items: center; font-size: var(--fs-body);
 }
+/* 属性で色を変える。耐性・弱点は結果を大きく変えるので一覧でも分かるようにする */
+.item .ic.fire { color: var(--ember) } .item .ic.ice { color: var(--def) }
+.item .ic.bolt { color: var(--gold) } .item .ic.pois { color: var(--spd) }
+.item .ic.phys { color: var(--dim) } .item .ic.def { color: var(--def) }
 .item .tx { flex: 1; min-width: 0; }
 .item .tx .n { font-size: var(--fs-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .item .tx .m { font-size: var(--fs-label); color: var(--faint); margin-top: 2px; }
 .item .rr { font-size: var(--fs-label); flex: 0 0 auto; }
+
+/* ---------------------------------------------------- 仮想リスト（§7.1 U9）
+   200件でも DOM に置くのは見える範囲だけ。全件ぶんの高さだけ .vlist が確保し、
+   中身は translateY で窓の位置へずらす。行の高さは固定でないと窓が計算できないので、
+   ここでの .item だけは min-height ではなく height で固定する（48px + gap 4px = 52px）。
+   inventory.ts の ROW_H と必ず一致させること。 */
+.vlist { position: relative; flex: 0 0 auto; }
+.vlist-inner {
+  position: absolute; left: 0; right: 0; top: 0;
+  display: flex; flex-direction: column; gap: 4px;
+  will-change: transform;
+}
+.vlist .item {
+  height: 48px; min-height: 0; padding-top: 0; padding-bottom: 0;
+  background: var(--surface-solid);
+}
+.vlist .item.on { background: var(--surface-2-solid); }
+.vlist .item.relic { background: linear-gradient(90deg, rgba(255,199,107,0.13), var(--surface-solid) 45%); }
+.vlist .item .tx .m { margin-top: 1px; }
+/* 種別が一目で分かるように、アイコンは行の高さいっぱいに大きく取る */
+.vlist .item .ic { width: 30px; height: 30px; font-size: 15px; }
 
 /* ---------------------------------------------------- Beats / Figures */
 .beats { display: flex; flex-direction: column; gap: var(--sp-2); }
@@ -424,6 +454,9 @@ button { font: inherit; color: inherit; background: none; border: none; }
  * 「見た目は正常なのに押せない」という、スクリーンショットでは
  * 絶対に分からない壊れ方になる（Playwright の到達可能性判定が検出した）。 */
 #ui:has(.sheet) .actionbar { position: relative; z-index: calc(var(--z-sheet) + 2); }
+/* モーダルを出している間は ActionBar を暗幕の後ろへ戻す。
+   「売るのをやめる」と言いながら裏の売却ボタンが押せる状態にしない */
+#ui:has(.modal) .actionbar { position: relative; z-index: 0; }
 .sheet {
   position: relative; z-index: calc(var(--z-sheet) + 1);
   flex: 1 1 auto; min-height: 0;
@@ -433,6 +466,9 @@ button { font: inherit; color: inherit; background: none; border: none; }
 /* 比較は上（視線が最初に来る位置）、一覧はその下に残す。
    一覧を閉じてしまうと、別の候補に乗り換えるのに毎回「戻る」が要る（§2.4） */
 .sheet-compare { flex: 0 0 auto; }
+/* 一覧を伴わない単体表示（所持品の明細）は、
+   上端に貼り付けず視線の高さへ寄せる */
+.sheet > .sheet-compare:only-child { margin: auto 0; }
 .sheet-list {
   flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
   display: flex; flex-direction: column; gap: var(--sp-1);
@@ -441,4 +477,60 @@ button { font: inherit; color: inherit; background: none; border: none; }
 .empty {
   text-align: center; color: var(--faint);
   font-size: var(--fs-label); padding: var(--sp-6) 0;
+}
+
+/* ---------------------------------------------------- Modal（戻せない操作の確認・§3.12）
+   シートと違い、これは本体と入れ替えずに**上へ重ねる**。
+   売却は取り消せないので、直前の一覧を見たまま止まれるほうがよい。 */
+.modal {
+  position: absolute; inset: 0; z-index: calc(var(--z-sheet) + 3);
+  display: grid; place-items: center; padding: var(--sp-4);
+  animation: fade-in var(--d-pop) var(--e-out) both;
+}
+.modal-body {
+  width: min(320px, 86vw); padding: var(--sp-4);
+  border-radius: var(--r-lg); text-align: center;
+  background: var(--surface-2-solid);
+  border: 1px solid var(--line-hi);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.08);
+  animation: plate-in var(--d-pop) var(--e-out) both;
+}
+.modal-body .nm { font-size: var(--fs-title); }
+.modal-body .pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
+@keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+
+/* ---------------------------------------------------- 戦死バナー */
+.banner {
+  display: grid; place-items: center; padding: var(--sp-3);
+  border-radius: var(--r-md);
+  border: 1px solid rgba(255,95,112,0.45);
+  background: linear-gradient(150deg, rgba(255,95,112,0.22), rgba(255,95,112,0.06));
+  color: var(--down); font-size: var(--fs-title); letter-spacing: 0.4em;
+  box-shadow: 0 0 40px rgba(255,95,112,0.18);
+}
+
+/* ---------------------------------------------------- 開封のカットイン */
+.reveal { position: absolute; inset: 0; display: grid; place-items: center;
+  pointer-events: none; z-index: var(--z-sheet); }
+.plate {
+  width: min(280px, 78vw); padding: var(--sp-5) var(--sp-4);
+  border-radius: var(--r-lg); text-align: center;
+  background: var(--surface-2); backdrop-filter: blur(18px);
+  border: 1px solid var(--rc, var(--line-hi));
+  box-shadow: 0 0 70px color-mix(in srgb, var(--rc, #fff) 26%, transparent),
+              0 24px 60px rgba(0,0,0,0.62), inset 0 1px 0 rgba(255,255,255,0.12);
+  animation: plate-in var(--d-pop) var(--e-out) both;
+}
+@keyframes plate-in { from { transform: translateY(10px); opacity: 0 } to { transform: none; opacity: 1 } }
+.plate .nm { font-size: var(--fs-display); margin: var(--sp-2) 0 3px; }
+.plate .sep { height: 1px; margin: var(--sp-3) 0;
+  background: linear-gradient(90deg, transparent, var(--rc, var(--line-hi)), transparent); }
+.plate .row { text-align: left; }
+.plate .fx > div { display: flex; justify-content: space-between;
+  font-size: var(--fs-label); color: var(--dim); padding: 2px 0; }
+
+.charge-hint {
+  font-size: var(--fs-display); letter-spacing: 0.5em;
+  color: var(--gold); text-shadow: 0 0 40px rgba(233,190,116,0.5);
+  animation: pulse 1.1s ease-in-out infinite;
 }

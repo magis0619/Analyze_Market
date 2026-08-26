@@ -48,6 +48,10 @@ export interface ScreenFactories {
   report: (nav: Nav, dispatchId: string) => Screen;
 }
 
+function escapeText(s: string): string {
+  return s.replace(/[&<>]/g, c => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'));
+}
+
 export class Shell implements Nav {
   readonly state: GameState;
   timeScale = 1;
@@ -80,6 +84,7 @@ export class Shell implements Nav {
     this.stage = createStage(canvas);
 
     this.unbind.push(onAct(this.ui, (act, el) => {
+      if (act === '__home') { this.goBase(); return; }
       const changed = this.screen.act?.(act, el);
       if (changed !== false) this.dirty = true;
     }));
@@ -140,7 +145,29 @@ export class Shell implements Nav {
     // スクロール位置を保つ。全書き換えのたびに一覧が先頭へ飛ぶと使えない
     const prev = qs(this.ui, '.stack');
     const top = prev?.scrollTop ?? 0;
-    this.ui.innerHTML = this.screen.render();
+    let html: string;
+    try {
+      html = this.screen.render();
+    } catch (e) {
+      // render() が投げると innerHTML への代入自体が起きず、
+      // 「data-screen は新しい画面なのに中身は前の画面のまま」という
+      // 気づきにくい状態で毎フレーム投げ続ける。失敗は必ず画面に出す
+      this.dirty = false;
+      const msg = e instanceof Error ? `${e.message}` : String(e);
+      console.error(`[${this.screenName}] render に失敗`, e);
+      this.ui.innerHTML =
+        `<div class="stack" data-role="render-error">` +
+        `<div class="panel"><div class="body">` +
+        `<div class="nm">この画面を描けなかった</div>` +
+        `<div style="font-size:var(--fs-label);color:var(--down);margin-top:var(--sp-2);` +
+        `word-break:break-all">${escapeText(this.screenName)}: ${escapeText(msg)}</div>` +
+        `</div></div></div>` +
+        `<footer class="actionbar" data-role="actionbar">` +
+        `<button class="btn primary block" data-tap data-act="__home" data-role="cta">拠点へ戻る</button>` +
+        `</footer>`;
+      return;
+    }
+    this.ui.innerHTML = html;
     const next = qs(this.ui, '.stack');
     if (next && top > 0) next.scrollTop = top;
     this.dirty = false;
@@ -162,4 +189,19 @@ export class Shell implements Nav {
 
   /** テスト用。外から強制的に再描画させる。 */
   invalidate(): void { this.dirty = true; }
+
+  /**
+   * 検証用。**その場で**描き直して、掛かったミリ秒を返す（§7.1 U9）。
+   *
+   * rAF を待って計ると three.js の描画とフレーム待ちが混ざり、
+   * 何を測っているのか分からない数字になる。UI の書き換えだけを切り出す。
+   */
+  measureRedraw(): number {
+    const t0 = performance.now();
+    this.dirty = true;
+    this.redraw();
+    // レイアウトの確定まで含める。文字列を作っただけでは終わっていない
+    this.ui.getBoundingClientRect();
+    return performance.now() - t0;
+  }
 }

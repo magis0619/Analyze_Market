@@ -47,8 +47,21 @@ export function itemName(it: Item): string {
   return base;
 }
 
+/**
+ * 一覧の左に置く1文字（§3.5）。
+ *
+ * 以前は ⚔ / 🛡 の絵文字だったが、環境によっては細い×印に潰れて
+ * どの行も同じ見た目になっていた。**属性は戦績を左右する情報**（耐性・弱点）なのに
+ * 「炎の短剣」のように名前へ出るのは非物理のときだけなので、ここで必ず見せる。
+ */
 export function itemIcon(it: Item): string {
-  return it.slot === 'weapon' ? '⚔' : '🛡';
+  if (it.slot !== 'weapon') return '盾';
+  return ELEM_LABEL[dominantElement(it.element)]?.slice(0, 1) ?? '物';
+}
+
+/** itemIcon の色分けに使うクラス。 */
+export function itemIconClass(it: Item): string {
+  return it.slot === 'weapon' ? elementClass(dominantElement(it.element)) : 'def';
 }
 
 function affixText(a: Item['affixes'][number]): string {
@@ -56,6 +69,9 @@ function affixText(a: Item['affixes'][number]): string {
   const el = a.element ? elementLabel(a.element) : '';
   if (a.kind === 'elementFlat') return `${el}ダメージ追加`;
   if (a.kind === 'resistPct') return `${el}耐性`;
+  // データ側の名前は '防御'。素の防御値の行と同じ語になり、
+  // 同じ数字を二度出しているように見えるので、表示だけ言い分ける
+  if (a.kind === 'defensePct') return '防御強化';
   return def.name;
 }
 
@@ -186,7 +202,7 @@ export function itemRow(p: ItemRowProps): string {
 
   return `<div class="item ${RARITY_CLASS[it.rarity]} ${p.selected ? 'on' : ''}"` +
     `${when(p.act, ` data-tap data-act="${esc(p.act ?? '')}" data-id="${esc(it.id)}"`)}>` +
-    `<div class="ic">${itemIcon(it)}</div>` +
+    `<div class="ic ${itemIconClass(it)}">${itemIcon(it)}</div>` +
     `<div class="tx"><div class="n">${esc(itemName(it))}${when(it.locked, ' 🔒')}</div>` +
     `<div class="m">${esc(meta)}</div></div>` +
     `${right}${p.extra ?? ''}</div>`;
@@ -249,7 +265,8 @@ export function equipCard(p: EquipCardProps): string {
   <div class="card ${RARITY_CLASS[it.rarity]}">
     <div class="micro tier">${RARITY_EN[it.rarity]}</div>
     <div class="nm">${esc(itemName(it))}</div>
-    <div class="base">${esc(baseDef(it.baseId).name)}</div>
+    ${when(itemName(it) !== baseDef(it.baseId).name,
+      `<div class="base">${esc(baseDef(it.baseId).name)}</div>`)}
     <div style="margin-top:var(--sp-2)">
       ${each(statsOf(it, p.compareTo), statRow)}
     </div>
