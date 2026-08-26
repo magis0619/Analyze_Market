@@ -492,6 +492,9 @@ function buildPedestal(opts = {}) {
 // ---------------------------------------------------------------- 実行系
 
 export const SCENES = {
+  // インベントリ・図鑑の背景。3Dは主役ではないので、
+  // 台座の光量を落として「後ろで何かが光っている」程度に留める
+  vault: () => buildPedestal({ color: FROST }),
   base: buildBase,
   dispatch: () => buildDescent({ reached: 0.34, accent: GOLD }),
   report: () => buildDescent({ reached: 0.78, accent: EMBER }),

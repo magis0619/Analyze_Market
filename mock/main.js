@@ -21,6 +21,9 @@ function show(name) {
   const s = SCREENS[name];
   if (!s) throw new Error(`unknown screen: ${name}`);
   ui.innerHTML = s.html;
+  // 撮影スクリプトがここを読んで「撮れている画面」を確認する。
+  // 座標決め打ちのスクリプトが別画面を撮り続けた事故への対策（UI-SPEC §7.2）
+  document.documentElement.dataset.screen = name;
   stage.load(s.scene);
   fit();
 }
