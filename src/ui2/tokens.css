@@ -1,0 +1,415 @@
+/* DELVERS — docs/UI-SPEC.md をそのまま実装したスタイル。
+ *
+ * トークン名は仕様書 §4 と一対一で対応させる。
+ * 画面側でリテラル（px・色）を書かないこと。書いた瞬間に
+ * 「同じ意味のものが画面ごとに違う」状態へ戻る。
+ */
+
+:root {
+  /* ---- §4.1 余白 ---- */
+  --sp-1: 4px;   /* 同じカード内の行間 */
+  --sp-2: 8px;   /* 要素間 */
+  --sp-3: 12px;  /* カード内の余白 */
+  --sp-4: 16px;  /* 画面の左右余白 */
+  --sp-5: 24px;  /* 区画の間 */
+  --sp-6: 40px;  /* 章の区切り */
+
+  /* ---- §4.2 形 ---- */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --bw: 1px;
+
+  /* ---- §4.3 色 ---- */
+  --bg: #080a11;
+  --surface: rgba(24, 30, 48, 0.72);
+  --surface-2: rgba(38, 46, 72, 0.82);
+  --line: rgba(150, 170, 220, 0.16);
+  --line-hi: rgba(210, 225, 255, 0.32);
+
+  --text: #e9ecf6;
+  --dim: #98a2bd;
+  --faint: #626c86;
+
+  --gold: #e9be74;
+  --gold-hi: #ffdda0;
+  --ember: #ff8348;
+
+  --atk: #ff8348;
+  --def: #6fc7ff;
+  --spd: #7ddc8a;
+  --crit: #e9be74;
+
+  --up: #7ddc8a;
+  --down: #ff5f70;
+
+  --r-common: #8d97b0;
+  --r-fine: #5aa9ff;
+  --r-rare: #a77dff;
+  --r-relic: #ffc76b;
+
+  /* ---- §4.4 文字 ---- */
+  --fs-display: 21px;
+  --fs-title: 17px;
+  --fs-body: 13px;
+  --fs-label: 11px;
+  --fs-micro: 9.5px;
+  --ff-jp: 'IPAGothic', 'Noto Sans CJK JP', sans-serif;
+  --ff-en: 'DejaVu Serif', 'Liberation Serif', serif;
+
+  /* ---- §4.5 動き ---- */
+  --d-tap: 80ms;
+  --d-pop: 280ms;
+  --d-float: 900ms;
+  --d-toast: 2400ms;
+  --e-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ---- §4.6 重なり ---- */
+  --z-world: 0;
+  --z-hud: 10;
+  --z-panel: 20;
+  --z-sheet: 30;
+  --z-modal: 40;
+  --z-toast: 50;
+
+  /* 触れるものの最小寸法（§2.0） */
+  --tap: 44px;
+}
+
+/* §4.5「prefers-reduced-motion を尊重し、指定時は --d-* を 0 にする」 */
+@media (prefers-reduced-motion: reduce) {
+  :root { --d-tap: 0ms; --d-pop: 0ms; --d-float: 0ms; --d-toast: 0ms; }
+  * { animation: none !important; transition: none !important; }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--ff-jp);
+  font-size: var(--fs-body);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+button { font: inherit; color: inherit; background: none; border: none; }
+
+/* 数値は必ず等幅（桁が変わるたびに幅が動くと一覧が落ち着かない） */
+.num, .v, .fig .v, .stat, .rr { font-variant-numeric: tabular-nums; }
+.en { font-family: var(--ff-en); }
+.micro {
+  font-size: var(--fs-micro); letter-spacing: 0.20em;
+  text-transform: uppercase; color: var(--faint);
+}
+
+/* ---------------------------------------------------- §2.0 骨格 */
+#app { position: relative; width: 100vw; height: 100dvh; overflow: hidden; }
+#gl { position: absolute; inset: 0; display: block; z-index: var(--z-world); }
+#vignette {
+  position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background:
+    radial-gradient(120% 76% at 50% 30%, transparent 40%, rgba(4,6,12,0.74) 100%),
+    linear-gradient(to bottom, rgba(4,6,12,0.60) 0%, transparent 16%, transparent 60%, rgba(4,6,12,0.90) 100%);
+}
+#ui {
+  position: absolute; inset: 0; z-index: var(--z-panel);
+  display: flex; flex-direction: column;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* ---------------------------------------------------- TopBar（L1・全画面共通） */
+.topbar {
+  flex: 0 0 auto; height: 56px; z-index: var(--z-hud);
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: 0 var(--sp-4);
+  background: linear-gradient(to bottom, rgba(6,8,14,0.88), rgba(6,8,14,0));
+}
+.topbar .back {
+  width: var(--tap); height: var(--tap); margin-left: calc(var(--sp-2) * -1);
+  flex: 0 0 auto; display: grid; place-items: center;
+  font-size: var(--fs-title); color: var(--dim);
+}
+.topbar h1 { font-size: var(--fs-title); font-weight: 500; letter-spacing: 0.08em; }
+.topbar .spacer { flex: 1; }
+
+.stat { display: inline-flex; align-items: center; gap: var(--sp-1); font-size: var(--fs-body); }
+.stat.gold { color: var(--gold); }
+.stat .dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--gold); box-shadow: 0 0 8px var(--gold);
+}
+.pill {
+  font-size: var(--fs-label); padding: 3px 9px; border-radius: 999px;
+  border: var(--bw) solid var(--line-hi); color: var(--dim);
+  background: rgba(10,14,24,0.6); white-space: nowrap;
+}
+.pill.live { color: var(--gold); border-color: rgba(233,190,116,0.45); }
+.pill.live::before {
+  content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--gold); margin-right: 5px; vertical-align: 1px;
+  animation: pulse 1.8s ease-in-out infinite;
+}
+.pill.warn { color: var(--down); border-color: rgba(255,95,112,0.45); }
+@keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
+
+/* ---------------------------------------------------- Stack（L2） */
+.stack {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: var(--sp-3);
+  padding: 0 var(--sp-4) var(--sp-3);
+}
+.stack.anchor-bottom { justify-content: flex-end; }
+.stack::-webkit-scrollbar { width: 0 }
+
+/* ---------------------------------------------------- ActionBar（親指到達域） */
+.actionbar {
+  flex: 0 0 auto; z-index: var(--z-hud);
+  padding: var(--sp-2) var(--sp-4) var(--sp-5);
+  background: linear-gradient(to top, rgba(6,8,14,0.92) 55%, rgba(6,8,14,0));
+}
+.actionbar .hint {
+  text-align: center; font-size: var(--fs-label); color: var(--faint);
+  margin-bottom: var(--sp-2);
+}
+.actionbar .pair { display: grid; grid-template-columns: 1fr 2fr; gap: var(--sp-2); }
+
+/* ---------------------------------------------------- Panel */
+.panel {
+  background: var(--surface);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--r-lg);
+  backdrop-filter: blur(14px) saturate(1.15);
+  box-shadow: 0 12px 34px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.panel.raised { background: var(--surface-2); border-color: var(--line-hi); }
+.panel > header {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-3) 0;
+}
+.panel > header .hr { flex: 1; height: 1px; background: var(--line); }
+.panel > .body { padding: var(--sp-2) var(--sp-3) var(--sp-3); }
+
+/* ---------------------------------------------------- Button */
+.btn {
+  display: grid; place-items: center; min-height: var(--tap);
+  padding: 0 var(--sp-3); border-radius: var(--r-md);
+  border: var(--bw) solid var(--line); background: var(--surface);
+  color: var(--text); font-size: var(--fs-body);
+  transition: transform var(--d-tap) var(--e-out), opacity var(--d-tap);
+}
+.btn.primary {
+  border-color: rgba(233,190,116,0.55); color: var(--gold-hi);
+  background: linear-gradient(150deg, rgba(233,190,116,0.26), rgba(233,190,116,0.08));
+  box-shadow: 0 10px 28px rgba(233,190,116,0.16), inset 0 1px 0 rgba(255,255,255,0.14);
+  font-size: var(--fs-title);
+}
+.btn.block { width: 100%; }
+.btn:active { transform: translateY(1px); }
+.btn[disabled] { opacity: 0.38; box-shadow: none; }
+/* §7.1 U6: 無効でも文字は読める。地だけ落とし、文字色は落としきらない */
+.btn[disabled] { color: var(--dim); }
+
+/* ---------------------------------------------------- ActionGrid（拠点の動線） */
+.actiongrid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
+.action {
+  position: relative; text-align: left; min-height: 64px;
+  padding: var(--sp-3); border-radius: var(--r-md);
+  border: var(--bw) solid var(--line); background: var(--surface);
+  display: flex; flex-direction: column; justify-content: center; gap: var(--sp-1);
+}
+.action.primary {
+  border-color: rgba(233,190,116,0.5); color: var(--gold-hi);
+  background: linear-gradient(150deg, rgba(233,190,116,0.20), rgba(233,190,116,0.05));
+}
+.action[disabled] { opacity: 0.38; }
+.badge {
+  position: absolute; top: -8px; right: -6px;
+  min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px;
+  background: var(--down); color: #fff; font-size: var(--fs-label);
+  display: grid; place-items: center;
+  box-shadow: 0 3px 10px rgba(255,95,112,0.5);
+}
+
+/* ---------------------------------------------------- DispatchSlot */
+.slot { display: flex; align-items: center; gap: var(--sp-3); }
+.slot .av {
+  width: 46px; height: 46px; flex: 0 0 auto; border-radius: var(--r-md);
+  border: var(--bw) solid var(--line-hi);
+  background: linear-gradient(150deg, #2a3352, #161c2e);
+  display: grid; place-items: center; font-size: var(--fs-title);
+}
+.slot .who { flex: 1; min-width: 0; }
+.slot .who .n { font-size: var(--fs-body); }
+.slot .who .s { font-size: var(--fs-label); color: var(--gold); margin-top: 3px; }
+.slot .who .s.idle { color: var(--faint); }
+.slot .who .s.warn { color: var(--down); }
+.slot .rt { text-align: right; font-size: var(--fs-label); color: var(--dim); }
+.slot .rt b { display: block; font-size: var(--fs-title); color: var(--gold); }
+
+.progress { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.09); margin-top: var(--sp-2); position: relative; overflow: hidden; }
+.progress > i { display: block; height: 100%; background: linear-gradient(90deg, var(--ember), var(--gold)); box-shadow: 0 0 10px rgba(233,190,116,0.55); }
+.progress > u { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #fff; }
+
+/* ---------------------------------------------------- Card / EquipCard */
+.card {
+  position: relative; border-radius: var(--r-md); padding: var(--sp-3);
+  border: var(--bw) solid var(--line); background: var(--surface); overflow: hidden;
+}
+.card::before {
+  content: ''; position: absolute; inset: 0 auto 0 0; width: 3px;
+  background: var(--rc); box-shadow: 0 0 16px var(--rc);
+}
+.common { --rc: var(--r-common) } .fine { --rc: var(--r-fine) }
+.rare { --rc: var(--r-rare) } .relic { --rc: var(--r-relic) }
+.card .tier { color: var(--rc); }
+.card .nm { font-size: var(--fs-body); margin: 3px 0 var(--sp-2); }
+.card .base { font-size: var(--fs-label); color: var(--faint); }
+.card .row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: var(--sp-2); padding: 3px 0; font-size: var(--fs-body);
+}
+.card .row .l { color: var(--faint); font-size: var(--fs-label); }
+.card .row .r { display: flex; align-items: baseline; gap: var(--sp-2); }
+.card .d { font-size: var(--fs-label); }
+.d.up { color: var(--up) } .d.dn { color: var(--down) }
+.card .fx { margin-top: var(--sp-2); padding-top: var(--sp-2); border-top: 1px solid var(--line); }
+.card .fx > div {
+  display: flex; justify-content: space-between; gap: var(--sp-2);
+  font-size: var(--fs-label); color: var(--dim); padding: 2px 0;
+}
+.card .uq {
+  margin-top: var(--sp-2); padding: var(--sp-2); border-radius: var(--r-sm);
+  background: rgba(233,190,116,0.09); border: 1px solid rgba(233,190,116,0.26);
+}
+.card .uq b { display: block; font-size: var(--fs-label); color: var(--gold-hi); margin-bottom: 3px; }
+.card .uq span { font-size: var(--fs-label); color: var(--dim); line-height: 1.5; }
+
+.verdict {
+  text-align: center; font-size: var(--fs-body); padding: var(--sp-2);
+  border-radius: var(--r-sm); border: 1px solid rgba(125,220,138,0.35);
+  background: rgba(125,220,138,0.10); color: var(--up);
+}
+
+/* ---------------------------------------------------- ItemRow */
+.list { display: flex; flex-direction: column; gap: var(--sp-1); }
+.item {
+  position: relative; overflow: hidden; min-height: var(--tap);
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md);
+  border: var(--bw) solid var(--line); background: var(--surface);
+}
+.item::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--rc); }
+.item.relic { background: linear-gradient(90deg, rgba(255,199,107,0.11), var(--surface) 45%); }
+.item.on { border-color: var(--line-hi); background: var(--surface-2); }
+.item .ic {
+  width: 32px; height: 32px; flex: 0 0 auto; border-radius: var(--r-sm);
+  background: linear-gradient(150deg, #232b45, #131828);
+  display: grid; place-items: center; font-size: var(--fs-body);
+}
+.item .tx { flex: 1; min-width: 0; }
+.item .tx .n { font-size: var(--fs-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item .tx .m { font-size: var(--fs-label); color: var(--faint); margin-top: 2px; }
+.item .rr { font-size: var(--fs-label); flex: 0 0 auto; }
+
+/* ---------------------------------------------------- Beats / Figures */
+.beats { display: flex; flex-direction: column; gap: var(--sp-2); }
+.beat { display: flex; gap: var(--sp-2); font-size: var(--fs-label); line-height: 1.55; color: var(--dim); }
+.beat > i { width: 5px; height: 5px; border-radius: 50%; margin-top: 6px; flex: 0 0 auto; background: var(--faint); }
+.beat.key { color: var(--text); }
+.beat.key > i { background: var(--gold); box-shadow: 0 0 9px var(--gold); }
+
+.figs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 1px; background: var(--line); border-radius: var(--r-sm); overflow: hidden; }
+.fig { background: rgba(14,18,30,0.85); padding: var(--sp-2) var(--sp-1); text-align: center; }
+.fig .v { font-size: var(--fs-title); margin-top: 3px; }
+
+/* ---------------------------------------------------- Stage / Rule / Tag */
+.stages { display: flex; flex-direction: column; gap: var(--sp-1); }
+.stage {
+  display: flex; align-items: center; gap: var(--sp-2); min-height: var(--tap);
+  padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md);
+  border: var(--bw) solid var(--line); background: var(--surface);
+}
+.stage.on { border-color: rgba(233,190,116,0.55); background: linear-gradient(90deg, rgba(233,190,116,0.14), var(--surface) 60%); }
+.stage.lock { opacity: 0.45; }
+.stage .no { width: 18px; font-size: var(--fs-label); color: var(--faint); }
+.stage .nm { flex: 1; font-size: var(--fs-body); }
+.stage .tm { font-size: var(--fs-label); color: var(--faint); }
+
+.tag { font-size: var(--fs-micro); padding: 3px 7px; border-radius: var(--r-sm); border: 1px solid currentColor; white-space: nowrap; }
+.tag.fire { color: var(--ember) } .tag.ice { color: var(--def) }
+.tag.bolt { color: var(--gold) } .tag.pois { color: var(--spd) }
+.tag.phys { color: var(--dim) }
+
+.rules { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-2); }
+.rule { padding: var(--sp-2); border-radius: var(--r-md); border: var(--bw) solid var(--line); background: var(--surface); }
+.rule.on { border-color: var(--rcol); background: linear-gradient(160deg, rgba(255,255,255,0.06), transparent); }
+.rule .n { font-size: var(--fs-body); color: var(--rcol); }
+.rule .g { height: 5px; border-radius: 3px; margin: var(--sp-2) 0 var(--sp-1); background: rgba(255,255,255,0.08); position: relative; overflow: hidden; }
+.rule .g > i { position: absolute; inset: 0 0 0 auto; background: var(--rcol); box-shadow: 0 0 9px var(--rcol); }
+.rule .g > u { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #fff; }
+.rule .d2 { font-size: var(--fs-micro); color: var(--faint); line-height: 1.5; letter-spacing: 0; text-transform: none; }
+
+/* ---------------------------------------------------- Tabs / Grid */
+.tabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: var(--sp-1); }
+.tab { min-height: var(--tap); display: grid; place-items: center; font-size: var(--fs-label); color: var(--dim); border-radius: var(--r-md); border: var(--bw) solid transparent; }
+.tab.on { color: var(--gold); border-color: rgba(233,190,116,0.45); background: var(--surface-2); }
+
+.grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--sp-1); }
+.cell {
+  aspect-ratio: 1; border-radius: var(--r-sm); display: grid; place-items: center;
+  border: var(--bw) solid var(--line); background: rgba(14,18,30,0.7);
+  font-size: var(--fs-body); position: relative;
+}
+.cell.found { border-color: var(--rc); }
+.cell.found::after {
+  content: ''; position: absolute; left: 4px; right: 4px; bottom: 4px; height: 2px;
+  background: var(--rc); border-radius: 1px;
+}
+.cell.miss { color: var(--faint); opacity: 0.5; }
+
+/* ---------------------------------------------------- 開封 */
+.reveal { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: var(--z-sheet); }
+.plate {
+  width: 262px; padding: var(--sp-5) var(--sp-4); border-radius: var(--r-lg); text-align: center;
+  background: rgba(12,16,28,0.82); backdrop-filter: blur(18px);
+  border: 1px solid rgba(255,199,107,0.42);
+  box-shadow: 0 0 70px rgba(255,160,60,0.28), 0 24px 60px rgba(0,0,0,0.62), inset 0 1px 0 rgba(255,255,255,0.12);
+}
+.plate .nm { font-size: var(--fs-display); margin: var(--sp-2) 0 3px; }
+.plate .sep { height: 1px; background: linear-gradient(90deg, transparent, rgba(255,199,107,0.55), transparent); margin: var(--sp-3) 0; }
+.plate .row { display: flex; justify-content: space-between; padding: 3px 2px; font-size: var(--fs-body); }
+.plate .row .l { color: var(--faint); font-size: var(--fs-label); }
+
+/* ---------------------------------------------------- Toast / Float（§5） */
+/* 通知は重ねるだけでは必ず何かを覆う。
+ * 覆わせないために、通知を出す画面では下端に帯を予約しておく。
+ * ActionBar がある画面はその上、無い画面は下端の予約帯に置く。 */
+#ui:has(.toasts) .stack { padding-bottom: 52px; }
+#ui:has(.toasts):has(.actionbar) .stack { padding-bottom: var(--sp-3); }
+
+.toasts {
+  position: absolute; left: 0; right: 0; z-index: var(--z-toast);
+  bottom: var(--sp-4);
+  display: flex; flex-direction: column; align-items: center; gap: var(--sp-1);
+  pointer-events: none;
+}
+#ui:has(.actionbar) .toasts { bottom: 104px; }
+.toast {
+  font-size: var(--fs-label); padding: var(--sp-2) var(--sp-3); border-radius: 999px;
+  background: rgba(8,10,17,0.92); border: 1px solid var(--line-hi); color: var(--dim);
+}
+.toast.gold { color: var(--gold); border-color: rgba(233,190,116,0.45); }
+.float {
+  position: absolute; z-index: var(--z-toast); font-size: var(--fs-body);
+  font-variant-numeric: tabular-nums; text-shadow: 0 2px 10px rgba(0,0,0,0.85);
+  pointer-events: none;
+}
+.float.up { color: var(--up) } .float.gold { color: var(--gold) }
+
+/* ---------------------------------------------------- タイトル */
+.title-wrap { flex: 1; display: grid; place-items: center; text-align: center; }
+.title-wrap .logo { font-size: 46px; letter-spacing: 0.16em; color: var(--gold); text-shadow: 0 0 40px rgba(233,190,116,0.35); }
+.title-wrap .sub { font-size: var(--fs-label); color: var(--dim); letter-spacing: 0.3em; margin-top: var(--sp-3); }
+.seed { position: absolute; left: var(--sp-4); bottom: var(--sp-2); font-size: var(--fs-micro); color: var(--faint); }
