@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { sampleHeight, type Field } from './heightfield';
 
 export type ViewName = 'beach' | 'overlook' | 'shallows' | 'reef'
-  | 'rest' | 'palms' | 'adan' | 'deigo' | 'mangrove' | 'pier' | 'lineup';
+  | 'rest' | 'palms' | 'adan' | 'deigo' | 'mangrove' | 'pier' | 'lineup' | 'campfire';
 
 /** 決め打ちの視点。批評用のスクリーンショットもここを基準に撮る。 */
 export const VIEWS: Record<ViewName, {
@@ -41,7 +41,9 @@ export const VIEWS: Record<ViewName, {
   // 桟橋を横から
   pier: { pos: [8, 0, 85], look: [-20, 72], pitch: -0.05, fov: 52 },
   // 種を横一列に並べて見比べる（?lineup=1 と一緒に使う）
-  lineup: { pos: [0, 0, 133], look: [0, 104], pitch: 0.05, fov: 46, eye: 3.4 }
+  lineup: { pos: [0, 0, 133], look: [0, 104], pitch: 0.05, fov: 46, eye: 3.4 },
+  // 焚き火を間近で。指示書 §5 の自己批評用（time=1.0 あたりが見やすい）
+  campfire: { pos: [-14.8, 0, 106.0], look: [-14.8, 113.6], pitch: 0.08, fov: 45, eye: 1.15 }
 };
 
 export class Walker {
