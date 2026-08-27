@@ -15,6 +15,10 @@ import type { Env } from './env';
 
 /** 「留まる」場所。東屋・焚き火・ハンモック・桟橋はここにまとまる */
 export const REST = { x: -20, z: 118, rot: -0.28 };
+/** 焚き火の位置。東屋のそば、「留まる」場所の中心（指示書 §5） */
+export const FIRE_POS = { x: REST.x + 5.2, z: REST.z - 4.4 };
+/** この半径の中は藪を生やさず、焚き火を囲んで座れる開けた地面にする */
+const FIRE_CLEAR_R = 3.6;
 /** 桟橋。浜から湾へ短く突き出す */
 export const PIER = { x: -20, z0: 87, z1: 62, width: 1.9 };
 /** 灯台。左の岬の先端 */
@@ -57,6 +61,7 @@ function sceneryMaterial(env: Env): THREE.ShaderMaterial {
       uniform vec3 uKeyDir;
       uniform vec3 uKeyLight;
       uniform vec3 uAmbLight;
+      uniform vec3 uFireBounce;
       varying vec3 vWorld;
       varying vec3 vNormal;
       varying vec3 vCol;
@@ -75,6 +80,13 @@ function sceneryMaterial(env: Env): THREE.ShaderMaterial {
         float ao = mix(mix(0.62, 1.0, vUp), mix(0.34, 1.0, vUp), vLeaf);
         float facet = 0.93 + 0.14 * hash21(floor(vWorld.xz * 2.5) + N.xz * 7.0);
         vec3 col = albedo * (uKeyLight * lit * 1.05 + uAmbLight * (0.38 + 0.62 * sat(N.y))) * ao * facet;
+
+        // 焚き火の波及光。東屋まわりの月桃・ソテツ・花木や、薪山そのものが
+        // 夜に暖色で照らされる（terrain.ts と同じ簡易な二乗減衰）。
+        vec2 fireD = vWorld.xz - vec2(${FIRE_POS.x.toFixed(2)}, ${FIRE_POS.z.toFixed(2)});
+        float fireAtten = 1.0 / (1.0 + dot(fireD, fireD) * 1.15);
+        col += albedo * uFireBounce * fireAtten * 0.7;
+
         float dist = distance(uCamPos, vWorld);
         col = applyFog(col, dist, vWorld - uCamPos);
         col = desaturate(col, uWeather * 0.45);
@@ -120,6 +132,9 @@ function scatterAround(
     const a = rng() * Math.PI * 2;
     const r = rMin + rng() * (rMax - rMin);
     const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+    // 焚き火のまわりは開けたまま残す。囲んで座る場所に藪が生えていては
+    // 「留まる」場所にならない
+    if (Math.hypot(x - FIRE_POS.x, z - FIRE_POS.z) < FIRE_CLEAR_R) continue;
     const y = sampleHeight(field, x, z);
     if (!ok(y, slopeAt(field, x, z))) continue;
     out.push({ x, z, y, rot: rng() * Math.PI * 2, scale: scale[0] + rng() * (scale[1] - scale[0]), tint: rng() });
@@ -269,7 +284,7 @@ export function createFoliage(env: Env, field: Field): THREE.Group {
   };
 
   one(pavilion(REST.x, REST.z, h, REST.rot));
-  one(firePit(REST.x + 5.2, REST.z - 4.4, h));
+  one(firePit(FIRE_POS.x, FIRE_POS.z, h));
   one(pier([PIER.x, h(PIER.x, PIER.z0) + 0.55, PIER.z0], [PIER.x, 0, PIER.z1], PIER.width, h));
   one(lighthouse(LIGHT.x, LIGHT.z, h));
   // 石垣は東屋の背中側に一本だけ。囲うのではなく、風を切るための短い壁

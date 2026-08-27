@@ -40,11 +40,15 @@ const shots = only
       { name: 'adan', view: 'adan', time: '11.5', weather: '0' },
       { name: 'deigo', view: 'deigo', time: '11.5', weather: '0' },
       { name: 'mangrove', view: 'mangrove', time: '11.5', weather: '0' },
-      { name: 'pier', view: 'pier', time: '11.5', weather: '0' }
+      { name: 'pier', view: 'pier', time: '11.5', weather: '0' },
+      // 指示書 §5 の焚き火。夜は火が灯り、昼はただの薪の山になることを確認する
+      { name: 'campfire-night', view: 'campfire', time: '1.0', weather: '0', arrive: '1' },
+      { name: 'campfire-noon', view: 'campfire', time: '11.5', weather: '0' }
     ];
 
 for (const s of shots) {
-  const url = `${base}/?view=${s.view}&time=${s.time}&weather=${s.weather}&still=42&hud=0`;
+  const arriveQ = s.arrive !== undefined ? `&arrive=${s.arrive}` : '';
+  const url = `${base}/?view=${s.view}&time=${s.time}&weather=${s.weather}&still=42&hud=0${arriveQ}`;
   const t0 = Date.now();
   await page.goto(url, { waitUntil: 'load' });
   await page.waitForFunction(() => (window.__island?.frames?.() ?? 0) > 4, null, { timeout: 120000 });

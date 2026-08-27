@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { COMMON, SKY, FOG } from './glsl/lib';
 import { FIELD } from './glsl/field';
 import { bakeField, BOUNDS, CELL, COLS, ROWS, DEEP, type Field } from './heightfield';
+import { FIRE_POS } from './foliage';
 import { makeStoneTextures } from './textures';
 import type { Env } from './env';
 
@@ -104,6 +105,7 @@ export function createTerrain(env: Env): TerrainResult {
       uniform vec3 uKeyLight;
       uniform vec3 uSunLight;
       uniform vec3 uAmbLight;
+      uniform vec3 uFireBounce;
       uniform sampler2D uStone;
       uniform sampler2D uStoneN;
       uniform float uTime;
@@ -191,6 +193,13 @@ export function createTerrain(env: Env): TerrainResult {
         vec3 V = normalize(uCamPos - vWorld);
         vec3 H = normalize(uKeyDir + V);
         col += uSunColor * pow(sat(dot(Np, H)), 60.0) * wet * 0.35 * (0.12 + 0.88 * uDay);
+
+        // 焚き火の波及光。指示書 §5: PointLight の代わりに、この作品の
+        // 照明モデル（uKeyLight 等と同じ共有ユニフォーム）で周囲の砂・岩を
+        // 暖色に照らす。平面距離だけを見る簡易な二乗減衰で十分。
+        vec2 fireD = xz - vec2(${FIRE_POS.x.toFixed(2)}, ${FIRE_POS.z.toFixed(2)});
+        float fireAtten = 1.0 / (1.0 + dot(fireD, fireD) * 1.15);
+        col += albedo * uFireBounce * fireAtten;
 
         col = applyFog(col, dist, vWorld - uCamPos);
         col = desaturate(col, uWeather * 0.45);

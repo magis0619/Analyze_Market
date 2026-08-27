@@ -3,7 +3,7 @@
 // そして琉球石灰岩の石垣。どれも数は少ないので、量より佇まいを優先する。
 
 import * as THREE from 'three';
-import { Builder, hex, addv, mul, norm, shade, type V3 } from './meshbuild';
+import { Builder, hex, addv, mul, shade, type V3 } from './meshbuild';
 import { makeRng } from './noise';
 
 const C = {
@@ -19,7 +19,11 @@ const C = {
   towerWhite: hex(0xf1efe6),
   towerBand: hex(0xc4402f),
   lantern: hex(0x40484c),
-  glass: hex(0xa9c6cf)
+  glass: hex(0xa9c6cf),
+  scorch: hex(0x3c3630),
+  scorchEdge: hex(0x6b5f4c),
+  logDark: hex(0x3a3129),
+  logMid: hex(0x5a4633)
 };
 
 export type HeightFn = (x: number, z: number) => number;
@@ -207,25 +211,72 @@ export function stoneWall(path: [number, number][], h: HeightFn): THREE.BufferGe
 }
 
 /** 焚き火のあと。東屋のそばに、留まった気配だけ置く */
+/**
+ * 焚き火の常設物。薪山・囲みの石・焦げ跡は常時存在し、昼間は火が
+ * 点いていないただの薪の山として見える（炎そのものは campfire.ts が別途
+ * 重ねる、動的なジオメトリとして分けてある）。
+ */
 export function firePit(cx: number, cz: number, h: HeightFn): THREE.BufferGeometry {
   const b = new Builder();
   const rng = makeRng(4242);
   const g = h(cx, cz);
-  const n = 11;
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2 + rng() * 0.3;
-    const r = 0.68 + rng() * 0.10;
-    b.box([cx + Math.cos(a) * r, g + 0.11, cz + Math.sin(a) * r],
-      [0.15 + rng() * 0.06, 0.11, 0.13 + rng() * 0.05],
-      shade(C.limestone, 0.80 + rng() * 0.25));
+
+  // --- 焦げ跡（ScorchGround）。薪の下に円形の暗い跡を敷く ---
+  // 「使われてきた場所感」を出す最小限の演出。薄い円盤を三角形の扇で作る。
+  const scorchN = 16;
+  const scorchR = 0.62;
+  for (let i = 0; i < scorchN; i++) {
+    const a0 = (i / scorchN) * Math.PI * 2, a1 = ((i + 1) / scorchN) * Math.PI * 2;
+    const rr = scorchR * (0.88 + rng() * 0.16);
+    const p0: V3 = [cx + Math.cos(a0) * rr, g + 0.006, cz + Math.sin(a0) * rr];
+    const p1: V3 = [cx + Math.cos(a1) * rr, g + 0.006, cz + Math.sin(a1) * rr];
+    const center: V3 = [cx, g + 0.006, cz];
+    // 中心ほど焦げが濃く、縁は砂に溶けて薄くなる
+    // 三角形の巻き方は上から見て表になる向きに（逆だと gl_FrontFacing が
+    // 反転し、法線を明示していても未照明扱いになって真っ黒に見える）
+    b.tri(center, p1, p0, shade(C.scorch, 0.85 + rng() * 0.2), 0, 0, [0, 1, 0]);
   }
-  // 燃え残りの薪
-  for (let i = 0; i < 4; i++) {
-    const a = rng() * Math.PI * 2;
-    const d = norm([Math.cos(a), 0.55, Math.sin(a)]);
-    b.tube([[cx - d[0] * 0.35, g + 0.03, cz - d[2] * 0.35],
-            addv([cx, g + 0.03, cz], mul(d, 0.42))],
-      [0.055, 0.04], 5, hex(0x3a3129), 0);
+  // 縁のにじみ（少し明るい輪）
+  for (let i = 0; i < scorchN; i++) {
+    const a0 = (i / scorchN) * Math.PI * 2, a1 = ((i + 1) / scorchN) * Math.PI * 2;
+    const rIn = scorchR * (0.86 + rng() * 0.1), rOut = rIn + 0.13 + rng() * 0.08;
+    const q0: V3 = [cx + Math.cos(a0) * rIn, g + 0.005, cz + Math.sin(a0) * rIn];
+    const q1: V3 = [cx + Math.cos(a1) * rIn, g + 0.005, cz + Math.sin(a1) * rIn];
+    const q2: V3 = [cx + Math.cos(a1) * rOut, g + 0.004, cz + Math.sin(a1) * rOut];
+    const q3: V3 = [cx + Math.cos(a0) * rOut, g + 0.004, cz + Math.sin(a0) * rOut];
+    // quad() は winding から法線を出すため、ここでは上向きを明示して
+    // 真上から見たときに未照明（真っ黒）にならないようにする
+    const ecol = shade(C.scorchEdge, 0.85 + rng() * 0.25);
+    b.tri(q0, q2, q1, ecol, 0, 0, [0, 1, 0]);
+    b.tri(q0, q3, q2, ecol, 0, 0, [0, 1, 0]);
+  }
+
+  // --- 囲みの石。低ポリの小さな岩を6〜8個リング状に。
+  // 石垣と同じ石灰岩の色で素材の統一感を出す（指示書 §5）。
+  const n = 7;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + rng() * 0.35;
+    const r = 0.62 + rng() * 0.12;
+    const rad = 0.13 + rng() * 0.05;
+    const cxr = cx + Math.cos(a) * r, czr = cz + Math.sin(a) * r;
+    b.blob([cxr, g + rad * 0.55, czr], [rad, rad * (0.75 + rng() * 0.3), rad], 0,
+      shade(C.limestone, 0.78 + rng() * 0.28), 0, 0,
+      (j) => 0.82 + 0.34 * (((j * 13) % 9) / 8));
+  }
+
+  // --- 薪山。3〜5本を井桁・合掌型に交差させ、向きと位置を少しずつずらす ---
+  const logs = 4;
+  const patterns: Array<[number, number]> = [[0, 0.14], [1, 0.11], [2, 0.15], [3, 0.10]];
+  for (let i = 0; i < logs; i++) {
+    const [idx, radius] = patterns[i % patterns.length]!;
+    const az = idx * (Math.PI / logs) + rng() * 0.18;
+    const len = 0.62 + rng() * 0.14;
+    const lift = 0.05 + i * 0.055 + rng() * 0.02;
+    const dir: V3 = [Math.cos(az), 0.10 + rng() * 0.06, Math.sin(az)];
+    const a: V3 = [cx - dir[0] * len * 0.5, g + lift, cz - dir[2] * len * 0.5];
+    const bEnd: V3 = addv([cx, g + lift + dir[1] * len, cz], mul(dir, len * 0.5));
+    const col = i % 2 === 0 ? C.logMid : C.logDark;
+    b.tube([a, bEnd], [radius * 0.9, radius * 0.65], 6, col, 0.02);
   }
   return b.build();
 }

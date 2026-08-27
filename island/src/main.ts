@@ -3,7 +3,9 @@ import { Env } from './env';
 import { createSky } from './sky';
 import { createTerrain } from './terrain';
 import { createWater } from './water';
-import { createFoliage, createLineup } from './foliage';
+import { createFoliage, createLineup, FIRE_POS } from './foliage';
+import { createCampfire } from './campfire';
+import { sampleHeight } from './heightfield';
 import { Walker, VIEWS, type ViewName } from './walker';
 
 const params = new URLSearchParams(location.search);
@@ -30,6 +32,12 @@ scene.add(createWater(env));
 // ?lineup=1 で、種を1体ずつ並べただけの検分用シーンにする
 const lineup = params.get('lineup') === '1';
 scene.add(lineup ? createLineup(env, field) : createFoliage(env, field));
+
+// 焚き火（指示書 §5）。薪山・石・焦げ跡は createFoliage 側の常設物として
+// 既に置いてあるので、ここでは炎・火の粉・煙・光だけを重ねる。
+const campfire = createCampfire(env);
+campfire.group.position.set(FIRE_POS.x, sampleHeight(field, FIRE_POS.x, FIRE_POS.z), FIRE_POS.z);
+scene.add(campfire.group);
 
 const walker = new Walker(camera, field);
 const view = (params.get('view') ?? 'beach') as ViewName;
@@ -120,6 +128,7 @@ function frame(now: number) {
   env.update(still === null ? dt : 0);
   if (still !== null) { env.clock = still; env.update(0); }
   (env.uniforms.uCamPos!.value as THREE.Vector3).copy(camera.position);
+  campfire.update();
   renderer.render(scene, camera);
   frames++;
   if (frames === 2) document.getElementById('boot')!.classList.add('done');

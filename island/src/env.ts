@@ -6,6 +6,10 @@ import * as THREE from 'three';
 const LAT = 0.62;   // 観測地の緯度っぽい定数（約35°）
 const DECL = 0.15;  // 太陽赤緯。少し夏寄り
 
+// 焚き火の基調色（線形）。lin() は下で定義するため、モジュール初期化の
+// 順序に依存しない場所に定数として置く。
+const FIRE_COLOR_HEX = 0xff8c3c;
+
 export type EnvUniforms = Record<string, THREE.IUniform>;
 
 /** sRGB の 16進 → THREE.Color（線形変換はシェーダ側でやるので生値のまま渡す） */
@@ -20,6 +24,8 @@ function lin(hex: number): THREE.Color {
   const c = srgb(hex);
   return new THREE.Color(Math.pow(c.r, 2.2), Math.pow(c.g, 2.2), Math.pow(c.b, 2.2));
 }
+
+const FIRE_COLOR = lin(FIRE_COLOR_HEX);
 
 export class Env {
   /** 0..24 */
@@ -82,6 +88,15 @@ export class Env {
     // 地形・水・植生の陰影だけがこちらを見る。
     uKeyDir: { value: new THREE.Vector3(0, 1, 0) },
     uKeyLight: { value: new THREE.Color(1, 1, 1) },
+
+    // --- 焚き火（指示書 §5）---
+    // 時刻を直接判定せず、空の光度パラメータ（uDay）と連動させる。
+    // uFireGlow: 火の強さ 0..1（揺らぎ込み）。花・炎・火の粉がこれを見る。
+    // uSmokeGlow: 消えかけの煙だけを強調する係数（夜明け側の遷移でのみ立つ）。
+    // uFireBounce: 焚き火が周囲の砂・葉に落とす暖色の波及光（線形色 × 強さ）。
+    uFireGlow: { value: 0 },
+    uSmokeGlow: { value: 0 },
+    uFireBounce: { value: new THREE.Color(0, 0, 0) },
 
     // --- 波（Gerstner: 方向x, 方向z, 波長, 尖り）---
     uWaveAmp: { value: 1.0 },
@@ -151,5 +166,35 @@ export class Env {
       kd.copy(this.sunDir);
       kl.copy(sl);
     }
+
+    // --- 焚き火（指示書 §5） -------------------------------------------
+    // 時刻を直接 if で判定せず、上ですでに求めた光度パラメータ uDay から
+    // duskFactor = 1 - uDay を作って連動させる。空が暗くなるほど火が
+    // 自然に強まり、夜明けとともに弱まりながら消えていく。
+    const duskFactor = 1 - day;
+
+    // 火の揺らぎ。加重した sin の重ね合わせで、周期性が目立たない程度に崩す
+    const flickerN =
+      0.55 * Math.sin(this.clock * 5.3) +
+      0.30 * Math.sin(this.clock * 11.7 + 1.3) +
+      0.15 * Math.sin(this.clock * 2.1 + 0.7);
+    const flicker = 0.85 + 0.15 * (flickerN * 0.5 + 0.5);
+    const fireGlow = duskFactor * flicker;
+    u.uFireGlow!.value = fireGlow;
+
+    // 「夜明け側でだけ煙が目立つ」の判定。H=0(正午)を境に、H<0（午前＝日の出へ
+    // 向かう上りの半日）だけを rising とする。sunDir.y は cos(H) 形なので、
+    // 上りかどうかは -sin(H) の符号で決まる（微分せずに解析的に求まる）。
+    const rising = THREE.MathUtils.smoothstep(-Math.sin(H), -0.12, 0.12);
+    // 完全な昼・完全な夜ではゼロになり、遷移の中間（duskFactor≈0.5）で最大になる山
+    const transitioning = 4 * duskFactor * (1 - duskFactor);
+    u.uSmokeGlow!.value = transitioning * rising;
+
+    // 周囲の砂・葉に落ちる暖色の波及光。この作品の地形・水・植生はどれも
+    // three.js のシーンライトを参照しない自前シェーダなので、実際に見える
+    // 効果はこの共有ユニフォームを terrain / foliage 側で加算する形で作る
+    // （FireLight という PointLight 自体は指示書の階層に合わせて別途置くが、
+    // 現状の描画には寄与しない。詳しくは campfire.ts のコメントを参照）。
+    (u.uFireBounce!.value as THREE.Color).copy(FIRE_COLOR).multiplyScalar(fireGlow * 0.55);
   }
 }
