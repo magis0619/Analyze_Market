@@ -11,6 +11,7 @@ import { makeRng, fbm } from './noise';
 import { sampleHeight, slopeAt, shoreSigned, BOUNDS, type Field } from './heightfield';
 import { buildFlora, type Species } from './flora';
 import { pavilion, hammock, pier, lighthouse, stoneWall, firePit } from './structures';
+import { buildVillaExterior, buildGarden, buildPots, buildVillaInterior, createEntryLantern, computeLayout, POTTED_SPOTS, VILLA } from './villa';
 import type { Env } from './env';
 
 /** 「留まる」場所。東屋・焚き火・ハンモック・桟橋はここにまとまる */
@@ -19,6 +20,8 @@ export const REST = { x: -20, z: 118, rot: -0.28 };
 export const FIRE_POS = { x: REST.x + 5.2, z: REST.z - 4.4 };
 /** この半径の中は藪を生やさず、焚き火を囲んで座れる開けた地面にする */
 const FIRE_CLEAR_R = 3.6;
+/** 別荘の庭として開けたままにする半径。建物の対角より少し広く取る */
+const VILLA_CLEAR_R = 14.0;
 /** 桟橋。浜から湾へ短く突き出す */
 export const PIER = { x: -20, z0: 87, z1: 62, width: 1.9 };
 /** 灯台。左の岬の先端 */
@@ -261,6 +264,8 @@ export function createFoliage(env: Env, field: Field): THREE.Group {
     // 白砂の浜と砂丘は裸のまま残す
     if (y < 7.5 && s < 0.14) return false;
     if (sh > 4 && sh < 30) return false;          // 汀線ぎわはヤシに譲る
+    // 別荘のまわりは開けた庭のまま残す。藪に埋もれては別荘に見えない
+    if (Math.hypot(x - VILLA.x, z - VILLA.z) < VILLA_CLEAR_R) return false;
     const d = fbm(x * 0.012, z * 0.012, 3) * 0.5 + 0.5;
     return rng() < 0.25 + d * 0.85;
   };
@@ -297,6 +302,21 @@ export function createFoliage(env: Env, field: Field): THREE.Group {
     const a = at(-1.95, -1.95), b = at(-1.95, 1.95);
     const deck = h(REST.x, REST.z) + 0.42;
     one(hammock([a[0], deck + 1.55, a[1]], [b[0], deck + 1.55, b[1]], 0.62));
+  }
+
+  // --- 別荘（指示書 §6） ---------------------------------------------------
+  one(buildVillaExterior(h));
+  one(buildGarden(h));
+  one(buildPots(h));
+  one(buildVillaInterior(h));
+  group.add(createEntryLantern(env, computeLayout(h)));
+  // 玄関先の鉢植え。ソテツとブーゲンビリアを1本ずつ、既存の flora をそのまま使う
+  {
+    const potSpots: Spot[] = POTTED_SPOTS.map(([x, z]) => ({
+      x, z, y: h(x, z) + 0.30, rot: rng() * Math.PI * 2, scale: 0.62, tint: rng()
+    }));
+    place('sotetsu', [potSpots[0]!], 0.10, 0);
+    place('bougain', [potSpots[1]!], 0.10, -0.4);
   }
 
   return group;
