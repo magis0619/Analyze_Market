@@ -11,8 +11,9 @@ import { makeRng, fbm } from './noise';
 import { sampleHeight, slopeAt, shoreSigned, BOUNDS, type Field } from './heightfield';
 import { buildFlora, type Species } from './flora';
 import { pavilion, hammock, pier, lighthouse, stoneWall, firePit } from './structures';
-import { buildVillaExterior, buildGarden, buildPots, buildVillaInterior, createEntryLantern, computeLayout, POTTED_SPOTS, VILLA } from './villa';
+import { buildVillaExterior, buildGarden, buildPots, buildVillaInterior, createEntryLantern, createPoolWater, computeLayout, POTTED_SPOTS, VILLA } from './villa';
 import type { Env } from './env';
+import type { AABB } from './collision';
 
 /** 「留まる」場所。東屋・焚き火・ハンモック・桟橋はここにまとまる */
 export const REST = { x: -20, z: 118, rot: -0.28 };
@@ -179,7 +180,7 @@ export function createLineup(env: Env, field: Field): THREE.Group {
 /** 並べ置きの場所。浜の平らなところ */
 export const LINEUP = { x0: -27.5, step: 5.0, z: 104 };
 
-export function createFoliage(env: Env, field: Field): THREE.Group {
+export function createFoliage(env: Env, field: Field): { group: THREE.Group; villaColliders: AABB[] } {
   const group = new THREE.Group();
   const rng = makeRng(0xb00b1e5);
   const flora = buildFlora();
@@ -304,20 +305,21 @@ export function createFoliage(env: Env, field: Field): THREE.Group {
     one(hammock([a[0], deck + 1.55, a[1]], [b[0], deck + 1.55, b[1]], 0.62));
   }
 
-  // --- 別荘（指示書 §6） ---------------------------------------------------
-  one(buildVillaExterior(h));
+  // --- 別荘（指示書 §6。モダンミニマル） ------------------------------------
+  const villaColliders: AABB[] = [];
+  one(buildVillaExterior(h, villaColliders));
   one(buildGarden(h));
   one(buildPots(h));
-  one(buildVillaInterior(h));
+  one(buildVillaInterior(h, villaColliders));
   group.add(createEntryLantern(env, computeLayout(h)));
-  // 玄関先の鉢植え。ソテツとブーゲンビリアを1本ずつ、既存の flora をそのまま使う
+  group.add(createPoolWater(env, h));
+  // 玄関先の鉢植え。ソテツ1本だけ（指示書「装飾は最小限に留める」）
   {
     const potSpots: Spot[] = POTTED_SPOTS.map(([x, z]) => ({
       x, z, y: h(x, z) + 0.30, rot: rng() * Math.PI * 2, scale: 0.62, tint: rng()
     }));
-    place('sotetsu', [potSpots[0]!], 0.10, 0);
-    place('bougain', [potSpots[1]!], 0.10, -0.4);
+    place('sotetsu', potSpots, 0.10, 0);
   }
 
-  return group;
+  return { group, villaColliders };
 }

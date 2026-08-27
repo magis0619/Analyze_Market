@@ -5,9 +5,10 @@ import { createTerrain } from './terrain';
 import { createWater } from './water';
 import { createFoliage, createLineup, FIRE_POS } from './foliage';
 import { createCampfire } from './campfire';
-import { computeLayout, VillaFloorTracker, arrivalDepth } from './villa';
+import { computeLayout, VillaFloorTracker, arrivalDepth, createSlidingDoor } from './villa';
 import { sampleHeight } from './heightfield';
 import { Walker, VIEWS, type ViewName } from './walker';
+import type { AABB } from './collision';
 
 const params = new URLSearchParams(location.search);
 const canvas = document.getElementById('view') as HTMLCanvasElement;
@@ -32,7 +33,14 @@ scene.add(createSky(env));
 scene.add(createWater(env));
 // ?lineup=1 で、種を1体ずつ並べただけの検分用シーンにする
 const lineup = params.get('lineup') === '1';
-scene.add(lineup ? createLineup(env, field) : createFoliage(env, field));
+let villaWallColliders: AABB[] = [];
+if (lineup) {
+  scene.add(createLineup(env, field));
+} else {
+  const foliage = createFoliage(env, field);
+  scene.add(foliage.group);
+  villaWallColliders = foliage.villaColliders;
+}
 
 // 焚き火（指示書 §5）。薪山・石・焦げ跡は createFoliage 側の常設物として
 // 既に置いてあるので、ここでは炎・火の粉・煙・光だけを重ねる。
@@ -48,6 +56,11 @@ const villaFloor = new VillaFloorTracker(view === 'bedroom');
 const walker = new Walker(camera, field, (x, z) => villaFloor.groundY(villaLayout, x, z));
 walker.applyView(view in VIEWS ? view : 'beach');
 walker.attach(canvas);
+
+// スライド式ガラスドア（指示書④）。壁・家具と違って毎フレーム開閉するので、
+// 焚き火・軒灯と同じく merged geometry の外に独立した Mesh として持つ。
+const slidingDoor = createSlidingDoor(env, villaLayout);
+scene.add(slidingDoor.mesh);
 
 // --- HUD ---
 const hud = document.getElementById('hud')!;
@@ -131,6 +144,11 @@ let frames = 0;
 function frame(now: number) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
+  // ドアの開閉は前フレームのプレイヤー位置で決め、そのまま今フレームの
+  // 当たり判定（walker.colliders）に反映してから動かす。1フレームの
+  // ずれは体感できないので、ここで先に済ませてしまってよい。
+  slidingDoor.update(walker.pos.x, walker.pos.z, dt);
+  walker.colliders = villaWallColliders.length ? [...villaWallColliders, slidingDoor.box()] : villaWallColliders;
   walker.update(dt);
   if (!arriveOverride) {
     const posDepth = arrivalDepth(villaFloor, walker.pos.x, walker.pos.z);

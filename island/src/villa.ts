@@ -2,19 +2,22 @@
 // この家から出発しこの家に戻るという具体的な動線として実体化する場所であり、
 // 拾った貝殻・流木を飾る場所でもある。
 //
-// 地中海〜南欧リゾート風の洋館、2階建て。白い漆喰壁・テラコッタ瓦・
-// フレンチドア・木製の鎧戸。砂浜からやや高台寄り、湾を見渡せる場所に置く。
+// スタイルはモダンミニマル（地中海リゾート風は撤回）。白い立方体ボリューム、
+// フラットな屋根、床から天井までのガラス面、木目調のウッドデッキ、
+// インフィニティ感のあるプール。装飾は最小限に留めるほどこのスタイルらしい。
+// 砂浜からやや高台寄り、湾を見渡せる場所に置く。
 //
 // 各階はシンプルな箱の組み合わせで作る（指示書の実装方針どおり）。
 // 螺旋階段の物理的な段差判定は最低限に留め、階段の足元だけをスロープとして
-// 扱う（VillaFloorTracker）。
+// 扱う（VillaFloorTracker）。壁・家具の水平方向の当たり判定は collision.ts。
 
 import * as THREE from 'three';
 import { Builder, hex, shade, type V3 } from './meshbuild';
 import { makeRng } from './noise';
 import type { HeightFn } from './structures';
-import { COMMON } from './glsl/lib';
+import { COMMON, SKY } from './glsl/lib';
 import type { Env } from './env';
+import { makeAABB, type AABB } from './collision';
 
 /** 敷地。湾を見渡せる高台。REST（東屋・焚き火）から見える距離感。 */
 export const VILLA = { x: -8, z: 176 };
@@ -27,7 +30,8 @@ const FOUND_H = 0.85;                 // 基礎（傾斜地の高さ合わせを
 const WALL1_H = 3.0;                  // 1F 壁高
 const SLAB_T = 0.28;                  // 2F 床（1F 天井）の厚み
 const WALL2_H = 2.65;                 // 2F 壁高
-const DOOR_W = 3.0;                   // フレンチドアの開口幅
+const DOOR_W = 3.6;                   // スライドドアの開口幅
+const GLASS_MARGIN = 0.5;             // 隅に残す方立（構造壁）の幅
 const VERANDA_D = 3.6;                // ベランダの奥行き（南＝浜側へ張り出す）
 
 /** 階段の踊り場（2F 床に開ける吹き抜けの矩形）。北東の隅。 */
@@ -118,31 +122,30 @@ export function arrivalDepth(floor: VillaFloorTracker, x: number, z: number): nu
   return 0.45 + (1 - 0.45) * t;
 }
 
+// --- モダンミニマルのパレット -----------------------------------------------
 const C = {
-  wall: hex(0xf3ece0),
-  wallShade: hex(0xe6dcc8),
-  found: hex(0xd8cdb4),
-  roof: hex(0xb5583a),
-  roofDark: hex(0x8f4530),
-  shutter: hex(0x6fa8a0),
-  shutterDark: hex(0x4f7f78),
+  wall: hex(0xf6f5f0),
+  wallShade: hex(0xebe9e2),
+  found: hex(0xd7d4cb),
+  roofSlab: hex(0xeeece5),
+  frame: hex(0x232326),
+  glass: hex(0xb9dbe3),
+  steel: hex(0xc9cdce),
   wood: hex(0x8a6f4c),
   woodDark: hex(0x6d573a),
-  glass: hex(0xbfe0e6),
-  rail: hex(0x7c6448),
   floorWood: hex(0xc9a06a),
-  poolWater: hex(0x36c4cf),
-  poolDeck: hex(0xe8ddc8),
-  sofa: hex(0x8a5a4a),
-  sofaCushion: hex(0xa8735f),
-  tv: hex(0x2b2b30),
-  counter: hex(0xe9e3d6),
-  counterTop: hex(0x5b4636),
+  poolDeck: hex(0xe6e3d9),
+  poolCoping: hex(0xf2f0e8),
+  sofa: hex(0xe8e2d5),
+  sofaCushion: hex(0xf1ece0),
+  tv: hex(0x141417),
+  counter: hex(0xedebe2),
+  counterTop: hex(0x3c3c40),
   shelf: hex(0x8a6f4c),
-  bed: hex(0xf4efe6),
-  bedFrame: hex(0x7c6448),
-  desk: hex(0x8a6f4c),
-  lantern: hex(0x3a3a3f)
+  bed: hex(0xf7f4ee),
+  bedFrame: hex(0xdcd9d0),
+  desk: hex(0xf0eee7),
+  lantern: hex(0x2c2c30)
 };
 
 /** 傾斜地の高さ合わせを兼ねた基礎。四周を袴のように囲む */
@@ -178,62 +181,56 @@ const WALL_LIT = 0.62;
 
 function wallWithGap(
   b: Builder, y0: number, y1: number, x0: number, x1: number, z: number,
-  gapX0: number | null, gapX1: number | null, alongX: boolean, col: V3
+  gapX0: number | null, gapX1: number | null, alongX: boolean, col: V3,
+  colliders?: AABB[]
 ): void {
   const midY = (y0 + y1) / 2, halfY = (y1 - y0) / 2;
   const seg = (a: number, bnd: number) => {
     if (bnd - a < 0.05) return;
     const mid = (a + bnd) / 2, half = (bnd - a) / 2;
-    if (alongX) {
-      b.box([VILLA.x + mid, midY, VILLA.z + z], [half, halfY, WALL_T / 2], col, 0, WALL_LIT);
-    } else {
-      b.box([VILLA.x + z, midY, VILLA.z + mid], [WALL_T / 2, halfY, half], col, 0, WALL_LIT);
-    }
+    const center: V3 = alongX ? [VILLA.x + mid, midY, VILLA.z + z] : [VILLA.x + z, midY, VILLA.z + mid];
+    const halfExt: V3 = alongX ? [half, halfY, WALL_T / 2] : [WALL_T / 2, halfY, half];
+    b.box(center, halfExt, col, 0, WALL_LIT);
+    colliders?.push(makeAABB(center, halfExt));
   };
   if (gapX0 === null) { seg(x0, x1); return; }
   seg(x0, gapX0);
   seg(gapX1!, x1);
 }
 
-/** 寄棟の屋根。軒を出し、テラコッタ色。妻側は三角に塞ぐ */
-function buildRoof(b: Builder, baseY: number, halfW: number, halfD: number, eave: number, rise: number): void {
+/** フラットな屋根。薄いパラペット（立ち上がりの縁）だけで、装飾は最小限にする */
+function buildFlatRoof(b: Builder, baseY: number, halfW: number, halfD: number, eave: number): void {
   const ex = halfW + eave, ez = halfD + eave;
-  const ridgeHalf = halfW * 0.35;
-  const apexY = baseY + rise;
-  const E = (sx: number, sz: number): V3 => [VILLA.x + sx * ex, baseY + 0.10, VILLA.z + sz * ez];
-  const R0: V3 = [VILLA.x - ridgeHalf, apexY, VILLA.z];
-  const R1: V3 = [VILLA.x + ridgeHalf, apexY, VILLA.z];
-  const e00 = E(-1, -1), e10 = E(1, -1), e11 = E(1, 1), e01 = E(-1, 1);
-  b.quad(e00, e10, R1, R0, C.roof, 0, 0);              // 南斜面
-  b.quad(e11, e01, R0, R1, shade(C.roof, 0.88), 0, 0); // 北斜面
-  b.tri(e10, e11, R1, shade(C.roofDark, 1.02), 0, 0);  // 東の妻
-  b.tri(e01, e00, R0, shade(C.roofDark, 0.94), 0, 0);  // 西の妻
-  b.tube([R0, R1], [0.14, 0.14], 5, C.roofDark, 0);
-  for (const [a, c] of [[e00, e10], [e10, e11], [e11, e01], [e01, e00]] as [V3, V3][]) {
-    b.tube([a, c], [0.09, 0.09], 5, C.roofDark, 0);
-  }
+  const slabH = 0.22;
+  b.box([VILLA.x, baseY + slabH / 2, VILLA.z], [ex, slabH / 2, ez], C.roofSlab, 0, WALL_LIT);
+  const parH = 0.32, parT = 0.09;
+  const midY = baseY + slabH + parH / 2;
+  b.box([VILLA.x, midY, VILLA.z - ez + parT / 2], [ex, parH / 2, parT / 2], C.wallShade, 0, WALL_LIT);
+  b.box([VILLA.x, midY, VILLA.z + ez - parT / 2], [ex, parH / 2, parT / 2], C.wallShade, 0, WALL_LIT);
+  b.box([VILLA.x - ex + parT / 2, midY, VILLA.z], [parT / 2, parH / 2, ez], shade(C.wallShade, 0.95), 0, WALL_LIT);
+  b.box([VILLA.x + ex - parT / 2, midY, VILLA.z], [parT / 2, parH / 2, ez], shade(C.wallShade, 0.95), 0, WALL_LIT);
 }
 
-/** 鎧戸。窓の左右に薄い板を1枚ずつ */
-function shutters(b: Builder, wx: number, y0: number, y1: number, z: number, faceOut: number): void {
-  const midY = (y0 + y1) / 2, halfY = (y1 - y0) / 2;
-  for (const s of [-1, 1]) {
-    b.box([VILLA.x + wx + s * 0.62, midY, VILLA.z + z + faceOut * 0.08],
-      [0.32, halfY * 0.92, 0.03], s > 0 ? C.shutter : shade(C.shutter, 0.9));
-    // 板のスリット感（縦の溝を細い線で示す）
-    for (let i = -1; i <= 1; i++) {
-      b.box([VILLA.x + wx + s * 0.62 + i * 0.18, midY, VILLA.z + z + faceOut * 0.095],
-        [0.02, halfY * 0.90, 0.01], C.shutterDark);
-    }
-  }
+/** 窓ガラス1枚。細い黒フレームつき（モダンミニマルは縁の薄さが命） */
+function windowGlass(
+  b: Builder, wx: number, y0: number, y1: number, z: number, faceOut: number,
+  halfWx = 0.9, colliders?: AABB[]
+): void {
+  const midY = (y0 + y1) / 2, halfY = (y1 - y0) / 2 * 0.94;
+  const center: V3 = [VILLA.x + wx, midY, VILLA.z + z + faceOut * 0.03];
+  const half: V3 = [halfWx, halfY, 0.02];
+  // ガラスは直射より空の映り込みで見える面。日陰側でも黒く沈まないよう、
+  // 壁と同じ明るさの底上げをかけておく（そうしないと日陰面だけ真っ黒になる）
+  b.box(center, half, C.glass, 0, WALL_LIT);
+  colliders?.push(makeAABB(center, half));
+  const ft = 0.035;
+  b.box([VILLA.x + wx, y0 + ft, VILLA.z + z + faceOut * 0.05], [halfWx + ft, ft, 0.018], C.frame);
+  b.box([VILLA.x + wx, y1 - ft, VILLA.z + z + faceOut * 0.05], [halfWx + ft, ft, 0.018], C.frame);
+  b.box([VILLA.x + wx - halfWx, midY, VILLA.z + z + faceOut * 0.05], [ft, halfY, 0.018], C.frame);
+  b.box([VILLA.x + wx + halfWx, midY, VILLA.z + z + faceOut * 0.05], [ft, halfY, 0.018], C.frame);
 }
 
-/** 窓ガラス1枚 */
-function windowGlass(b: Builder, wx: number, y0: number, y1: number, z: number, faceOut: number, halfWx = 0.9): void {
-  b.box([VILLA.x + wx, (y0 + y1) / 2, VILLA.z + z + faceOut * 0.03], [halfWx, (y1 - y0) / 2 * 0.85, 0.02], C.glass);
-}
-
-export function buildVillaExterior(h: HeightFn): THREE.BufferGeometry {
+export function buildVillaExterior(h: HeightFn, colliders: AABB[]): THREE.BufferGeometry {
   const b = new Builder();
   const layout = computeLayout(h);
   buildFoundation(b, layout, h);
@@ -241,43 +238,53 @@ export function buildVillaExterior(h: HeightFn): THREE.BufferGeometry {
   const y0 = layout.floor1Y, y1 = layout.floor1Y + WALL1_H;
   const y2 = layout.floor2Y, y3 = layout.floor2Y + WALL2_H;
 
-  // --- 1F 壁 ---（南面はフレンチドアの開口）
-  wallWithGap(b, y0, y1, -HALF_W, HALF_W, -HALF_D, -DOOR_W / 2, DOOR_W / 2, true, C.wall);
-  wallWithGap(b, y0, y1, -HALF_W, HALF_W, HALF_D, null, null, true, shade(C.wall, 0.92));
-  wallWithGap(b, y0, y1, -HALF_D, HALF_D, -HALF_W, null, null, false, shade(C.wall, 0.96));
-  wallWithGap(b, y0, y1, -HALF_D, HALF_D, HALF_W, null, null, false, shade(C.wall, 0.96));
+  // --- 1F 南面：隅の方立だけを構造壁として残し、中央はスライドドア
+  // （createSlidingDoor が動的メッシュで別途重ねる）、その両脇は固定ガラスで
+  // 床から天井までのガラス面にする（地中海様式の撤回・モダンミニマル化）。
+  {
+    const doorHalf = DOOR_W / 2;
+    const flankWidth = HALF_W - GLASS_MARGIN - doorHalf;
+    for (const s of [-1, 1] as const) {
+      const cx = s * (HALF_W - GLASS_MARGIN / 2);
+      const half: V3 = [GLASS_MARGIN / 2, (y1 - y0) / 2, WALL_T / 2];
+      const center: V3 = [VILLA.x + cx, (y0 + y1) / 2, VILLA.z - HALF_D];
+      b.box(center, half, C.wall, 0, WALL_LIT);
+      colliders.push(makeAABB(center, half));
+    }
+    for (const s of [-1, 1] as const) {
+      const fx = s * (doorHalf + flankWidth / 2);
+      windowGlass(b, fx, y0 + 0.02, y1 - 0.02, -HALF_D, -1, flankWidth / 2 - 0.04, colliders);
+    }
+  }
+  wallWithGap(b, y0, y1, -HALF_W, HALF_W, HALF_D, null, null, true, shade(C.wall, 0.94), colliders);
+  wallWithGap(b, y0, y1, -HALF_D, HALF_D, -HALF_W, null, null, false, shade(C.wall, 0.97), colliders);
+  wallWithGap(b, y0, y1, -HALF_D, HALF_D, HALF_W, null, null, false, shade(C.wall, 0.97), colliders);
+  windowGlass(b, HALF_W, y0 + 0.3, y1 - 0.2, 1.5, 1, 0.9);
+  windowGlass(b, -1.5, y0 + 0.3, y1 - 0.2, HALF_D, 1, 0.9);
+
   // 1F 天井（= 2F 床）のスラブ
   b.box([VILLA.x, y1 + SLAB_T / 2, VILLA.z], [HALF_W + 0.06, SLAB_T / 2, HALF_D + 0.06], C.wallShade, 0, WALL_LIT);
 
-  // --- 2F 壁 ---（南面は小窓、西面は寝室の窓）
-  wallWithGap(b, y2, y3, -HALF_W, HALF_W, -HALF_D, -0.75, 0.75, true, C.wall);
-  wallWithGap(b, y2, y3, -HALF_W, HALF_W, HALF_D, null, null, true, shade(C.wall, 0.92));
-  wallWithGap(b, y2, y3, -HALF_D, HALF_D, -HALF_W, -0.9, 0.9, false, shade(C.wall, 0.96));
-  wallWithGap(b, y2, y3, -HALF_D, HALF_D, HALF_W, null, null, false, shade(C.wall, 0.96));
-
-  // --- 窓・鎧戸 ---
-  windowGlass(b, 0, y2, y3, -HALF_D, -1, 0.7);            // 2F 南の小窓
-  shutters(b, 0, y2, y3, -HALF_D, -1);
-  windowGlass(b, -HALF_D * 0 - HALF_W, y2 + 0.1, y3 - 0.1, -1.2, -1, 0.75); // 西の寝室窓（西壁面）
-  windowGlass(b, HALF_W, y0 + 0.3, y1 - 0.2, 1.5, 1, 0.9);  // 1F 東（キッチン脇）の窓
-  shutters(b, 1.5, y0 + 0.3, y1 - 0.2, HALF_W, 1);
-  windowGlass(b, -1.5, y0 + 0.3, y1 - 0.2, HALF_D, 1, 0.9); // 1F 北の窓
-  shutters(b, -1.5, y0 + 0.3, y1 - 0.2, HALF_D, 1);
-
-  // --- フレンチドア（開口いっぱいに、両開きの2枚） ---
-  for (const s of [-1, 1]) {
-    b.box([VILLA.x + s * DOOR_W * 0.26, (y0 + y1 - 0.3) / 2, VILLA.z - HALF_D],
-      [DOOR_W * 0.24, (y1 - y0 - 0.3) / 2, 0.03], C.glass);
-    b.box([VILLA.x + s * DOOR_W * 0.5, (y0 + y1) / 2, VILLA.z - HALF_D], [0.03, (y1 - y0) / 2, 0.03], C.rail);
+  // --- 2F 壁 ---（南は方立+全面ガラス、西は大窓、北・東は無地）
+  {
+    for (const s of [-1, 1] as const) {
+      const cx = s * (HALF_W - GLASS_MARGIN / 2);
+      const half: V3 = [GLASS_MARGIN / 2, (y3 - y2) / 2, WALL_T / 2];
+      const center: V3 = [VILLA.x + cx, (y2 + y3) / 2, VILLA.z - HALF_D];
+      b.box(center, half, C.wall, 0, WALL_LIT);
+      colliders.push(makeAABB(center, half));
+    }
+    windowGlass(b, 0, y2 + 0.04, y3 - 0.04, -HALF_D, -1, HALF_W - GLASS_MARGIN - 0.05, colliders);
   }
-  // 2枚の合わせ目。すきまを開けたままだと外がまる見えの穴になるので、
-  // 実物のフレンチドアどおり中央に方立（マリオン）を立てて塞ぐ
-  b.box([VILLA.x, (y0 + y1) / 2, VILLA.z - HALF_D], [0.055, (y1 - y0) / 2, 0.035], C.rail);
+  wallWithGap(b, y2, y3, -HALF_W, HALF_W, HALF_D, null, null, true, shade(C.wall, 0.94), colliders);
+  wallWithGap(b, y2, y3, -HALF_D, HALF_D, -HALF_W, -1.8, 1.8, false, shade(C.wall, 0.97), colliders);
+  windowGlass(b, 0, y2 + 0.06, y3 - 0.06, -HALF_W, -1, 1.75, colliders);
+  wallWithGap(b, y2, y3, -HALF_D, HALF_D, HALF_W, null, null, false, shade(C.wall, 0.97), colliders);
 
-  buildRoof(b, y3, HALF_W, HALF_D, 0.55, 2.1);
+  buildFlatRoof(b, y3, HALF_W, HALF_D, 0.45);
   lanternHousing(b, layout);
 
-  // --- ベランダ（南へ張り出す木製デッキ）と手すり ---
+  // --- ベランダ（南へ張り出す木目デッキ）と手すり ---
   const vz0 = -HALF_D - VERANDA_D, vz1 = -HALF_D;
   const planks = 9;
   for (let i = 0; i < planks; i++) {
@@ -291,30 +298,36 @@ export function buildVillaExterior(h: HeightFn): THREE.BufferGeometry {
     const g = h(px, pz);
     b.tube([[px, g, pz], [px, layout.floor1Y, pz]], [0.09, 0.09], 6, C.woodDark, 0);
   }
-  // 手すり（南端と東西の縁）
+  // 手すり：南端（湾側）はガラスの腰壁、東西はスチールの縦格子
   const railY = layout.floor1Y + 0.55;
-  const rail = (ax: number, az: number, bx: number, bz: number) => {
-    b.tube([[VILLA.x + ax, railY, VILLA.z + az], [VILLA.x + bx, railY, VILLA.z + bz]], [0.035, 0.035], 5, C.rail, 0);
+  b.box([VILLA.x, (layout.floor1Y + railY) / 2 + 0.05, VILLA.z + vz0],
+    [HALF_W - 0.05, (railY - layout.floor1Y) / 2, 0.02], C.glass, 0, 0);
+  b.tube([[VILLA.x - HALF_W, railY, VILLA.z + vz0], [VILLA.x + HALF_W, railY, VILLA.z + vz0]], [0.03, 0.03], 6, C.steel, 0);
+  const sideRail = (ax: number, az: number, bx: number, bz: number) => {
+    b.tube([[VILLA.x + ax, railY, VILLA.z + az], [VILLA.x + bx, railY, VILLA.z + bz]], [0.03, 0.03], 6, C.steel, 0);
     const n = 6;
     for (let i = 0; i <= n; i++) {
       const t = i / n;
       const x = ax + (bx - ax) * t, z = az + (bz - az) * t;
-      b.tube([[VILLA.x + x, layout.floor1Y, VILLA.z + z], [VILLA.x + x, railY, VILLA.z + z]], [0.02, 0.02], 4, C.rail, 0);
+      b.tube([[VILLA.x + x, layout.floor1Y, VILLA.z + z], [VILLA.x + x, railY, VILLA.z + z]], [0.016, 0.016], 4, C.steel, 0);
     }
   };
-  rail(-HALF_W, vz0, HALF_W, vz0);
-  rail(-HALF_W, vz0, -HALF_W, vz1);
-  rail(HALF_W, vz0, HALF_W, vz1);
+  sideRail(-HALF_W, vz0, -HALF_W, vz1);
+  sideRail(HALF_W, vz0, HALF_W, vz1);
 
   return b.build();
 }
 
-/** 庭。プールとプールデッキ。ベランダのさらに南、浜側 */
-export function buildGarden(h: HeightFn): THREE.BufferGeometry {
-  const b = new Builder();
+export type PoolLayout = {
+  cx: number; cz: number;
+  poolHalfX: number; poolHalfZ: number; deckHalf: number;
+  deckY: number; poolY: number;
+};
+
+/** プール・デッキの位置と高さ。buildGarden と createPoolWater の両方が使う共通の値 */
+export function poolLayout(h: HeightFn): PoolLayout {
   const cx = VILLA.x, cz = VILLA.z - HALF_D - VERANDA_D - 4.2;
-  const poolHalfX = 2.6, poolHalfZ = 1.7;
-  const deckHalf = 1.0; // プールの外周に敷くデッキの幅
+  const poolHalfX = 2.6, poolHalfZ = 1.7, deckHalf = 1.0;
   const outX = poolHalfX + deckHalf, outZ = poolHalfZ + deckHalf;
 
   // 別荘の基礎と同じ理由。1点の地面サンプルだけでデッキの高さを決めると、
@@ -323,14 +336,21 @@ export function buildGarden(h: HeightFn): THREE.BufferGeometry {
   const corners: [number, number][] = [[-outX, -outZ], [outX, -outZ], [outX, outZ], [-outX, outZ]];
   const gMax = Math.max(...corners.map(([dx, dz]) => h(cx + dx, cz + dz)));
   const deckY = gMax + 0.12;
-  // 水面はプール内側だけで見た最高点よりさらに上に置く（低いと地形に埋もれる）
   const poolCorners: [number, number][] = [
     [-poolHalfX, -poolHalfZ], [poolHalfX, -poolHalfZ], [poolHalfX, poolHalfZ], [-poolHalfX, poolHalfZ]
   ];
   const poolGMax = Math.max(...poolCorners.map(([dx, dz]) => h(cx + dx, cz + dz)));
-  const poolY = Math.min(deckY - 0.10, poolGMax + 0.35); // デッキより低く、かつ池底の地形より確実に高く
+  const poolY = Math.min(deckY - 0.10, poolGMax + 0.35);
+  return { cx, cz, poolHalfX, poolHalfZ, deckHalf, deckY, poolY };
+}
 
-  // デッキの土台（傾斜を吸収する控えめな土台）
+/** 庭。プールデッキとコーピング（水面は createPoolWater が別に重ねる） */
+export function buildGarden(h: HeightFn): THREE.BufferGeometry {
+  const b = new Builder();
+  const pl = poolLayout(h);
+  const { cx, cz, poolHalfX, poolHalfZ, deckHalf, deckY, poolY } = pl;
+  const outX = poolHalfX + deckHalf, outZ = poolHalfZ + deckHalf;
+
   const rng = makeRng(0xdec6);
   const skirt: [number, number, number, number][] = [
     [-outX, -outZ, outX, -outZ], [outX, -outZ, outX, outZ],
@@ -359,53 +379,117 @@ export function buildGarden(h: HeightFn): THREE.BufferGeometry {
   ];
   for (const [x0, z0, x1, z1] of ring) {
     const midX = cx + (x0 + x1) / 2, midZ = cz + (z0 + z1) / 2;
-    b.box([midX, deckY, midZ], [(x1 - x0) / 2, 0.10, (z1 - z0) / 2], shade(C.poolDeck, 0.90 + rng() * 0.18));
+    b.box([midX, deckY, midZ], [(x1 - x0) / 2, 0.10, (z1 - z0) / 2], shade(C.poolDeck, 0.92 + rng() * 0.14));
   }
-  // プールの縁（少し立ち上げた白い縁石）
-  b.box([cx, poolY + 0.28, cz - poolHalfZ], [poolHalfX + 0.08, 0.10, 0.08], C.poolDeck);
-  b.box([cx, poolY + 0.28, cz + poolHalfZ], [poolHalfX + 0.08, 0.10, 0.08], C.poolDeck);
-  b.box([cx - poolHalfX, poolY + 0.28, cz], [0.08, 0.10, poolHalfZ], C.poolDeck);
-  b.box([cx + poolHalfX, poolY + 0.28, cz], [0.08, 0.10, poolHalfZ], C.poolDeck);
-  // 水面（波紋なしの静止面。海より明るく澄んだ色にする）
-  b.box([cx, poolY, cz], [poolHalfX, 0.02, poolHalfZ], C.poolWater);
-  // プール底（浅く見せる）
-  b.box([cx, poolY - 0.55, cz], [poolHalfX - 0.06, 0.02, poolHalfZ - 0.06], shade(C.poolWater, 0.55));
+  // プールの縁（白いコーピング。薄く低くして、海との一体感を邪魔しない）
+  b.box([cx, poolY + 0.24, cz - poolHalfZ], [poolHalfX + 0.06, 0.07, 0.06], C.poolCoping);
+  b.box([cx, poolY + 0.24, cz + poolHalfZ], [poolHalfX + 0.06, 0.07, 0.06], C.poolCoping);
+  b.box([cx - poolHalfX, poolY + 0.24, cz], [0.06, 0.07, poolHalfZ], C.poolCoping);
+  b.box([cx + poolHalfX, poolY + 0.24, cz], [0.06, 0.07, poolHalfZ], C.poolCoping);
 
   return b.build();
 }
 
-/** 玄関先の鉢。中身の植物は foliage.ts 側で flora の低木を差し込む */
+/** プールの水面。海と同じ吸光・散乱モデルを共有ユニフォームごと使い回すことで
+ * 「海と同等の水質」にする（指示書②）。タイル張りの浅いプールなので海底の
+ * 代わりに一定の水深とタイルのアルベドを仮定するだけで、あとは同じ式。 */
+export function createPoolWater(env: Env, h: HeightFn): THREE.Mesh {
+  const pl = poolLayout(h);
+  const geo = new THREE.PlaneGeometry(pl.poolHalfX * 2 - 0.10, pl.poolHalfZ * 2 - 0.10, 24, 16);
+  geo.rotateX(-Math.PI / 2);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: env.uniforms,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.FrontSide,
+    vertexShader: COMMON + /* glsl */ `
+      uniform float uTime;
+      varying vec2 vXz;
+      varying vec3 vWorld;
+      void main() {
+        vec3 p = position;
+        p.y += sin(p.x * 3.4 + uTime * 1.3) * 0.010 + cos(p.z * 2.6 + uTime * 0.9) * 0.010;
+        vec4 world = modelMatrix * vec4(p, 1.0);
+        vXz = world.xz;
+        vWorld = world.xyz;
+        gl_Position = projectionMatrix * viewMatrix * world;
+      }
+    `,
+    fragmentShader: COMMON + SKY + /* glsl */ `
+      uniform float uTime;
+      uniform vec3 uCamPos;
+      uniform vec3 uKeyDir;
+      uniform vec3 uKeyLight;
+      uniform vec3 uAmbLight;
+      uniform vec3 uExtinction;
+      uniform vec3 uScatterCoef;
+      varying vec2 vXz;
+      varying vec3 vWorld;
+      void main() {
+        // タイル張りの浅いプールなので、海底の代わりに一定の水深を仮定する
+        float depth = 1.35;
+        vec3 tileAlbedo = sRGB(214.0, 232.0, 232.0);
+        vec3 bedLit = tileAlbedo * (uKeyLight * max(uKeyDir.y, 0.15) + uAmbLight * 0.7);
+        vec3 trans = exp(-uExtinction * depth * 1.6);
+        vec3 twoE = 2.0 * uExtinction;
+        vec3 inScat = (uScatterCoef / twoE) * (1.0 - exp(-twoE * depth)) * (uKeyLight * 0.75 + uAmbLight * 0.9);
+        vec3 body = bedLit * trans + inScat;
+
+        vec3 V = normalize(uCamPos - vWorld);
+        vec2 rp = vXz * 1.6 + vec2(uTime * 0.05, uTime * 0.04);
+        float n = fbm3(rp);
+        vec3 N = normalize(vec3(n * 0.05, 1.0, fbm3(rp * 1.7 + 5.0) * 0.05));
+        vec3 R = reflect(-V, N);
+        R.y = abs(R.y);
+        vec3 refl = skyColor(normalize(R), 0.0);
+        float fres = 0.03 + 0.6 * pow(1.0 - max(dot(N, V), 0.0), 4.0);
+        vec3 col = mix(body, refl, fres);
+
+        vec3 H = normalize(uKeyDir + V);
+        col += uSunColor * pow(max(dot(N, H), 0.0), 500.0) * 1.6;
+
+        gl_FragColor = vec4(grade(col), 0.95);
+      }
+    `
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(pl.cx, pl.poolY, pl.cz);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 11;
+  return mesh;
+}
+
+/** 玄関先の鉢。最小限、ソテツ1本だけ（指示書「装飾は最小限に留める」） */
 export const POTTED_SPOTS: [number, number][] = [
-  [VILLA.x - DOOR_W / 2 - 0.9, VILLA.z - HALF_D - VERANDA_D + 0.5],
-  [VILLA.x + DOOR_W / 2 + 0.9, VILLA.z - HALF_D - VERANDA_D + 0.5]
+  [VILLA.x - DOOR_W / 2 - 1.3, VILLA.z - HALF_D - VERANDA_D + 0.5]
 ];
 
 export function buildPots(h: HeightFn): THREE.BufferGeometry {
   const b = new Builder();
   for (const [x, z] of POTTED_SPOTS) {
     const g = h(x, z);
-    b.tube([[x, g, z], [x, g + 0.30, z]], [0.24, 0.20], 8, hex(0xc17a4e), 0);
-    b.tube([[x, g + 0.28, z], [x, g + 0.34, z]], [0.27, 0.27], 8, hex(0xa8613a), 0);
+    b.tube([[x, g, z], [x, g + 0.30, z]], [0.22, 0.19], 8, C.steel, 0);
+    b.tube([[x, g + 0.28, z], [x, g + 0.33, z]], [0.24, 0.24], 8, shade(C.steel, 0.85), 0);
   }
   return b.build();
 }
 
-/** 軒下のランタン本体（灯りは createEntryLantern が別途重ねる） */
+/** 軒下の間接照明の本体（灯りは createEntryLantern が別途重ねる）。
+ * 吊り下げ式ランタンではなく、スラブの下端に沿った細いスリット状の器具にする */
 function lanternHousing(b: Builder, layout: VillaLayout): void {
-  const p: V3 = [VILLA.x, layout.floor1Y + WALL1_H - 0.20, VILLA.z - HALF_D - 0.30];
-  b.tube([[p[0], p[1] + 0.22, p[2]], [p[0], p[1] - 0.02, p[2]]], [0.015, 0.015], 4, C.lantern, 0);
-  b.box(p, [0.09, 0.13, 0.09], C.lantern);
+  const y = layout.floor1Y + WALL1_H + 0.02;
+  b.box([VILLA.x, y, VILLA.z - HALF_D - 0.28], [0.55, 0.03, 0.05], C.lantern);
 }
 
 /**
- * 軒下ランタンの灯り。焚き火のような揺らぎは持たせず、夜（1 - uDay）に
+ * 軒下照明の灯り。焚き火のような揺らぎは持たせず、夜（1 - uDay）に
  * 応じて静かに灯るだけのごく単純な発光。campfire.ts と同じ、
  * この作品の照明モデル（three.js のシーンライトを参照しない自前シェーダ）
  * にそのまま乗せている。
  */
 export function createEntryLantern(env: Env, layout: VillaLayout): THREE.Mesh {
-  const p: V3 = [VILLA.x, layout.floor1Y + WALL1_H - 0.20, VILLA.z - HALF_D - 0.30];
-  const geo = new THREE.IcosahedronGeometry(0.13, 0);
+  const p: V3 = [VILLA.x, layout.floor1Y + WALL1_H - 0.02, VILLA.z - HALF_D - 0.28];
+  const geo = new THREE.IcosahedronGeometry(0.09, 0);
   const mat = new THREE.ShaderMaterial({
     uniforms: env.uniforms,
     transparent: true,
@@ -419,7 +503,7 @@ export function createEntryLantern(env: Env, layout: VillaLayout): THREE.Mesh {
     fragmentShader: COMMON + /* glsl */ `
       uniform float uDay;
       void main() {
-        vec3 col = sRGB(255.0, 196.0, 130.0) * (1.0 - uDay) * 0.9;
+        vec3 col = sRGB(255.0, 200.0, 140.0) * (1.0 - uDay) * 0.9;
         gl_FragColor = vec4(grade(col), (1.0 - uDay) * 0.85);
       }
     `
@@ -431,60 +515,147 @@ export function createEntryLantern(env: Env, layout: VillaLayout): THREE.Mesh {
   return mesh;
 }
 
-/** 螺旋階段。踏板を STAIR の踊り場の中でらせん状に配置するだけの簡易実装 */
+export type DoorLayout = {
+  y0: number; y1: number; z: number; halfW: number; halfH: number;
+  closedX: number; openX: number;
+};
+
+/** スライドドアの開口位置。壁側（buildVillaExterior）と動的メッシュの両方が使う */
+function doorLayout(layout: VillaLayout): DoorLayout {
+  const y0 = layout.floor1Y + 0.02, y1 = layout.floor1Y + WALL1_H - 0.02;
+  return {
+    y0, y1, z: VILLA.z - HALF_D,
+    halfW: DOOR_W / 2, halfH: (y1 - y0) / 2,
+    closedX: VILLA.x, openX: VILLA.x + (HALF_W - GLASS_MARGIN) // 東の方立の裏に隠れる位置
+  };
+}
+
+/**
+ * スライド式ガラスドア（指示書④）。この作品の家具・地形はすべて静的に
+ * 焼き込んだ merged geometry で、動くものは焚き火・軒灯だけが例外的に
+ * 独立した Mesh だった。ドアも同じ扱いにする：プレイヤーの位置を毎フレーム
+ * 見て開閉し、当たり判定（box）もその開閉に追従させる。
+ */
+export function createSlidingDoor(env: Env, layout: VillaLayout): {
+  mesh: THREE.Mesh;
+  update: (playerX: number, playerZ: number, dt: number) => void;
+  box: () => AABB;
+} {
+  const dl = doorLayout(layout);
+  const geo = new THREE.PlaneGeometry(dl.halfW * 2 * 0.96, dl.halfH * 2 * 0.96);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: env.uniforms,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    vertexShader: /* glsl */ `
+      varying vec3 vNormalW;
+      varying vec3 vWorld;
+      void main() {
+        vNormalW = normalize(mat3(modelMatrix) * normal);
+        vec4 world = modelMatrix * vec4(position, 1.0);
+        vWorld = world.xyz;
+        gl_Position = projectionMatrix * viewMatrix * world;
+      }
+    `,
+    fragmentShader: COMMON + /* glsl */ `
+      uniform vec3 uCamPos;
+      uniform vec3 uKeyDir;
+      uniform vec3 uKeyLight;
+      uniform vec3 uAmbLight;
+      varying vec3 vNormalW;
+      varying vec3 vWorld;
+      void main() {
+        vec3 V = normalize(uCamPos - vWorld);
+        float fres = pow(1.0 - max(dot(normalize(vNormalW), V), 0.0), 3.0);
+        vec3 glassCol = sRGB(180.0, 210.0, 216.0);
+        vec3 lit = glassCol * (uKeyLight * max(uKeyDir.y, 0.25) + uAmbLight);
+        vec3 col = mix(lit * 0.55, sRGB(255.0, 255.0, 255.0), fres * 0.6);
+        gl_FragColor = vec4(grade(col), 0.30 + fres * 0.35);
+      }
+    `
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(dl.closedX, (dl.y0 + dl.y1) / 2, dl.z);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 12;
+
+  let openAmount = 0;
+  const TRIGGER = 2.2;
+  function update(playerX: number, playerZ: number, dt: number): void {
+    const dist = Math.hypot(playerX - dl.closedX, playerZ - dl.z);
+    const target = dist < TRIGGER ? 1 : 0;
+    openAmount += (target - openAmount) * Math.min(1, dt * 3.2);
+    mesh.position.x = dl.closedX + (dl.openX - dl.closedX) * openAmount;
+  }
+  function box(): AABB {
+    return makeAABB([mesh.position.x, mesh.position.y, mesh.position.z], [dl.halfW * 0.96, dl.halfH * 0.96, 0.06]);
+  }
+  return { mesh, update, box };
+}
+
+/** 螺旋階段。白/スチールの片持ち踏板が浮いているように見せる（指示書③） */
 function buildSpiralStair(b: Builder, layout: VillaLayout): void {
   const cx = VILLA.x + (STAIR.x0 + STAIR.x1) / 2, cz = VILLA.z + (STAIR.z0 + STAIR.z1) / 2;
   const r = Math.min(STAIR.x1 - STAIR.x0, STAIR.z1 - STAIR.z0) / 2 - 0.15;
   const steps = 12;
   const turns = 1.4;
-  b.tube([[cx, layout.floor1Y, cz], [cx, layout.floor2Y + 0.1, cz]], [0.06, 0.06], 8, C.rail, 0);
+  b.tube([[cx, layout.floor1Y, cz], [cx, layout.floor2Y + 0.1, cz]], [0.05, 0.05], 10, C.steel, 0);
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const a = t * Math.PI * 2 * turns;
     const y = layout.floor1Y + (layout.floor2Y - layout.floor1Y) * t;
     const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
     const nx = cx + Math.cos(a + 0.3) * r * 0.55, nz = cz + Math.sin(a + 0.3) * r * 0.55;
-    // 踏板（芯から外へ台形に張り出す板）
+    // 踏板（芯から外へ台形に張り出す板）。leaf を効かせて白く浮かせる
     b.quad(
       [nx, y, nz], [x, y, z],
       [x + Math.cos(a) * 0.06, y, z + Math.sin(a) * 0.06],
       [nx + Math.cos(a) * 0.06, y, nz + Math.sin(a) * 0.06],
-      shade(C.woodDark, 0.9 + (i % 3) * 0.06), 0, 0
+      shade(C.steel, 0.97 + (i % 3) * 0.02), 0, 0.35
     );
-    // 手すりの支柱
-    if (i % 2 === 0) b.tube([[x, y, z], [x, y + 0.55, z]], [0.018, 0.018], 4, C.rail, 0);
+    if (i % 2 === 0) b.tube([[x, y, z], [x, y + 0.52, z]], [0.014, 0.014], 4, C.steel, 0);
   }
 }
 
 /** 1F 家具。開放的な玄関＋リビングを1つの土間として作る */
-function buildInterior1F(b: Builder, layout: VillaLayout): void {
+function buildInterior1F(b: Builder, layout: VillaLayout, colliders: AABB[]): void {
   const y = layout.floor1Y;
   // 床（フローリング）
   b.box([VILLA.x, y - 0.02, VILLA.z], [HALF_W - 0.05, 0.03, HALF_D - 0.05], C.floorWood);
 
-  // --- ソファ（西寄り、中央を向く） ---
+  // --- ソファ（西寄り、中央を向く）。座面・背もたれ・肘掛けの継ぎ目に
+  // 丸みを通して柔らかく見せる（指示書⑤） ---
   const sx = VILLA.x - HALF_W * 0.55, sz = VILLA.z + 0.4;
-  b.box([sx, y + 0.22, sz], [1.35, 0.22, 0.55], C.sofa);
-  b.box([sx, y + 0.50, sz - 0.42], [1.35, 0.20, 0.13], C.sofa);
+  b.box([sx, y + 0.20, sz], [1.35, 0.18, 0.55], C.sofa);
+  b.box([sx, y + 0.52, sz - 0.30], [1.35, 0.24, 0.14], C.sofa);
+  b.tube([[sx - 1.30, y + 0.36, sz - 0.16], [sx + 1.30, y + 0.36, sz - 0.16]], [0.16, 0.16], 8, C.sofa, 0);
   for (const dx of [-0.85, 0, 0.85]) {
-    b.box([sx + dx, y + 0.48, sz + 0.08], [0.32, 0.14, 0.30], C.sofaCushion);
+    b.box([sx + dx, y + 0.42, sz + 0.10], [0.32, 0.13, 0.30], C.sofaCushion);
   }
-  b.box([sx - 1.30, y + 0.30, sz], [0.10, 0.30, 0.55], shade(C.sofa, 0.85));
-  b.box([sx + 1.30, y + 0.30, sz], [0.10, 0.30, 0.55], shade(C.sofa, 0.85));
+  for (const s of [-1, 1]) {
+    b.box([sx + s * 1.30, y + 0.26, sz], [0.11, 0.26, 0.55], shade(C.sofa, 0.92));
+    b.tube([[sx + s * 1.30, y + 0.50, sz - 0.52], [sx + s * 1.30, y + 0.50, sz + 0.52]], [0.11, 0.11], 8, shade(C.sofa, 0.92), 0);
+  }
+  colliders.push(makeAABB([sx, y + 0.3, sz], [1.45, 0.6, 0.68]));
 
-  // --- TV（北壁ぎわの低い台の上） ---
+  // --- TV（北壁ぎわ。視距離4.5mから対角約50インチ相当に拡大：指示書⑥） ---
   const tvx = VILLA.x - 1.1, tvz = VILLA.z + HALF_D - 0.35;
-  b.box([tvx, y + 0.18, tvz], [0.55, 0.16, 0.18], shade(C.counter, 0.9));
-  b.box([tvx, y + 0.55, tvz - 0.06], [0.48, 0.30, 0.04], C.tv);
+  b.box([tvx, y + 0.18, tvz], [0.62, 0.16, 0.18], shade(C.counter, 0.9));
+  b.box([tvx, y + 0.62, tvz - 0.06], [0.56, 0.31, 0.035], C.tv);
 
   // --- キッチン（東壁ぎわのオープンカウンター） ---
   const kx = VILLA.x + HALF_W - 0.55;
-  b.box([kx, y + 0.42, VILLA.z + 1.2], [0.42, 0.42, 1.55], C.counter);
+  const k1: V3 = [kx, y + 0.42, VILLA.z + 1.2], k1h: V3 = [0.42, 0.42, 1.55];
+  const k2: V3 = [kx, y + 0.42, VILLA.z - 0.7], k2h: V3 = [0.42, 0.42, 0.85];
+  b.box(k1, k1h, C.counter);
   b.box([kx, y + 0.86, VILLA.z + 1.2], [0.44, 0.03, 1.58], C.counterTop);
-  b.box([kx, y + 0.42, VILLA.z - 0.7], [0.42, 0.42, 0.85], C.counter);
+  b.box(k2, k2h, C.counter);
   b.box([kx, y + 0.86, VILLA.z - 0.7], [0.44, 0.03, 0.88], C.counterTop);
+  colliders.push(makeAABB(k1, [k1h[0] + 0.02, k1h[1] + 0.44, k1h[2]]));
+  colliders.push(makeAABB(k2, [k2h[0] + 0.02, k2h[1] + 0.44, k2h[2]]));
 
-  // --- 飾り棚（北壁。フレンチドアから戻ってすぐ目に入る） ---
+  // --- 飾り棚（北壁。ドアから戻ってすぐ目に入る場所） ---
   const shx = VILLA.x + 2.0, shz = VILLA.z + HALF_D - 0.12;
   for (const dy of [0, 0.55]) {
     b.box([shx, y + 0.85 + dy, shz], [0.85, 0.03, 0.16], C.shelf);
@@ -496,10 +667,9 @@ function buildInterior1F(b: Builder, layout: VillaLayout): void {
 }
 
 /** 2F 家具。窓辺に書き物机、寝室にベッド */
-function buildInterior2F(b: Builder, layout: VillaLayout): void {
+function buildInterior2F(b: Builder, layout: VillaLayout, colliders: AABB[]): void {
   const y = layout.floor2Y;
-  // 床。階段の吹き抜け（STAIR）は矩形の切り欠きとして、2枚の板で L字に敷く
-  // 階段の吹き抜け（STAIR、北東の隅にぴったり寄せてある）を、
+  // 床。階段の吹き抜け（STAIR、北東の隅にぴったり寄せてある）を、
   // 矩形2枚で隙間なく L字に敷く。継ぎ目をぴったり合わせて、
   // すきま／めり込みによる継ぎ目のちらつきを避ける。
   const notchX = STAIR.x0, notchZ = STAIR.z0;
@@ -511,25 +681,27 @@ function buildInterior2F(b: Builder, layout: VillaLayout): void {
 
   // --- ベッド（西壁ぎわ） ---
   const bx = VILLA.x - HALF_W * 0.55, bz = VILLA.z - 0.3;
-  b.box([bx, y + 0.20, bz], [1.0, 0.20, 1.55], C.bedFrame);
+  const bedCenter: V3 = [bx, y + 0.22, bz];
+  b.box(bedCenter, [1.0, 0.16, 1.55], shade(C.bedFrame, 0.95));
   b.box([bx, y + 0.40, bz], [0.95, 0.14, 1.48], C.bed);
-  b.box([bx, y + 0.60, bz - 1.30], [0.98, 0.28, 0.10], C.bedFrame);
+  b.box([bx, y + 0.62, bz - 1.30], [0.98, 0.30, 0.08], C.bedFrame);
   b.box([bx - 0.45, y + 0.56, bz - 1.05], [0.30, 0.16, 0.28], hex(0xffffff));
   b.box([bx + 0.45, y + 0.56, bz - 1.05], [0.30, 0.16, 0.28], hex(0xffffff));
+  colliders.push(makeAABB(bedCenter, [1.05, 0.45, 1.60]));
 
-  // --- 書き物机（南の小窓の脇。灯篭流しの一言をここで書く） ---
+  // --- 書き物机（南の大窓の脇。灯篭流しの一言をここで書く。白/スチールで統一） ---
   const dx = VILLA.x + 1.6, dz = VILLA.z - HALF_D + 0.55;
-  b.box([dx, y + 0.42, dz], [0.55, 0.04, 0.35], C.desk);
+  b.box([dx, y + 0.42, dz], [0.55, 0.03, 0.35], C.desk);
   for (const [ox, oz] of [[-0.48, -0.28], [0.48, -0.28], [-0.48, 0.28], [0.48, 0.28]] as [number, number][]) {
-    b.box([dx + ox, y + 0.21, dz + oz], [0.03, 0.21, 0.03], C.desk);
+    b.tube([[dx + ox, y, dz + oz], [dx + ox, y + 0.40, dz + oz]], [0.018, 0.018], 5, C.steel, 0);
   }
-  b.box([dx, y + 0.60, dz + 0.30], [0.22, 0.16, 0.02], shade(C.desk, 0.8));
+  b.box([dx, y + 0.60, dz + 0.30], [0.22, 0.16, 0.02], shade(C.desk, 0.85));
 }
 
-export function buildVillaInterior(h: HeightFn): THREE.BufferGeometry {
+export function buildVillaInterior(h: HeightFn, colliders: AABB[]): THREE.BufferGeometry {
   const b = new Builder();
   const layout = computeLayout(h);
-  buildInterior1F(b, layout);
-  buildInterior2F(b, layout);
+  buildInterior1F(b, layout, colliders);
+  buildInterior2F(b, layout, colliders);
   return b.build();
 }
