@@ -4,7 +4,8 @@ import * as THREE from 'three';
 import { sampleHeight, type Field } from './heightfield';
 
 export type ViewName = 'beach' | 'overlook' | 'shallows' | 'reef'
-  | 'rest' | 'palms' | 'adan' | 'deigo' | 'mangrove' | 'pier' | 'lineup' | 'campfire';
+  | 'rest' | 'palms' | 'adan' | 'deigo' | 'mangrove' | 'pier' | 'lineup' | 'campfire'
+  | 'villa' | 'bedroom' | 'living' | 'veranda';
 
 /** 決め打ちの視点。批評用のスクリーンショットもここを基準に撮る。 */
 export const VIEWS: Record<ViewName, {
@@ -43,7 +44,17 @@ export const VIEWS: Record<ViewName, {
   // 種を横一列に並べて見比べる（?lineup=1 と一緒に使う）
   lineup: { pos: [0, 0, 133], look: [0, 104], pitch: 0.05, fov: 46, eye: 3.4 },
   // 焚き火を間近で。指示書 §5 の自己批評用（time=1.0 あたりが見やすい）
-  campfire: { pos: [-14.8, 0, 106.0], look: [-14.8, 113.6], pitch: 0.08, fov: 45, eye: 1.15 }
+  campfire: { pos: [-14.8, 0, 106.0], look: [-14.8, 113.6], pitch: 0.08, fov: 45, eye: 1.15 },
+
+  // --- 別荘（指示書 §6）。以下は外観・室内の自己批評用 ---
+  // 湾から見上げた別荘の外観。REST/焚き火のあたりから振り返った構図
+  villa: { pos: [-4, 0, 140], look: [-8, 176], pitch: 0.10, fov: 46, eye: 1.68 },
+  // 開始時の視点。2階の寝室、窓を背にベッドと階段口のほうを見る
+  bedroom: { pos: [-8.5, 0, 178.2], look: [-6, 174.5], pitch: -0.02, fov: 50, eye: 1.55 },
+  // 1F リビング。フレンチドア越しに庭と湾を見る、到着シーケンスの起点
+  living: { pos: [-8, 0, 178.5], look: [-8, 165], pitch: -0.05, fov: 50, eye: 1.55 },
+  // ベランダから湾を見渡す
+  veranda: { pos: [-8, 0, 170.3], look: [-8, 100], pitch: -0.10, fov: 52, eye: 1.55 }
 };
 
 export class Walker {
@@ -57,7 +68,18 @@ export class Walker {
   private lastY = 0;
   private moveTouch: { id: number; x: number; y: number; dx: number; dy: number } | null = null;
 
-  constructor(private readonly camera: THREE.PerspectiveCamera, private readonly field: Field) {}
+  constructor(
+    private readonly camera: THREE.PerspectiveCamera,
+    private readonly field: Field,
+    /** 別荘の中にいるときの床高さ。footprint の外なら null を返す想定 */
+    private readonly groundOverride?: (x: number, z: number) => number | null
+  ) {}
+
+  /** 地形の高さと、別荘の床（あれば）のどちらか高いほうを接地面にする */
+  private groundAt(x: number, z: number): number {
+    const over = this.groundOverride?.(x, z);
+    return over ?? sampleHeight(this.field, x, z);
+  }
 
   applyView(name: ViewName): void {
     const v = VIEWS[name];
@@ -74,7 +96,7 @@ export class Walker {
     this.eyeHeight = v.eye ?? 1.68;
     // 目線の高さはその場で確定させる。徐々に持ち上げると、最初の数フレームは
     // 地面の下にカメラがあることになり、地形が裏面カリングで消える。
-    this.pos.y = Math.max(sampleHeight(this.field, this.pos.x, this.pos.z), 0) + this.eyeHeight;
+    this.pos.y = Math.max(this.groundAt(this.pos.x, this.pos.z), 0) + this.eyeHeight;
     this.camera.fov = v.fov;
     this.camera.updateProjectionMatrix();
     this.sync();
@@ -136,7 +158,7 @@ export class Walker {
       if (gh > -1.15) { this.pos.x = step.x; this.pos.z = step.z; }
     }
 
-    const ground = sampleHeight(this.field, this.pos.x, this.pos.z);
+    const ground = this.groundAt(this.pos.x, this.pos.z);
     const eye = Math.max(ground, 0) + this.eyeHeight;
     this.pos.y += (eye - this.pos.y) * Math.min(1, dt * 9);
     this.sync();

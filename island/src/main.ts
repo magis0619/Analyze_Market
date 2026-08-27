@@ -5,6 +5,7 @@ import { createTerrain } from './terrain';
 import { createWater } from './water';
 import { createFoliage, createLineup, FIRE_POS } from './foliage';
 import { createCampfire } from './campfire';
+import { computeLayout, VillaFloorTracker, arrivalDepth } from './villa';
 import { sampleHeight } from './heightfield';
 import { Walker, VIEWS, type ViewName } from './walker';
 
@@ -39,8 +40,12 @@ const campfire = createCampfire(env);
 campfire.group.position.set(FIRE_POS.x, sampleHeight(field, FIRE_POS.x, FIRE_POS.z), FIRE_POS.z);
 scene.add(campfire.group);
 
-const walker = new Walker(camera, field);
-const view = (params.get('view') ?? 'beach') as ViewName;
+// 別荘の中は地形の高さ場ではなく、階の床・階段のスロープを接地面にする
+const villaLayout = computeLayout((x, z) => sampleHeight(field, x, z));
+const view = (params.get('view') ?? 'bedroom') as ViewName;
+// 寝室から始まる視点は 2F 扱いで起動する（同じ足元 x,z でも 1F と高さが違うため）
+const villaFloor = new VillaFloorTracker(view === 'bedroom');
+const walker = new Walker(camera, field, (x, z) => villaFloor.groundY(villaLayout, x, z));
 walker.applyView(view in VIEWS ? view : 'beach');
 walker.attach(canvas);
 
@@ -102,22 +107,24 @@ resize();
 const still = params.get('still') !== null ? Number(params.get('still')) : null;
 
 // --- 到着と、帰り道 -------------------------------------------------------
-// 「行って、帰ってくる」をひとつの体験にする。スクリーンショットのときだけは
-// 演出を飛ばして、色の突き合わせが到着途中の色に引きずられないようにする。
+// 「行って、帰ってくる」を、彩度の変化だけでなく別荘の動線として実体化する
+// （指示書 §6）。寝室にいるあいだは仄暗く、階段を降りるほど満ちていき、
+// フレンチドアを抜けて庭・浜へ出るほどさらに満ちる。逆順で戻れば引いていく。
+// この位置ベースの目標値に加えて、タブを離れたときは強制的に 0 へ引く
+// （指示書の「終わり方も設計する」の安全弁）。
+//
+// スクリーンショットのときは演出を飛ばせるように ?arrive= で固定できる。
 const arriveParam = params.get('arrive');
-if (arriveParam !== null) {
+const arriveOverride = arriveParam !== null;
+if (arriveOverride) {
   // 到着の途中の色を撮るための固定値（自己批評用）
   env.arrive = Math.max(0, Math.min(1, Number(arriveParam)));
   env.arriveTarget = env.arrive;
-} else if (still !== null) {
-  env.arrive = 1;
-  env.arriveTarget = 1;
 }
-document.addEventListener('visibilitychange', () => {
-  env.arriveTarget = document.hidden ? 0 : 1;
-});
-window.addEventListener('blur', () => { env.arriveTarget = 0; });
-window.addEventListener('focus', () => { env.arriveTarget = 1; });
+let tabVisible = true;
+document.addEventListener('visibilitychange', () => { tabVisible = !document.hidden; });
+window.addEventListener('blur', () => { tabVisible = false; });
+window.addEventListener('focus', () => { tabVisible = true; });
 
 let last = performance.now();
 let frames = 0;
@@ -125,6 +132,12 @@ function frame(now: number) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   walker.update(dt);
+  if (!arriveOverride) {
+    const posDepth = arrivalDepth(villaFloor, walker.pos.x, walker.pos.z);
+    env.arriveTarget = tabVisible ? posDepth : 0;
+    // still は dt=0 で呼ぶので、ease に頼らずその場の値をそのまま反映する
+    if (still !== null) env.arrive = env.arriveTarget;
+  }
   env.update(still === null ? dt : 0);
   if (still !== null) { env.clock = still; env.update(0); }
   (env.uniforms.uCamPos!.value as THREE.Vector3).copy(camera.position);
