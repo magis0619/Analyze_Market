@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { sampleHeight, type Field } from './heightfield';
+import { resolveHorizontal, type AABB } from './collision';
 
 export type ViewName = 'beach' | 'overlook' | 'shallows' | 'reef'
   | 'rest' | 'palms' | 'adan' | 'deigo' | 'mangrove' | 'pier' | 'lineup' | 'campfire'
@@ -62,6 +63,10 @@ export class Walker {
   pitch = 0;
   eyeHeight = 1.68;
   readonly pos = new THREE.Vector3();
+  /** 別荘の壁・家具・ドアの当たり判定（指示書「①家の衝突判定」）。
+   * 別荘から離れているあいだは空配列のままでよく、判定コストもかからない。
+   * main.ts が毎フレーム、ドア（動的コライダー）の現在位置に合わせて更新する。 */
+  colliders: AABB[] = [];
   private readonly keys = new Set<string>();
   private dragging = false;
   private lastX = 0;
@@ -152,10 +157,19 @@ export class Walker {
       const nx = (-sin * fwd + cos * side);
       const nz = (-cos * fwd - sin * side);
       const len = Math.hypot(nx, nz) || 1;
-      const step = new THREE.Vector3(this.pos.x + (nx / len) * speed, 0, this.pos.z + (nz / len) * speed);
+      const dx = (nx / len) * speed, dz = (nz / len) * speed;
       // 腰より深いところへは行かない
-      const gh = sampleHeight(this.field, step.x, step.z);
-      if (gh > -1.15) { this.pos.x = step.x; this.pos.z = step.z; }
+      const gh = sampleHeight(this.field, this.pos.x + dx, this.pos.z + dz);
+      if (gh > -1.15) {
+        // 家の中では、壁・家具・ドアに軸ごとにぶつかりながらスライドする
+        // （指示書「①家の衝突判定」）。別荘から離れていれば colliders が
+        // 空なので、これまでどおり地形に沿って自由に歩ける。
+        const resolved = this.colliders.length
+          ? resolveHorizontal(this.pos.x, this.pos.z, dx, dz, (x, z) => this.groundAt(x, z), this.colliders)
+          : { x: this.pos.x + dx, z: this.pos.z + dz };
+        this.pos.x = resolved.x;
+        this.pos.z = resolved.z;
+      }
     }
 
     const ground = this.groundAt(this.pos.x, this.pos.z);
