@@ -16,84 +16,12 @@ final class GoldenTests: XCTestCase {
 
     // MARK: - 読み込み
     //
-    // **`JSONSerialization` を使わない。**
-    //
-    // あれは `0.015739798778668046` を `NSDecimalNumber` として読み、
-    // `.doubleValue` で 2ulp 落とす（bits `…04000000` → `…03fffffe`）。
-    // 落ちるのは正解表のほうなので、**実装が正しいのにテストが落ちる**——
-    // しかも「1ulp ずれている」という、いかにも移植をしくじったように見える
-    // 落ち方をする。実際この罠に一度かかって、FP の contraction を疑った。
-    //
-    // `JSONDecoder`（と `Double(String)`）は正確に読む。数値を1つも落とさない
-    // 経路で読み込む。
+    // 読み取りの本体は JSONValue.swift にある（state 側の試験と共用）。
 
-    indirect enum JSONValue: Decodable {
-        case null
-        case bool(Bool)
-        case number(Double)
-        case string(String)
-        case array([JSONValue])
-        case object([String: JSONValue])
-
-        init(from decoder: Decoder) throws {
-            let c = try decoder.singleValueContainer()
-            if c.decodeNil() { self = .null; return }
-            // Bool を Double より先に試す。順番を逆にすると true/false が拾えない
-            if let v = try? c.decode(Bool.self) { self = .bool(v); return }
-            if let v = try? c.decode(Double.self) { self = .number(v); return }
-            if let v = try? c.decode(String.self) { self = .string(v); return }
-            if let v = try? c.decode([JSONValue].self) { self = .array(v); return }
-            if let v = try? c.decode([String: JSONValue].self) { self = .object(v); return }
-            throw DecodingError.dataCorruptedError(in: c, debugDescription: "unknown JSON node")
-        }
-    }
-
-    private static var golden: [String: JSONValue] = {
-        guard let url = Bundle.module.url(forResource: "golden", withExtension: "json"),
-              let data = try? Data(contentsOf: url),
-              let root = try? JSONDecoder().decode(JSONValue.self, from: data),
-              case .object(let obj) = root
-        else {
-            fatalError("golden.json を読めない。Package.swift の resources を確認する")
-        }
-        return obj
-    }()
+    private static let golden: [String: JSONValue] = JSONValue.loadResource("golden")
 
     private func node(_ key: String) -> [JSONValue] { a(Self.golden[key]) }
     private func obj(_ key: String) -> [String: JSONValue] { d(Self.golden[key]) }
-
-    // JSON の取り出し。テストなので、形が違えば落ちてよい。
-    private func d(_ v: JSONValue?) -> [String: JSONValue] {
-        guard case .object(let o)? = v else { fatalError("object を期待した: \(String(describing: v))") }
-        return o
-    }
-    private func a(_ v: JSONValue?) -> [JSONValue] {
-        guard case .array(let x)? = v else { fatalError("array を期待した: \(String(describing: v))") }
-        return x
-    }
-    private func f(_ v: JSONValue?) -> Double {
-        guard case .number(let n)? = v else { fatalError("number を期待した: \(String(describing: v))") }
-        return n
-    }
-    private func i(_ v: JSONValue?) -> Int { Int(f(v)) }
-    private func s(_ v: JSONValue?) -> String {
-        guard case .string(let x)? = v else { fatalError("string を期待した: \(String(describing: v))") }
-        return x
-    }
-    private func b(_ v: JSONValue?) -> Bool {
-        guard case .bool(let x)? = v else { fatalError("bool を期待した: \(String(describing: v))") }
-        return x
-    }
-    /// null かもしれない文字列（unique / weakTo / affix の element）
-    private func optS(_ v: JSONValue?) -> String? {
-        if case .string(let x)? = v { return x }
-        return nil
-    }
-    /// null かもしれないオブジェクト（potion）
-    private func optD(_ v: JSONValue?) -> [String: JSONValue]? {
-        if case .object(let o)? = v { return o }
-        return nil
-    }
 
     // MARK: - 1. 乱数
     //

@@ -12,7 +12,7 @@
 | track | 中身 | 状態 |
 |---|---|---|
 | **web（本流）** | TypeScript + three.js + DOM。遊べる | 完成して動いている。検証 854 件が通過 |
-| **swift（移植中）** | `swift/DelversCore`。ゲームロジックだけ | **`swift test` 14 件通過**。TS と完全一致。画面はこれから |
+| **swift（移植中）** | `swift/DelversCore`。ロジックと拠点の状態 | **`swift test` 20 件通過**。TS と完全一致。画面はこれから |
 
 web 版は Swift 移植で一行も変えていない。両方を並行して持つ前提で、
 ロジックの正はいまのところ **TypeScript 側**にある。
@@ -45,7 +45,8 @@ cd swift && swift test          # Xcode なら Package.swift を開く
 npm run swift:verify            # 移植した論理を照合（Swift を待たずに回せる）
 ```
 
-どちらも通る状態。`swift test` は 14 件、`swift:verify` は 7,810 件。
+どちらも通る状態。`swift test` は 20 件（うち state 層は 54 手の通し）、
+`swift:verify` は 7,810 件。
 落ちたときの読み方は `swift/README.md` の表にある。
 
 ---

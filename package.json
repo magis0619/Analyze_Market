@@ -11,7 +11,8 @@
     "test:ui": "bash scripts/ui-verify.sh",
     "swift:tables": "tsx tools/gen-swift-tables.ts > swift/Sources/DelversCore/Data/Generated.swift",
     "swift:golden": "tsx tools/golden.ts > swift/Tests/DelversCoreTests/Resources/golden.json",
-    "swift:verify": "python3 tools/verify-port.py"
+    "swift:verify": "python3 tools/verify-port.py",
+    "swift:golden-state": "tsx tools/golden-state.ts > swift/Tests/DelversCoreTests/Resources/golden-state.json"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

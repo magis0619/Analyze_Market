@@ -21,8 +21,8 @@ public let ELEMENTS: [Element] = [.physical, .fire, .lightning, .poison, .ice]
 /// Swift の `Dictionary` は順序を持たないため、そのまま辞書にすると
 /// 同率配分（0.5/0.5）の武器で主属性が実行ごとに変わる——
 /// サムネの色も台座の光も揺れる、再現しない不具合になる。
-public struct ElementSplit: Equatable, Sendable {
-    public struct Share: Equatable, Sendable {
+public struct ElementSplit: Equatable, Sendable, Codable {
+    public struct Share: Equatable, Sendable, Codable {
         public let element: Element
         public let value: Double
         public init(_ element: Element, _ value: Double) {
@@ -49,6 +49,18 @@ public struct ElementSplit: Equatable, Sendable {
     }
 
     public var isEmpty: Bool { shares.isEmpty }
+
+    // **配列そのものとして保存する。** 辞書に落とすと順序が消え、
+    // 0.5/0.5 の武器の主属性がセーブを跨いで入れ替わる。
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        shares = try c.decode([Share].self)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(shares)
+    }
 }
 
 /// 配分の中で最も比率の高い属性。同率なら**先に入ったほう**（JS と同じ）。
@@ -122,7 +134,7 @@ public struct AffixDef: Sendable {
     public let elemental: Bool
 }
 
-public struct Affix: Equatable, Sendable {
+public struct Affix: Equatable, Sendable, Codable {
     public let kind: AffixKind
     /// 内部の連続値。画面には出さない（§5.6）
     public let value: Double
@@ -136,6 +148,14 @@ public struct Affix: Equatable, Sendable {
         self.value = value
         self.tier = tier
         self.element = element
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try c.decode(AffixKind.self, forKey: .kind)
+        value = try c.decode(Double.self, forKey: .value)
+        tier = try c.decode(Int.self, forKey: .tier)
+        element = try c.decodeIfPresent(Element.self, forKey: .element)
     }
 }
 
@@ -162,7 +182,7 @@ public struct UniqueDef: Sendable {
     public let slot: Fit
 }
 
-public struct Item: Equatable, Sendable {
+public struct Item: Equatable, Sendable, Codable {
     public var id: String
     public var baseId: String
     public var slot: Slot
@@ -182,6 +202,24 @@ public struct Item: Equatable, Sendable {
     public var fromStage: Int
     /// インベントリのロック（一括売却から保護）
     public var locked: Bool
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        baseId = try c.decode(String.self, forKey: .baseId)
+        slot = try c.decode(Slot.self, forKey: .slot)
+        rarity = try c.decode(Rarity.self, forKey: .rarity)
+        power = try c.decode(Int.self, forKey: .power)
+        speed = try c.decode(Double.self, forKey: .speed)
+        crit = try c.decode(Double.self, forKey: .crit)
+        element = try c.decode(ElementSplit.self, forKey: .element)
+        affixes = try c.decode([Affix].self, forKey: .affixes)
+        unique = try c.decodeIfPresent(UniqueKind.self, forKey: .unique)
+        identified = try c.decode(Bool.self, forKey: .identified)
+        fromStage = try c.decode(Int.self, forKey: .fromStage)
+        // ロックは付いていない品のほうが多い。省略を許す
+        locked = try c.decodeIfPresent(Bool.self, forKey: .locked) ?? false
+    }
 
     public init(
         id: String, baseId: String, slot: Slot, rarity: Rarity,
@@ -319,7 +357,7 @@ public enum RunOutcome: String, Codable, Sendable {
     case retreat, clear, death
 }
 
-public struct RunStats: Equatable, Sendable {
+public struct RunStats: Equatable, Sendable, Codable {
     public var dealt: Int
     public var taken: Int
     public var kills: Int
@@ -331,7 +369,7 @@ public struct RunStats: Equatable, Sendable {
     public var potionSaved: Int
 }
 
-public struct RunResult: Equatable, Sendable {
+public struct RunResult: Equatable, Sendable, Codable {
     public var outcome: RunOutcome
     /// 到達した遭遇数
     public var depth: Int
@@ -353,7 +391,7 @@ public struct RunResult: Equatable, Sendable {
 
 // MARK: - 派遣
 
-public struct Dispatch: Equatable, Sendable {
+public struct Dispatch: Equatable, Sendable, Codable {
     public var id: String
     public var jobId: JobId
     public var stageId: Int

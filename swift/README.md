@@ -15,9 +15,13 @@ swift/
     Offline.swift         オフライン進行（§7.2）
     Data/Generated.swift  データ表（**自動生成**）
     Data/Tables.swift     表の引き方
+    State.swift           拠点の状態とセーブ（§3 / §7.5）
+    Persistence.swift     置き場所と通知の口（protocol）。実装はアプリが差す
   Tests/DelversCoreTests/
-    GoldenTests.swift     TypeScript 版の実測値と突き合わせる
-    Resources/golden.json 正解表（自動生成）
+    GoldenTests.swift       sim 層を実測値と突き合わせる
+    StateGoldenTests.swift  state 層を「台本を決めた通し」で1手ずつ照合する
+    JSONValue.swift         正解表の読み取り（JSONSerialization を使わない理由つき）
+    Resources/*.json        正解表（自動生成）
 ```
 
 ## ローカルで始める
@@ -58,8 +62,9 @@ swift build -c release  # ライブラリだけ
 
 | | 確かめ方 | 状態 |
 |---|---|---|
-| 書き写した**論理**が TS と同じか | `npm run swift:verify` | **7,810 件が一致** |
-| **Swift として通り、TS と同じ結果を出すか** | `swift test` | **14 件すべて成功**（Swift 6.3.3 / macOS arm64） |
+| 書き写した**論理**が TS と同じか | `npm run swift:verify` | **7,810 件が一致**（sim 層） |
+| **Swift として通り、TS と同じ結果を出すか** | `swift test` | **20 件すべて成功**（Swift 6.3.3 / macOS arm64） |
+| 状態が同じ手順で同じように動くか | `swift test` | **54 手の通しを1手ずつ照合**して一致 |
 | 実機でアプリとして動くか | 次の段（画面層） | 未着手 |
 
 最初のコンパイルで出た本当の欠陥は1つだけだった——`EnemyDef` / `HerbDef` / `PotionDef` の
@@ -113,6 +118,16 @@ TS → Python → Swift の3実装が同じ値を出している。
    しくじったように見える落ち方をする。実際この罠に一度かかって浮動小数の
    contraction を疑った。`JSONDecoder` と `Double(String)` は正確。
 
+8. **state の写しは深くコピーする。** 台本の1手ごとに状態を写す作りにしたが、
+   最初はオブジェクトをそのまま入れていた。`equipped` と図鑑の項目が全フレームで
+   同じ参照を指し、**54手ぶんの「写し」が全部最終状態**になっていた——
+   init の時点で死亡後に支給された初期装備が付いている、という
+   ありえない正解表ができていた。Swift 側の1手目が落ちて気づいた。
+
+9. **`sorted` の安定性に頼らない。** 調合は「多い材料から使う」ために並べ替えるが、
+   JS の `sort` は安定で同数なら元の並びが残るのに対し、Swift の `sorted` は
+   安定性を保証しない。同数のときに減る材料が変わるので、添字を第2キーにしてある。
+
 ### 実機で分かったこと
 
 `pow` を避けた判断は、クラウドでは「libm ごとに違いうる」という予測だった。
@@ -127,9 +142,10 @@ TS → Python → Swift の3実装が同じ値を出している。
 ## 作り直すとき
 
 ```sh
-npm run swift:tables    # データ表を TS から作り直す
-npm run swift:golden    # 正解表を作り直す
-npm run swift:verify    # 移植した論理を照合する
+npm run swift:tables       # データ表を TS から作り直す
+npm run swift:golden       # sim 層の正解表を作り直す
+npm run swift:golden-state # state 層の正解表を作り直す
+npm run swift:verify       # 移植した論理を照合する（Swift 不要）
 ```
 
 TypeScript 側のバランスを触ったら、必ず `swift:golden` を作り直すこと。

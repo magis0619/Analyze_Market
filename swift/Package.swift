@@ -24,8 +24,9 @@ let package = Package(
             name: "DelversCoreTests",
             dependencies: ["DelversCore"],
             resources: [
-                // TypeScript 版の実測値。移植の正解表（tools/golden.ts が作る）
-                .process("Resources/golden.json")
+                // TypeScript 版の実測値。移植の正解表
+                .process("Resources/golden.json"),        // sim 層（tools/golden.ts）
+                .process("Resources/golden-state.json")   // state 層（tools/golden-state.ts）
             ]
         )
     ]
