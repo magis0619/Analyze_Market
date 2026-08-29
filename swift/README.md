@@ -20,11 +20,36 @@ swift/
     Resources/golden.json 正解表（自動生成）
 ```
 
-## 動かす
+## ローカルで始める
 
 ```sh
+git fetch origin claude/game-creation-bcoyzz
+git checkout claude/game-creation-bcoyzz
+
 cd swift
-swift test          # または Xcode で Package.swift を開く
+swift test                      # Xcode なら Package.swift を開く（File > Open）
+```
+
+`swift test` が**最初の1回目のコンパイル**になる。だから最初は型か構文で落ちる可能性が
+高い。落ち方で対応が分かれる:
+
+| 落ち方 | 意味 | やること |
+|---|---|---|
+| コンパイルエラー | Swift として通っていない | その行を直す。論理は照合済みなので、**式の中身は変えない**——型注釈・`Swift.min` の付け方・アクセス修飾子で解く |
+| `test1_Prng…` が落ちる | 乱数がずれている | `Prng.step` の `Int32(bitPattern:)` の変換を疑う。ここが落ちていたら以降は全部道連れなので、まずこれだけ直す |
+| `test2_難易度倍率…` が落ちる | `pow` を使ってしまっている | `intPow`（繰り返し乗算）に戻す |
+| `test3_装備生成…` が落ちる | 乱数を引く順番か回数が違う | 失敗メッセージが「seed X/slot/stage Y の N 個目」まで言う。その1件だけ TS と読み比べる |
+| `test4_派遣…` の HP 推移が落ちる | どこかの遭遇で別の道に入った | `hpCurve[k]` の k が分岐点。その遭遇の条件式を読む |
+
+論理そのものがずれていた場合は、**TypeScript 側と読み比べる前に**
+`python3 tools/verify-port.py` を回すこと。Python 側（＝Swift を写したもの）が
+通っているなら、ずれているのは論理ではなく Swift の書き方のほう。
+
+## 動かす（作り直しを含む）
+
+```sh
+swift test              # 突き合わせ
+swift build -c release  # ライブラリだけ
 ```
 
 ## この移植で確かめてあること・いないこと
