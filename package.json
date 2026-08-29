@@ -8,7 +8,10 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "node scripts/static-checks.mjs && tsx test/run-tests.ts && bash scripts/ui-verify.sh",
-    "test:ui": "bash scripts/ui-verify.sh"
+    "test:ui": "bash scripts/ui-verify.sh",
+    "swift:tables": "tsx tools/gen-swift-tables.ts > swift/Sources/DelversCore/Data/Generated.swift",
+    "swift:golden": "tsx tools/golden.ts > swift/Tests/DelversCoreTests/Resources/golden.json",
+    "swift:verify": "python3 tools/verify-port.py"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
