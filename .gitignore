@@ -7,3 +7,7 @@ dist/
 .build/
 *.xcuserdatad
 DerivedData/
+
+# iOS のビルド生成物と、生成されるプロジェクトファイル
+ios/.build/
+ios/Delvers.xcodeproj/
