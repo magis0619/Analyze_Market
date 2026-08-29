@@ -1,0 +1,123 @@
+client:
+  name: basic
+  file-system: device-agnostic
+tools: {}
+targets:
+  "DelversCore-arm64-apple-macosx-debug.module": ["<DelversCore-arm64-apple-macosx-debug.module>"]
+  "DelversCorePackageTests-arm64-apple-macosx-debug.module": ["<DelversCorePackageTests-arm64-apple-macosx-debug.module>"]
+  "DelversCorePackageTests-arm64-apple-macosx-debug.test": ["<DelversCorePackageTests-arm64-apple-macosx-debug.test>"]
+  "DelversCoreTests-arm64-apple-macosx-debug.module": ["<DelversCoreTests-arm64-apple-macosx-debug.module>"]
+  "PackageStructure": ["<PackageStructure>"]
+  "main": ["<DelversCore-arm64-apple-macosx-debug.module>"]
+  "test": ["<DelversCore-arm64-apple-macosx-debug.module>","<DelversCorePackageTests-arm64-apple-macosx-debug.test>","<DelversCoreTests-arm64-apple-macosx-debug.module>"]
+default: "main"
+nodes:
+  "/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+  "/Users/imiytk/Analyze_Market/swift/Tests/DelversCoreTests/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+commands:
+  "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Combat.swift","/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Data/Generated.swift","/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Data/Tables.swift","/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Items.swift","/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Offline.swift","/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Prng.swift","/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Types.swift"]
+    outputs: ["/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/sources"]
+    description: "Write auxiliary file /Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/sources"
+
+  "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.derived/runner.swift"]
+    outputs: ["/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.build/sources"]
+    description: "Write auxiliary file /Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.build/sources"
+
+  "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.derived/runner.swift":
+    tool: test-entry-point-tool
+    inputs: []
+    outputs: ["/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.derived/runner.swift"]
+
+  "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.product/Objects.LinkFileList":
+    tool: write-auxiliary-file
+    inputs: ["<link-file-list>","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Combat.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Generated.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Items.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Offline.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Prng.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Tables.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Types.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.build/runner.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCoreTests.build/GoldenTests.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCoreTests.build/resource_bundle_accessor.swift.o"]
+    outputs: ["/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.product/Objects.LinkFileList"]
+    description: "Write auxiliary file /Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.product/Objects.LinkFileList"
+
+  "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCoreTests.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/imiytk/Analyze_Market/swift/Tests/DelversCoreTests/GoldenTests.swift","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCoreTests.build/DerivedSources/resource_bundle_accessor.swift"]
+    outputs: ["/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCoreTests.build/sources"]
+    description: "Write auxiliary file /Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCoreTests.build/sources"
+
+  "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore_DelversCoreTests.bundle/golden.json":
+    tool: copy-tool
+    inputs: ["/Users/imiytk/Analyze_Market/swift/Tests/DelversCoreTests/Resources/golden.json"]
+    outputs: ["/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore_DelversCoreTests.bundle/golden.json"]
+    description: "Copying /Users/imiytk/Analyze_Market/swift/Tests/DelversCoreTests/Resources/golden.json"
+
+  "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt":
+    tool: write-auxiliary-file
+    inputs: ["<swift-get-version>","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"]
+    outputs: ["/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"]
+    always-out-of-date: "true"
+    description: "Write auxiliary file /Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+
+  "<DelversCore-arm64-apple-macosx-debug.module>":
+    tool: phony
+    inputs: ["/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Combat.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Generated.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Tables.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Items.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Offline.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Prng.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Types.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/Modules/DelversCore.swiftmodule"]
+    outputs: ["<DelversCore-arm64-apple-macosx-debug.module>"]
+
+  "<DelversCorePackageTests-arm64-apple-macosx-debug.module>":
+    tool: phony
+    inputs: ["/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.build/runner.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/Modules/DelversCorePackageTests.swiftmodule"]
+    outputs: ["<DelversCorePackageTests-arm64-apple-macosx-debug.module>"]
+
+  "<DelversCorePackageTests-arm64-apple-macosx-debug.test>":
+    tool: phony
+    inputs: ["/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.xctest/Contents/MacOS/DelversCorePackageTests"]
+    outputs: ["<DelversCorePackageTests-arm64-apple-macosx-debug.test>"]
+
+  "<DelversCoreTests-arm64-apple-macosx-debug.module>":
+    tool: phony
+    inputs: ["/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCoreTests.build/GoldenTests.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCoreTests.build/resource_bundle_accessor.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/Modules/DelversCoreTests.swiftmodule"]
+    outputs: ["<DelversCoreTests-arm64-apple-macosx-debug.module>"]
+
+  "C.DelversCore-arm64-apple-macosx-debug.module":
+    tool: shell
+    inputs: ["/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Combat.swift","/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Data/Generated.swift","/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Data/Tables.swift","/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Items.swift","/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Offline.swift","/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Prng.swift","/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Types.swift","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/sources"]
+    outputs: ["/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Combat.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Generated.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Tables.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Items.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Offline.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Prng.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Types.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/Modules/DelversCore.swiftmodule"]
+    description: "Compiling Swift Module 'DelversCore' (7 sources)"
+    args: ["/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc","-module-name","DelversCore","-emit-dependencies","-emit-module","-emit-module-path","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/Modules/DelversCore.swiftmodule","-output-file-map","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/output-file-map.json","-parse-as-library","-incremental","-c","@/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/sources","-I","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/Modules","-target","arm64-apple-macosx13.0","-incremental","-enable-batch-mode","-serialize-diagnostics","-index-store-path","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/index/store","-Onone","-enable-testing","-j8","-DSWIFT_PACKAGE","-DDEBUG","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/ModuleCache","-parseable-output","-parse-as-library","-emit-objc-header","-emit-objc-header-path","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/include/DelversCore-Swift.h","-swift-version","5","-plugin-path","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing","-sdk","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-I","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-L","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-g","-Xcc","-isysroot","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk","-Xcc","-F","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-Xcc","-fPIC","-Xcc","-g","-package-name","swift"]
+
+  "C.DelversCorePackageTests-arm64-apple-macosx-debug.module":
+    tool: shell
+    inputs: ["/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.derived/runner.swift","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/Modules/DelversCoreTests.swiftmodule","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.build/sources"]
+    outputs: ["/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.build/runner.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/Modules/DelversCorePackageTests.swiftmodule"]
+    description: "Compiling Swift Module 'DelversCorePackageTests' (1 sources)"
+    args: ["/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc","-module-name","DelversCorePackageTests","-emit-dependencies","-emit-module","-emit-module-path","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/Modules/DelversCorePackageTests.swiftmodule","-output-file-map","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.build/output-file-map.json","-parse-as-library","-incremental","-c","@/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.build/sources","-I","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/Modules","-target","arm64-apple-macosx13.0","-incremental","-enable-batch-mode","-serialize-diagnostics","-index-store-path","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/index/store","-Onone","-enable-testing","-Xfrontend","-enable-cross-import-overlays","-j8","-DSWIFT_PACKAGE","-DDEBUG","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/ModuleCache","-parseable-output","-parse-as-library","-emit-objc-header","-emit-objc-header-path","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.build/include/DelversCorePackageTests-Swift.h","-plugin-path","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing","-sdk","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-I","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-L","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-g","-Xcc","-isysroot","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk","-Xcc","-F","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-Xcc","-fPIC","-Xcc","-g","-package-name","swift"]
+
+  "C.DelversCorePackageTests-arm64-apple-macosx-debug.test":
+    tool: shell
+    inputs: ["/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Combat.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Generated.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Items.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Offline.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Prng.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Tables.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Types.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.build/runner.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCoreTests.build/GoldenTests.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCoreTests.build/resource_bundle_accessor.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.product/Objects.LinkFileList"]
+    outputs: ["/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.xctest/Contents/MacOS/DelversCorePackageTests"]
+    description: "Linking ./.build/arm64-apple-macosx/debug/DelversCorePackageTests.xctest/Contents/MacOS/DelversCorePackageTests"
+    args: ["/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc","-L","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug","-o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.xctest/Contents/MacOS/DelversCorePackageTests","-module-name","DelversCorePackageTests","-Xlinker","-no_warn_duplicate_libraries","-Xlinker","-bundle","-Xlinker","-rpath","-Xlinker","@loader_path/../../../","@/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCorePackageTests.product/Objects.LinkFileList","-Xlinker","-rpath","-Xlinker","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-6.2/macosx","-target","arm64-apple-macosx14.0","-Xlinker","-add_ast_path","-Xlinker","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/Modules/DelversCore.swiftmodule","-Xlinker","-add_ast_path","-Xlinker","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/Modules/DelversCorePackageTests.swiftmodule","-Xlinker","-add_ast_path","-Xlinker","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/Modules/DelversCoreTests.swiftmodule","-plugin-path","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing","-sdk","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-I","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-L","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-g"]
+
+  "C.DelversCoreTests-arm64-apple-macosx-debug.module":
+    tool: shell
+    inputs: ["/Users/imiytk/Analyze_Market/swift/Tests/DelversCoreTests/GoldenTests.swift","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCoreTests.build/DerivedSources/resource_bundle_accessor.swift","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt","<DelversCoreTests-arm64-apple-macosx-debug.module-resources>","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/Modules/DelversCore.swiftmodule","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCoreTests.build/sources"]
+    outputs: ["/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCoreTests.build/GoldenTests.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCoreTests.build/resource_bundle_accessor.swift.o","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/Modules/DelversCoreTests.swiftmodule"]
+    description: "Compiling Swift Module 'DelversCoreTests' (2 sources)"
+    args: ["/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc","-module-name","DelversCoreTests","-emit-dependencies","-emit-module","-emit-module-path","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/Modules/DelversCoreTests.swiftmodule","-output-file-map","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCoreTests.build/output-file-map.json","-parse-as-library","-incremental","-c","@/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCoreTests.build/sources","-I","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/Modules","-target","arm64-apple-macosx14.0","-incremental","-enable-batch-mode","-serialize-diagnostics","-index-store-path","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/index/store","-Onone","-enable-testing","-Xfrontend","-enable-cross-import-overlays","-j8","-DSWIFT_PACKAGE","-DDEBUG","-DSWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE","-module-cache-path","/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/ModuleCache","-parseable-output","-parse-as-library","-swift-version","5","-plugin-path","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing","-sdk","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-I","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-L","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-g","-Xcc","-isysroot","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk","-Xcc","-F","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-Xcc","-fPIC","-Xcc","-g","-package-name","swift"]
+
+  "DelversCoreTests-arm64-apple-macosx-debug.module-resources":
+    tool: phony
+    inputs: ["/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore_DelversCoreTests.bundle/golden.json"]
+    outputs: ["<DelversCoreTests-arm64-apple-macosx-debug.module-resources>"]
+
+  "PackageStructure":
+    tool: package-structure-tool
+    inputs: ["/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/","/Users/imiytk/Analyze_Market/swift/Tests/DelversCoreTests/","/Users/imiytk/Analyze_Market/swift/Package.swift","/Users/imiytk/Analyze_Market/swift/Package.resolved"]
+    outputs: ["<PackageStructure>"]
+    description: "Planning build"
+    allow-missing-inputs: true
+

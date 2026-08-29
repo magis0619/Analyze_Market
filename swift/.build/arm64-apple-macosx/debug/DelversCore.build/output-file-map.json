@@ -1,0 +1,54 @@
+{
+  "": {
+    "swift-dependencies": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/primary.swiftdeps"
+  },
+  "/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Combat.swift": {
+    "dependencies": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Combat.d",
+    "object": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Combat.swift.o",
+    "swiftmodule": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Combat~partial.swiftmodule",
+    "swift-dependencies": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Combat.swiftdeps",
+    "diagnostics": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Combat.dia"
+  },
+  "/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Data/Generated.swift": {
+    "dependencies": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Generated.d",
+    "object": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Generated.swift.o",
+    "swiftmodule": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Generated~partial.swiftmodule",
+    "swift-dependencies": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Generated.swiftdeps",
+    "diagnostics": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Generated.dia"
+  },
+  "/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Data/Tables.swift": {
+    "dependencies": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Tables.d",
+    "object": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Tables.swift.o",
+    "swiftmodule": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Tables~partial.swiftmodule",
+    "swift-dependencies": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Tables.swiftdeps",
+    "diagnostics": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Tables.dia"
+  },
+  "/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Items.swift": {
+    "dependencies": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Items.d",
+    "object": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Items.swift.o",
+    "swiftmodule": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Items~partial.swiftmodule",
+    "swift-dependencies": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Items.swiftdeps",
+    "diagnostics": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Items.dia"
+  },
+  "/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Offline.swift": {
+    "dependencies": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Offline.d",
+    "object": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Offline.swift.o",
+    "swiftmodule": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Offline~partial.swiftmodule",
+    "swift-dependencies": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Offline.swiftdeps",
+    "diagnostics": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Offline.dia"
+  },
+  "/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Prng.swift": {
+    "dependencies": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Prng.d",
+    "object": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Prng.swift.o",
+    "swiftmodule": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Prng~partial.swiftmodule",
+    "swift-dependencies": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Prng.swiftdeps",
+    "diagnostics": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Prng.dia"
+  },
+  "/Users/imiytk/Analyze_Market/swift/Sources/DelversCore/Types.swift": {
+    "dependencies": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Types.d",
+    "object": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Types.swift.o",
+    "swiftmodule": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Types~partial.swiftmodule",
+    "swift-dependencies": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Types.swiftdeps",
+    "diagnostics": "/Users/imiytk/Analyze_Market/swift/.build/arm64-apple-macosx/debug/DelversCore.build/Types.dia"
+  }
+}

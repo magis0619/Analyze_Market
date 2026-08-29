@@ -268,6 +268,51 @@ public struct StageDef: Sendable {
     public enum DropBias: String, Sendable { case weapon, armor, even }
 }
 
+// MARK: - 敵（§6.2）
+
+public struct EnemyDef: Sendable {
+    public let id: String
+    public let name: String
+    /// 出現するステージ帯（§7.1 の番号）
+    public let minStage: Int
+    public let maxStage: Int
+    /// 見た目の属性。数値には影響せず、名札の説得力のためだけに使う
+    public let flavor: Element
+    /// 描画用アイコンキー
+    public let icon: String
+}
+
+// MARK: - 薬草園
+
+public struct HerbDef: Sendable {
+    public let id: String
+    public let name: String
+    /// どの属性に効く薬の材料になるか
+    public let element: Element
+    /// 育ちきるまでの秒数（実時間）
+    public let growSec: Int
+    /// 収穫で採れる数
+    public let yieldCount: Int
+    /// 種の購入価格
+    public let seedCost: Int
+    /// 3D と一覧で使う1文字
+    public let glyph: String
+}
+
+public struct PotionDef: Sendable {
+    public let id: String
+    public let name: String
+    /// どの属性の攻撃を和らげるか
+    public let element: Element
+    /// 被ダメージの軽減率（0〜1）
+    public let resist: Double
+    /// 主材料。これを2つ使う
+    public let main: String
+    /// 主材料以外の薬草を、この数だけ使う（何でもよい）
+    public let other: Int
+    public let text: String
+}
+
 // MARK: - 戦闘結果
 
 public enum RunOutcome: String, Codable, Sendable {

@@ -15,31 +15,85 @@ import XCTest
 final class GoldenTests: XCTestCase {
 
     // MARK: - 読み込み
+    //
+    // **`JSONSerialization` を使わない。**
+    //
+    // あれは `0.015739798778668046` を `NSDecimalNumber` として読み、
+    // `.doubleValue` で 2ulp 落とす（bits `…04000000` → `…03fffffe`）。
+    // 落ちるのは正解表のほうなので、**実装が正しいのにテストが落ちる**——
+    // しかも「1ulp ずれている」という、いかにも移植をしくじったように見える
+    // 落ち方をする。実際この罠に一度かかって、FP の contraction を疑った。
+    //
+    // `JSONDecoder`（と `Double(String)`）は正確に読む。数値を1つも落とさない
+    // 経路で読み込む。
 
-    private static var golden: [String: Any] = {
+    indirect enum JSONValue: Decodable {
+        case null
+        case bool(Bool)
+        case number(Double)
+        case string(String)
+        case array([JSONValue])
+        case object([String: JSONValue])
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.singleValueContainer()
+            if c.decodeNil() { self = .null; return }
+            // Bool を Double より先に試す。順番を逆にすると true/false が拾えない
+            if let v = try? c.decode(Bool.self) { self = .bool(v); return }
+            if let v = try? c.decode(Double.self) { self = .number(v); return }
+            if let v = try? c.decode(String.self) { self = .string(v); return }
+            if let v = try? c.decode([JSONValue].self) { self = .array(v); return }
+            if let v = try? c.decode([String: JSONValue].self) { self = .object(v); return }
+            throw DecodingError.dataCorruptedError(in: c, debugDescription: "unknown JSON node")
+        }
+    }
+
+    private static var golden: [String: JSONValue] = {
         guard let url = Bundle.module.url(forResource: "golden", withExtension: "json"),
               let data = try? Data(contentsOf: url),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+              let root = try? JSONDecoder().decode(JSONValue.self, from: data),
+              case .object(let obj) = root
         else {
             fatalError("golden.json を読めない。Package.swift の resources を確認する")
         }
         return obj
     }()
 
-    private func node(_ key: String) -> [Any] {
-        (Self.golden[key] as? [Any]) ?? []
-    }
-    private func obj(_ key: String) -> [String: Any] {
-        (Self.golden[key] as? [String: Any]) ?? [:]
-    }
+    private func node(_ key: String) -> [JSONValue] { a(Self.golden[key]) }
+    private func obj(_ key: String) -> [String: JSONValue] { d(Self.golden[key]) }
 
     // JSON の取り出し。テストなので、形が違えば落ちてよい。
-    private func d(_ v: Any?) -> [String: Any] { v as! [String: Any] }
-    private func a(_ v: Any?) -> [Any] { v as! [Any] }
-    private func f(_ v: Any?) -> Double { (v as! NSNumber).doubleValue }
-    private func i(_ v: Any?) -> Int { (v as! NSNumber).intValue }
-    private func s(_ v: Any?) -> String { v as! String }
-    private func b(_ v: Any?) -> Bool { (v as! NSNumber).boolValue }
+    private func d(_ v: JSONValue?) -> [String: JSONValue] {
+        guard case .object(let o)? = v else { fatalError("object を期待した: \(String(describing: v))") }
+        return o
+    }
+    private func a(_ v: JSONValue?) -> [JSONValue] {
+        guard case .array(let x)? = v else { fatalError("array を期待した: \(String(describing: v))") }
+        return x
+    }
+    private func f(_ v: JSONValue?) -> Double {
+        guard case .number(let n)? = v else { fatalError("number を期待した: \(String(describing: v))") }
+        return n
+    }
+    private func i(_ v: JSONValue?) -> Int { Int(f(v)) }
+    private func s(_ v: JSONValue?) -> String {
+        guard case .string(let x)? = v else { fatalError("string を期待した: \(String(describing: v))") }
+        return x
+    }
+    private func b(_ v: JSONValue?) -> Bool {
+        guard case .bool(let x)? = v else { fatalError("bool を期待した: \(String(describing: v))") }
+        return x
+    }
+    /// null かもしれない文字列（unique / weakTo / affix の element）
+    private func optS(_ v: JSONValue?) -> String? {
+        if case .string(let x)? = v { return x }
+        return nil
+    }
+    /// null かもしれないオブジェクト（potion）
+    private func optD(_ v: JSONValue?) -> [String: JSONValue]? {
+        if case .object(let o)? = v { return o }
+        return nil
+    }
 
     // MARK: - 1. 乱数
     //
@@ -169,7 +223,7 @@ final class GoldenTests: XCTestCase {
             XCTAssertEqual(i(row["unlockCost"]), got.unlockCost, "stage \(got.id) の解放費用")
             let wantResists = a(row["resists"]).map { s($0) }
             XCTAssertEqual(wantResists, got.resists.map { $0.rawValue }, "stage \(got.id) の耐性")
-            let wantWeak = row["weakTo"] as? String
+            let wantWeak = optS(row["weakTo"])
             XCTAssertEqual(wantWeak, got.weakTo?.rawValue, "stage \(got.id) の弱点")
         }
 
@@ -195,7 +249,7 @@ final class GoldenTests: XCTestCase {
     // 乱数を**引く順番**が仕様。順番が1つずれると品がまるごと変わる。
 
     /// 生成された品を1件ずつ突き合わせる。
-    private func assertItem(_ want: [String: Any], _ got: Item, _ where_: String) {
+    private func assertItem(_ want: [String: JSONValue], _ got: Item, _ where_: String) {
         XCTAssertEqual(s(want["id"]), got.id, "\(where_) の id")
         XCTAssertEqual(s(want["baseId"]), got.baseId, "\(where_) のベース")
         XCTAssertEqual(s(want["rarity"]), got.rarity.rawValue, "\(where_) のレアリティ")
@@ -205,7 +259,7 @@ final class GoldenTests: XCTestCase {
         XCTAssertEqual(i(want["fromStage"]), got.fromStage, "\(where_) の出所")
         XCTAssertEqual(i(want["sellValue"]), sellValue(got), "\(where_) の売値")
 
-        let wantUnique = want["unique"] as? String
+        let wantUnique = optS(want["unique"])
         XCTAssertEqual(wantUnique, got.unique?.rawValue, "\(where_) のユニーク")
 
         // 属性配分は**入った順**まで見る。順が変わると主属性（＝サムネの色・
@@ -227,7 +281,7 @@ final class GoldenTests: XCTestCase {
             XCTAssertEqual(s(wa["kind"]), ga.kind.rawValue, "\(where_) のアフィックス[\(k)] の種類")
             XCTAssertEqual(f(wa["value"]), ga.value, "\(where_) のアフィックス[\(k)] の値")
             XCTAssertEqual(i(wa["tier"]), ga.tier, "\(where_) のアフィックス[\(k)] のティア")
-            XCTAssertEqual(wa["element"] as? String, ga.element?.rawValue,
+            XCTAssertEqual(optS(wa["element"]), ga.element?.rawValue,
                            "\(where_) のアフィックス[\(k)] の属性")
         }
     }
@@ -295,7 +349,7 @@ final class GoldenTests: XCTestCase {
             assertItem(d(vec["armor"]), armor, "\(label) の防具")
 
             var potion: PotionEffect?
-            if let p = input["potion"] as? [String: Any] {
+            if let p = optD(input["potion"]) {
                 potion = PotionEffect(
                     element: Element(rawValue: s(p["element"]))!,
                     resist: f(p["resist"]), name: s(p["name"])
