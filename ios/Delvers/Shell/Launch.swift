@@ -55,6 +55,7 @@ struct LaunchOptions {
         case "title": return .title
         case "base": return .base
         case "dispatch": return .dispatch
+        case "status": return .status("d1")
         case "opening": return .opening
         case "inventory": return .inventory
         case "compendium": return .compendium

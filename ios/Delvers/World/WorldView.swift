@@ -12,7 +12,7 @@ import SwiftUI
 // 3D の物を押させたいときは、位置だけ返して SwiftUI 側にボタンを置く。
 
 enum SceneName: String, Equatable {
-    case base, vista, gate, map, pedestal, descent, reveal, vault, archive, garden, alchemy
+    case base, vista, gate, map, pedestal, descent, travel, reveal, vault, archive, garden, alchemy
 }
 
 /// SceneKit を SwiftUI に載せる。

@@ -74,6 +74,7 @@ class WorldScene {
         case .map: return MapScene()
         case .pedestal: return PedestalScene()
         case .descent: return DescentScene()
+        case .travel: return TravelScene()
         case .reveal: return RevealScene()
         case .vault: return PedestalScene(dim: true)
         case .archive: return ArchiveScene()

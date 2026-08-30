@@ -185,6 +185,12 @@ struct TierButton: View {
                     }
             }
             .foregroundStyle(tint)
+            // **枠の中ならどこを押しても効く。**
+            // `.background` は絵を敷くだけで**当たり判定を広げない**ので、
+            // これが無いと「描かれた文字の形」だけが反応する。
+            // 44pt の枠があっても、押せるのは文字の上だけ——
+            // XCUITest は枠の寸法しか見ないので、この壊れ方は検査に出ない。
+            .contentShape(RoundedRectangle(cornerRadius: DS.rMd, style: .continuous))
         }
         .buttonStyle(PressStyle())
         .disabled(disabled)
@@ -507,5 +513,25 @@ struct Burst: View {
         }
         .allowsHitTesting(false)
         .onAppear { withAnimation(.easeOut(duration: 0.55)) { go = true } }
+    }
+}
+
+extension View {
+    /// **枠いっぱいを押せる行にする。**
+    ///
+    /// `.frame(minHeight: 44)` と `.contentShape(Rectangle())` だけでは足りない。
+    /// 背景を持たないボタン（文字と記号しか描かれていないもの）は、
+    /// 当たり判定も**読み上げ用の枠も**描かれた文字の大きさのままになる——
+    /// 実測で 54.7 × 14.3pt しかなかった。44pt を指定してあるのに、である。
+    ///
+    /// しかもその状態の要素は `isHittable` が false を返すので、
+    /// 「44pt 以上か」の検査が**その要素を読み飛ばして通っていた**。
+    ///
+    /// ほぼ透明な塗りを敷くと、描かれた中身が枠いっぱいに広がるので、
+    /// 当たり判定と読み上げ枠の両方が 44pt になる。
+    func tappableRow(minHeight: CGFloat = DS.tap) -> some View {
+        self.frame(maxWidth: .infinity, minHeight: minHeight)
+            .background(Rectangle().fill(Color.white.opacity(0.001)))
+            .contentShape(Rectangle())
     }
 }

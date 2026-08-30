@@ -31,6 +31,10 @@ targets:
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         ENABLE_USER_SCRIPT_SANDBOXING: NO
+        # 実機ビルド用。.xcodeproj は毎回 xcodegen で作り直すので、
+        # ここに書かないと実機を繋ぐたびに Xcode で手動設定し直すことになる
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: RYH629N7HD
 
   DelversUITests:
     type: bundle.ui-testing

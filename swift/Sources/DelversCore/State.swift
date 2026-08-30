@@ -298,6 +298,17 @@ public final class GameState {
         )
         data.dispatches.append(record)
         data.history[id] = record
+
+        // **帰りの通知は、出発したこの瞬間に予約する。**
+        // 帰還の処理はアプリが動いている時にしか走らないので、
+        // そちらで鳴らすと「閉じている間は鳴らない通知」になる。
+        notifier.scheduleReturn(
+            id: id,
+            job: job.name,
+            stage: stageDef(stageId).name,
+            afterSeconds: Double(record.durationSec)
+        )
+
         save()
         return true
     }
@@ -348,11 +359,12 @@ public final class GameState {
 
         data.inbox.append(d.id)
 
-        notifier.notifyReturn(
-            job: jobDef(d.jobId).name,
-            stage: stageDef(d.stageId).name,
-            outcome: result.outcome == .death ? "戦死" : result.outcome == .clear ? "踏破" : "撤退"
-        )
+        // **ここで鳴らさない。予約を消す。**
+        // この関数はアプリが動いている `tick()` の中でしか走らないので、
+        // ここで鳴らす実装は「アプリを開いている時だけ鳴る通知」になる。
+        // 鳴らす予約は出発の瞬間に済ませてあり、ここまで来たということは
+        // もう画面で見せられる＝あとから鳴らす理由が無い。
+        notifier.cancelReturn(id: d.id)
     }
 
     /// 装備を失ったら最低性能の初期装備を無限に支給する（§4.4）。

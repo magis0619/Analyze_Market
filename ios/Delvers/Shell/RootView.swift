@@ -54,6 +54,7 @@ struct RootView: View {
         case .base: BaseScreen()
         case .dispatch: DispatchScreen()
         case .report(let id): ReportScreen(dispatchId: id)
+        case .status(let id): StatusScreen(dispatchId: id)
         case .opening: OpeningScreen()
         case .inventory: InventoryScreen()
         case .compendium: CompendiumScreen()
@@ -83,6 +84,7 @@ struct RootView: View {
         case .base: return .base
         case .dispatch: return DispatchScreen.sceneFor(shell)
         case .report: return .descent
+        case .status: return .travel
         case .opening: return .reveal
         case .inventory: return .vault
         case .compendium: return .archive
@@ -111,6 +113,15 @@ struct RootView: View {
             )
         case .dispatch:
             return DispatchScreen.moodFor(shell)
+        case .status(let id):
+            // **深さや被害は渡さない。** 渡した時点で、まだ見せていない結果が
+            // 3D の明るさとして漏れる。渡すのは「どこへ行ったか」の色だけ
+            let stage = stageDef(st.dispatchInfo(id)?.stageId ?? 1)
+            // **経過だけを渡す。** 深さも被害も渡さない——
+            // 渡した瞬間に、まだ見せていない結果が光として漏れる
+            let ratio = st.data.dispatches.first { $0.id == id }
+                .map { st.progressOf($0).ratio } ?? 0
+            return Mood(accent: stageAccent(stage), intensity: 0.3, presence: ratio)
         case .report(let id):
             let stage = stageDef(st.dispatchInfo(id)?.stageId ?? 1)
             let worst = st.data.results[id].map { $0.hpCurve.min() ?? 1 } ?? 1

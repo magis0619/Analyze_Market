@@ -66,13 +66,23 @@ public protocol ReturnNotifier: AnyObject {
     /// 許可を求める。**初めて派遣を出した瞬間**にだけ呼ばれる——
     /// 起動直後に求めても何のための許可か分からず、まず拒否される。
     func requestPermission()
-    /// 帰還を知らせる。
-    func notifyReturn(job: String, stage: String, outcome: String)
+
+    /// 帰還を**予約する**。出発の瞬間に、帰ってくる時刻を渡して呼ぶ。
+    ///
+    /// **帰還した時に鳴らすのでは遅い。** 帰還の処理はアプリが動いている
+    /// `tick()` の中でしか走らないので、「帰った瞬間に鳴らす」実装は
+    /// **アプリを閉じている間は永久に鳴らない**——放置ゲームで通知が要るのは
+    /// まさにその時なので、それでは意味がない。
+    func scheduleReturn(id: String, job: String, stage: String, afterSeconds: Double)
+
+    /// 予約を取り消す。先に自分で結果を見た時など、鳴らす理由が消えた時に呼ぶ。
+    func cancelReturn(id: String)
 }
 
 /// 何もしない実装。テストと、通知を使わない場面の既定。
 public final class SilentNotifier: ReturnNotifier {
     public init() {}
     public func requestPermission() {}
-    public func notifyReturn(job: String, stage: String, outcome: String) {}
+    public func scheduleReturn(id: String, job: String, stage: String, afterSeconds: Double) {}
+    public func cancelReturn(id: String) {}
 }

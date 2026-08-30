@@ -558,3 +558,86 @@ final class ArchiveScene: WorldScene {
         glowNode.scale = v3(1 + sin(ft * 1.6) * 0.04)
     }
 }
+
+// MARK: - 潜行中の道中
+
+/// 潜行中の1人を映す。
+///
+/// **深さの目盛りを置かない。** 松明が10個並ぶ竪坑（`DescentScene`）は
+/// 「何番目まで到達したか」を語ってしまう。ところが結果は出発の瞬間に
+/// 確定していて、まだ見せていない——だから「今ここまで来た」と言える情報は
+/// こちらには無い。言えるのは**時間がどれだけ経ったか**だけ。
+///
+/// なので灯りは1つだけ置き、経過時間ぶんだけ下へ動かす。
+/// 目盛りが無ければ、それは「進んでいる」以上のことを主張しない。
+final class TravelScene: WorldScene {
+    private var lantern: SCNNode!
+    private var lanternLight: SCNNode!
+    private var dust: SCNNode!
+    private var want = UIColor(red: 1.0, green: 0.72, blue: 0.38, alpha: 1)
+    private var cur = UIColor(red: 1.0, green: 0.72, blue: 0.38, alpha: 1)
+    private var progress = 0.0
+    private var wantProgress = 0.0
+
+    private let top: Float = 9
+    private let bottom: Float = -11
+
+    override init() {
+        super.init()
+        fog(UIColor(red: 0.03, green: 0.04, blue: 0.07, alpha: 1), start: 16, end: 74)
+        _ = addCamera(fov: 52, at: SCNVector3(0, 0, 20), look: SCNVector3(0, -0.5, 0))
+        _ = light(.ambient, UIColor(red: 0.16, green: 0.20, blue: 0.32, alpha: 1), intensity: 520)
+
+        // 坑道の壁。左右に積んで、間を降りていく道に見せる
+        var r = SeededRandom(717)
+        for i in 0..<22 {
+            for side in [-1.0, 1.0] {
+                let b = rock(CGFloat(r.range(2.4, 4.0)), CGFloat(r.range(1.8, 3.0)),
+                             CGFloat(r.range(1.8, 3.0)),
+                             UIColor(red: 0.13, green: 0.15, blue: 0.22, alpha: 1),
+                             seed: UInt32(720 + i * 2))
+                b.position = SCNVector3(Float(side * r.range(4.4, 5.6)),
+                                        top - Float(i) * 1.0, Float(r.range(-2, 1)))
+                scene.rootNode.addChildNode(b)
+            }
+        }
+
+        // 灯り。**これ1つだけ。**
+        lantern = glow(want, size: 3.4, opacity: 0.85)
+        lantern.position = SCNVector3(0, top, 1.5)
+        scene.rootNode.addChildNode(lantern)
+        lanternLight = light(.omni, want, intensity: 1700, at: SCNVector3(0, top, 2))
+        lanternLight.light?.attenuationEndDistance = 20
+
+        dust = motes(count: 60, spread: SCNVector3(9, 22, 6), color: .white, size: 0.07, seed: 44)
+        dust.opacity = 0.22
+        scene.rootNode.addChildNode(dust)
+    }
+
+    /// `presence` に経過の割合、`accent` に行き先の色が来る
+    override func apply(_ mood: Mood) {
+        want = UIColor(mood.accent)
+        wantProgress = Swift.max(0, Swift.min(1, mood.presence))
+    }
+
+    override func update(_ t: TimeInterval) {
+        progress += (wantProgress - progress) * 0.05
+        let ft = Float(t)
+        // 揺れながら降りる。歩いている感じは、等速でないことから出る
+        let y = top + (bottom - top) * Float(progress) + sin(ft * 1.9) * 0.22
+        lantern.position.y = y
+        lanternLight.position.y = y
+        lantern.scale = v3(1 + sin(ft * 2.7) * 0.05)
+
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        want.getRed(&r, green: &g, blue: &b, alpha: &a)
+        var cr: CGFloat = 0, cg: CGFloat = 0, cb: CGFloat = 0
+        cur.getRed(&cr, green: &cg, blue: &cb, alpha: &a)
+        cur = UIColor(red: cr + (r - cr) * 0.06, green: cg + (g - cg) * 0.06,
+                      blue: cb + (b - cb) * 0.06, alpha: 1)
+        lantern.geometry?.firstMaterial?.diffuse.contents = WorldScene.radialTexture(cur)
+        lanternLight.light?.color = cur
+        lanternLight.light?.intensity = CGFloat(1500 + Double(sin(ft * 3.3)) * 140)
+        dust.position.y = Float((Double(ft) * 0.35).truncatingRemainder(dividingBy: 4)) - 2
+    }
+}

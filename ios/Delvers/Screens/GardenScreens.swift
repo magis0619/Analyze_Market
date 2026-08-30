@@ -174,6 +174,7 @@ struct GardenScreen: View {
                             .foregroundStyle(DS.line)
                     }
                 }
+                .contentShape(Rectangle())   // 枠の中ならどこでも押せる
                 .buttonStyle(PressStyle())
                 .accessibilityIdentifier("bed-\(i)")
             }
@@ -230,6 +231,7 @@ struct GardenScreen: View {
                     }
                     .opacity(off ? 0.45 : 1)
                 }
+                .contentShape(Rectangle())   // 枠の中ならどこでも押せる
                 .buttonStyle(PressStyle())
                 .accessibilityIdentifier("herb-\(h.id)")
             }
@@ -302,6 +304,7 @@ struct GardenScreen: View {
                     }
             }
         }
+        .contentShape(Rectangle())   // 枠の中ならどこでも押せる
         .buttonStyle(PressStyle())
         .accessibilityIdentifier("stock-open")
     }
@@ -519,6 +522,7 @@ struct AlchemyScreen: View {
             // 作れないことは**縁と理由**で言う。札ごと薄くすると文字まで薄くなる
             .opacity(ok ? 1 : 0.92)
         }
+        .contentShape(Rectangle())   // 枠の中ならどこでも押せる
         .buttonStyle(PressStyle())
         .accessibilityIdentifier("potion-\(p.id)")
     }

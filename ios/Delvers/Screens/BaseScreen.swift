@@ -3,13 +3,22 @@ import SwiftUI
 
 /// 拠点（web 版 §2.2）。
 ///
-/// **タイルをやめて物にする。** 同じ大きさ・同じ角丸のタイルが4枚並んでいると、
-/// 押す先が4つあることは分かっても、そこに何があるかは文字を読むまで分からない。
-/// 看板・郵便受け・宝箱・棚・温室なら、絵を見た時点で
-/// 「送り出す／読む／開ける／しまう／育てる」が分かる。
+/// **3D の上に重ねたチップをやめ、カードに戻した。**
 ///
-/// 名札は 3D の**足元**にぶら下げる。中心に置くと名札が物の胴を隠す。
+/// チップは 3D の物の足元に浮いていて、「押せる物」なのか「絵の一部」なのかが
+/// 見た目で決まらなかった。導線を絵に溶かすのは、ハンバーガーメニューや
+/// ジェスチャ操作と同じ取引をしている——省スペースと引き換えに、
+/// **見つけやすさを失う**。
+/// <https://www.uxpin.com/studio/blog/mobile-navigation-patterns-pros-and-cons/>
+/// 「hidden navigation reduces discoverability」
+///
+/// 一度は「同じ大きさのタイルが4枚並んでいても、そこに何があるかは
+/// 文字を読むまで分からない」と考えてチップにした。その観察自体は正しかったが、
+/// 出した答えが行きすぎていた。**絵は背景に残したまま、押す物は枠を持たせる**——
+/// 3D は雰囲気を担い、導線はカードが担う。Apple HIG の deference
+/// （UI は内容に譲る）も、導線まで消せとは言っていない。
 struct BaseScreen: View {
+
     @EnvironmentObject var shell: Shell
     @State private var showDrawer = false
 
@@ -45,12 +54,13 @@ struct BaseScreen: View {
             Scaffold(
                 title: "拠点",
                 meta: shell.state.data.tier > 1 ? "難易度 \(shell.state.data.tier)" : nil,
-                hero: true, heroFraction: 0.46, anchorBottom: true
+                hero: true, heroFraction: 0.34, anchorBottom: true
             ) {
                 nextBanner(next)
                 ForEach(shell.state.availableJobs(), id: \.self) { job in
                     slotRow(job)
                 }
+                destinations(next)
                 Button {
                     withAnimation(.easeOut(duration: DS.dPop)) { showDrawer = true }
                 } label: {
@@ -62,8 +72,7 @@ struct BaseScreen: View {
                         }
                     }
                     .foregroundStyle(DS.faint)
-                    .frame(maxWidth: .infinity, minHeight: DS.tap)
-                    .contentShape(Rectangle())
+                    .tappableRow()
                 }
                 .buttonStyle(PressStyle())
                 .accessibilityIdentifier("detail")
@@ -73,100 +82,69 @@ struct BaseScreen: View {
             }
 
 
-            GeometryReader { geo in
-                let placed = layout(in: geo.size)
-                ForEach(props, id: \.id) { p in
-                    if let at = placed[p.id] {
-                        propTag(p, isNext: next.prop == p.id).position(x: at.x, y: at.y)
-                    }
-                }
-            }
-            // **板より上に置く。** 下に置くと ScrollView がタップを飲み、
-            // 「押せるように見えて押せない」——スクショにも出ない壊れ方になる。
-            // 空いている場所は GeometryReader が素通しするので、本文は塞がない
-            .allowsHitTesting(true)
-
             if showDrawer { drawer }
         }
     }
 
-    /// チップの置き場所を決める。
+    /// 行き先のカード。
     ///
-    /// 3D 由来の座標をそのまま使うと2つのことが起きる:
-    ///   ・板の上や画面の外へ落ちる（カメラを動かすたびに変わる）
-    ///   ・**チップ同士が重なる**（物が近づくと投影も近づく）
-    /// 留めてから、近すぎるものを縦にずらす。押せなくなるほうが困る。
-    private func layout(in size: CGSize) -> [String: CGPoint] {
-        let minGapX: CGFloat = 52
-        let minGapY: CGFloat = 46
-        var out: [String: CGPoint] = [:]
-        var taken: [CGPoint] = []
-        // 左から順に置く。順番を固定しないと、フレームごとに入れ替わって落ち着かない
-        let ordered = props.compactMap { p -> (String, CGPoint)? in
-            guard let at = shell.hotspots[p.id] else { return nil }
-            return (p.id, CGPoint(x: at.x * size.width, y: at.y * size.height + 26))
-        }.sorted { $0.1.x < $1.1.x }
-
-        for (id, raw) in ordered {
-            var x = min(max(raw.x, 34), size.width - 34)
-            var y = min(max(raw.y, 96), size.height * 0.40)
-            // ぶつかっていたら、空くまで上へ逃がす
-            var guardCount = 0
-            while taken.contains(where: { abs($0.x - x) < minGapX && abs($0.y - y) < minGapY }),
-                  guardCount < 8 {
-                y -= minGapY
-                if y < 96 { y = size.height * 0.40; x = min(x + minGapX, size.width - 34) }
-                guardCount += 1
+    /// **枠を持たせ、名前を出す。** チップ方式では記号だけを出して
+    /// 「名前は 3D の物が言う」としていたが、それは
+    /// 「絵を見れば分かる」という作り手の思い込みに寄りかかっていた。
+    /// 出典が言うとおり、常に見えている要素のほうが wayfinding は明快になる。
+    private func destinations(_ next: Shell.NextAction) -> some View {
+        // **5つとも折り返しの上に収める。** 2列だと3行になり、
+        // 下2つがスクロールしないと見えなかった——
+        // 「常に見えている」ために戻したのに、それでは元の木阿弥になる
+        let cols = Array(repeating: GridItem(.flexible(), spacing: DS.sp2), count: 3)
+        return LazyVGrid(columns: cols, spacing: DS.sp2) {
+            ForEach(props, id: \.id) { p in
+                destinationCard(p, isNext: next.prop == p.id)
             }
-            taken.append(CGPoint(x: x, y: y))
-            out[id] = CGPoint(x: x, y: y)
         }
-        return out
     }
 
-    // MARK: - 部品
-
-    /// 3D の物に付けるチップ。**押されるのはこれ。**
-    /// 3D 側に当たり判定を持たせると、この動線が「44pt あるか」
-    /// 「本当に押せるか」の検査からまるごと消える。
-    private func propTag(_ p: Prop, isNext: Bool) -> some View {
+    private func destinationCard(_ p: Prop, isNext: Bool) -> some View {
         let n = p.count(shell.state)
         return Button {
-            if p.id == "mail" {
-                if let id = shell.state.data.inbox.first { shell.go(.report(id)) }
+            if p.id == "mail", let first = shell.state.data.inbox.first {
+                shell.go(.report(first))
             } else {
                 shell.go(p.route)
             }
         } label: {
-            HStack(spacing: DS.sp1) {
-                Image(systemName: p.icon).font(.system(size: 15, weight: .medium))
-                if isNext {
-                    Text(p.label).font(.delversLabel).lineLimit(1).fixedSize()
-                }
+            VStack(spacing: 3) {
+                Image(systemName: p.icon)
+                    .font(.system(size: 18))
+                    .foregroundStyle(isNext ? DS.gold : DS.dim)
+                Text(p.label).font(.delversLabel).foregroundStyle(DS.text)
+                    .lineLimit(1).minimumScaleFactor(0.7)
                 if n > 0 {
-                    Text("\(n)")
-                        .font(.delversMicro).monospacedDigit()
-                        .padding(.horizontal, 5).padding(.vertical, 1)
-                        .background(Capsule().fill(DS.gold))
-                        .foregroundStyle(Color(hex: 0x14100A))
+                    Text("\(n)件").font(.delversMicro).foregroundStyle(DS.gold)
+                } else if isNext {
+                    Text("ここから").font(.delversMicro).foregroundStyle(DS.gold)
+                } else {
+                    Text(" ").font(.delversMicro)
                 }
             }
-            .padding(.horizontal, isNext || n > 0 ? DS.sp3 : 0)
-            .frame(minWidth: DS.tap, minHeight: DS.tap)
-            // 焚き火の真上に来ることがある。**地の色を敷かないと 1.9:1 まで落ちる**
-            .background(Capsule().fill(DS.ground.opacity(0.70))
-                .background(Capsule().fill(.ultraThinMaterial)))
-            .overlay(Capsule().strokeBorder(isNext ? DS.gold.opacity(0.75) : DS.line, lineWidth: 1))
-            .foregroundStyle(isNext ? DS.gold : DS.dim)
-            .shadow(color: isNext ? DS.gold.opacity(0.5) : .clear, radius: 8)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, DS.sp1)
+            .frame(minHeight: 74)
+            .background {
+                Surface(radius: DS.rMd)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: DS.rMd, style: .continuous)
+                            .strokeBorder(isNext ? DS.gold.opacity(0.75) : DS.line,
+                                          lineWidth: 1)
+                    }
+            }
+            .shadow(color: isNext ? DS.gold.opacity(0.35) : .clear, radius: 8)
         }
+        .contentShape(Rectangle())   // 枠の中ならどこでも押せる
         .buttonStyle(PressStyle())
         .accessibilityIdentifier("prop-\(p.id)")
-        .accessibilityLabel(p.label)
     }
 
-    /// 「次にやること」。**理由を1行だけ言う。**
-    /// 理由が無いまま指示だけ出すと、言われた通りに押すだけの人になる。
     private func nextBanner(_ next: Shell.NextAction) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text("次にやること").font(.delversMicro).tracking(1.6).foregroundStyle(DS.gold)
@@ -193,6 +171,8 @@ struct BaseScreen: View {
         let st = shell.state
         let def = jobDef(job)
         let running = st.data.dispatches.first { $0.jobId == job }
+        // **潜行中の枠は押せる。** 一覧に出せるのは「行き先と残り時間」までで、
+        // それ以上は場所を取る。出典の言う「一覧で全部言わず、押せば詳しく」に沿う
         return Panel(label: running == nil ? "待機中" : "潜行中") {
             HStack(spacing: DS.sp3) {
                 Text(String(def.name.prefix(1)))
@@ -221,6 +201,19 @@ struct BaseScreen: View {
                     }
                 }
                 Spacer(minLength: 0)
+                if let d = running {
+                    Button { shell.go(.status(d.id)) } label: {
+                        HStack(spacing: 3) {
+                            Text("状況").font(.delversLabel)
+                            Image(systemName: "chevron.right").font(.system(size: 9))
+                        }
+                        .foregroundStyle(DS.gold)
+                        .frame(minWidth: 56, minHeight: DS.tap)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PressStyle())
+                    .accessibilityIdentifier("status-\(d.jobId.rawValue)")
+                }
                 if running == nil {
                     Button {
                         shell.stageContext = nil
@@ -267,6 +260,7 @@ struct BaseScreen: View {
                                          text: "\(found.count)", label: "図鑑",
                                          tone: DS.rarity(.rare))
                         }
+                        .contentShape(Rectangle())   // 枠の中ならどこでも押せる
                         .buttonStyle(PressStyle())
                         .accessibilityIdentifier("compendium")
                         Button { shell.go(.inventory) } label: {
@@ -274,6 +268,7 @@ struct BaseScreen: View {
                                          text: "\(st.data.inventory.count)", label: "所持",
                                          tone: st.data.inventory.count >= 150 ? DS.down : DS.def)
                         }
+                        .contentShape(Rectangle())   // 枠の中ならどこでも押せる
                         .buttonStyle(PressStyle())
                         .accessibilityIdentifier("inventory")
                     }

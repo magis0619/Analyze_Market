@@ -83,11 +83,18 @@ final class AuditTests: XCTestCase {
         }
 
         // 押せるもの（ボタン・セグメント）を集める
+        // **`isHittable` で絞らない。**
+        // 背景を持たないボタンは当たり判定が文字の大きさのままになり、
+        // その状態だと `isHittable` が false を返す。そこで読み飛ばしていたので、
+        // 「44pt 以上か」の検査が**一番小さい要素を見ないまま通っていた**
+        // （実測 54.7 × 14.3pt のボタンが素通りしていた）。
+        // 見えている場所にある操作は、押せると報告されなくても数える。
         var controls: [(String, CGRect)] = []
         for kind in [app.buttons, app.segmentedControls] {
             for i in 0..<kind.count {
                 let e = kind.element(boundBy: i)
-                guard e.exists, e.isHittable else { continue }
+                guard e.exists, e.isEnabled else { continue }
+                guard e.isHittable || visible(e.frame) else { continue }
                 let f = e.frame
                 guard f.width > 1, f.height > 1 else { continue }
                 let label = e.label.isEmpty ? e.identifier : e.label
@@ -556,4 +563,71 @@ extension AuditTests {
         }
         return out
     }
+}
+
+// MARK: - 「押せる」を、押して確かめる
+//
+// `isHittable` は要素自身の可視性しか見ない。**上に何かが被さっていても true を返す**し、
+// `.background` で描いただけの枠は当たり判定を持たないのに、枠の寸法は 44pt と報告される。
+// この2つは実際に出荷され、どちらもユーザーから報告された:
+//   ・ボタンの文字の上しか反応しない（`contentShape` が無かった）
+//   ・地図の深いノードが選べない（板の `ScrollView` がタップを飲んでいた）
+// **寸法を測るのをやめて、押して、変わったかを見る。**
+
+extension AuditTests {
+
+    /// 枠の四隅を押しても効くか。文字は中央にあるので、隅は「絵の上」になる。
+    func test枠の隅を押しても効く() {
+        let app = launch(["-reset", "-devitems", "24", "-pending", "5", "-grown",
+                          "-gold", "5000", "-screen", "base"])
+        // **塗りつぶした背景を持つボタンでは、この欠陥は出ない。**
+        // 最初 `cta` で試したが、あれは背景があるので `contentShape` を外しても押せた。
+        // 出るのは**背景を持たないボタン**——文字と記号しか描かれていないもの。
+        // 「詳細」は全幅・背景なしで、押せば引き出しが開くので結果が観測できる。
+        let detail = app.buttons["detail"]
+        XCTAssertTrue(detail.waitForExistence(timeout: 12), "「詳細」が出ない")
+
+        // 左端から 6% の位置。文字は中央にあるので、ここは「何も描かれていない」場所
+        let edge = detail.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.5))
+        edge.tap()
+        Thread.sleep(forTimeInterval: 1.2)
+        check("HIT", "詳細の端", app.buttons["compendium"].exists,
+              "背景の無いボタンは、枠の端を押しても効かない（contentShape が無い）")
+        app.terminate()
+        report()
+    }
+
+    /// 地図のノードを実際に押して、選択が変わるか。
+    func test地図の深いノードが選べる() {
+        let app = launch(["-reset", "-devitems", "24", "-grown", "-gold", "5000",
+                          "-screen", "dispatch"])
+        let open = app.buttons["map-open"]
+        XCTAssertTrue(open.waitForExistence(timeout: 12), "派遣先の行が無い")
+        open.tap()
+        Thread.sleep(forTimeInterval: 1.6)
+
+        // **一番深いノードから試す。** 経路は奥へ向かって下へ降りるので、
+        // 板に飲まれるとしたら深いほうから
+        var changed = 0
+        var tried = 0
+        for id in [10, 9, 8, 7] {
+            let n = app.buttons["node-\(id)"]
+            guard n.exists, n.isHittable else { continue }
+            tried += 1
+            n.tap()
+            Thread.sleep(forTimeInterval: 0.7)
+            // 選んだ段が明細に出ていれば、押せている
+            if app.staticTexts.allElementsBoundByIndex.contains(where: {
+                $0.label.contains("解放") || $0.label.contains("敵の属性")
+            }) { changed += 1 }
+        }
+        check("HIT", "map", tried > 0, "深いノードが1つも見つからない")
+        check("HIT", "map", changed == tried,
+              "深いノード \(tried)個のうち \(tried - changed)個は押しても何も変わらない")
+        app.terminate()
+        report()
+    }
+}
+
+extension AuditTests {
 }

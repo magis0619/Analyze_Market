@@ -387,9 +387,13 @@ final class StateGoldenTests: XCTestCase {
     func test通知は初回の派遣でだけ許可を求める() {
         final class Counter: ReturnNotifier {
             var asked = 0
-            var notified = 0
+            var scheduled: [(id: String, after: Double)] = []
+            var cancelled: [String] = []
             func requestPermission() { asked += 1 }
-            func notifyReturn(job: String, stage: String, outcome: String) { notified += 1 }
+            func scheduleReturn(id: String, job: String, stage: String, afterSeconds: Double) {
+                scheduled.append((id, afterSeconds))
+            }
+            func cancelReturn(id: String) { cancelled.append(id) }
         }
         let n = Counter()
         let st = GameState(seed: 3, now: 0, store: MemorySaveStore(), notifier: n)
@@ -397,6 +401,15 @@ final class StateGoldenTests: XCTestCase {
         st.tick(60 * 60 * 1000)          // 帰還させる
         st.dispatch(job: .swordsman, stage: 1, rule: .standard, now: 60 * 60 * 1000)
         XCTAssertEqual(n.asked, 1, "許可を何度も求めている（起動のたびに聞かれると拒否される）")
-        XCTAssertEqual(n.notified, 1, "帰還を知らせていない")
+
+        // **出発の瞬間に予約していること。**
+        // 帰還時に鳴らす実装だと、アプリを閉じている間は永久に鳴らない——
+        // 放置ゲームで通知が要るのは、まさに閉じている時。
+        XCTAssertEqual(n.scheduled.count, 2, "出発時に帰りを予約していない")
+        XCTAssertTrue(n.scheduled.allSatisfy { $0.after > 0 },
+                      "予約が「今すぐ」になっている（帰還時刻になっていない）")
+        // 帰った回は、鳴らすのではなく予約を消す
+        XCTAssertEqual(n.cancelled, [n.scheduled[0].id],
+                       "帰還したのに予約を消していない（あとから鳴ってしまう）")
     }
 }

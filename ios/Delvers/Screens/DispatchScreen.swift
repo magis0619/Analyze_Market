@@ -152,6 +152,7 @@ struct DispatchScreen: View {
                         }
                 }
             }
+            .contentShape(Rectangle())   // 枠の中ならどこでも押せる
             .buttonStyle(PressStyle())
             .accessibilityIdentifier("map-open")
         } action: {
@@ -213,6 +214,7 @@ struct DispatchScreen: View {
                     .strokeBorder(DS.line, lineWidth: 1)
             }
         }
+        .contentShape(Rectangle())   // 枠の中ならどこでも押せる
         .buttonStyle(PressStyle())
         .accessibilityIdentifier("pick-\(slot.rawValue)")
     }
@@ -315,6 +317,7 @@ struct DispatchScreen: View {
                     .strokeBorder(on ? tone.opacity(0.7) : DS.line, lineWidth: 1)
             }
         }
+        .contentShape(Rectangle())   // 枠の中ならどこでも押せる
         .buttonStyle(PressStyle())
         .accessibilityIdentifier("rule-\(r.id.rawValue)")
     }
@@ -328,14 +331,6 @@ struct DispatchScreen: View {
     private var mapSheet: some View {
         let prevCleared = stage.id == 1 || shell.state.data.clearedStages.contains(stage.id - 1)
         return ZStack {
-            GeometryReader { geo in
-                ForEach(Array(STAGES.enumerated()), id: \.element.id) { i, s in
-                    if let at = shell.hotspots["node\(i)"] {
-                        mapNode(s, selected: s.id == stageId)
-                            .position(x: at.x * geo.size.width, y: at.y * geo.size.height)
-                    }
-                }
-            }
             Scaffold(
                 title: "派遣先を選ぶ", back: { mapOpen = false },
                 hint: "暗いノードはまだ行けない場所", hero: false, anchorBottom: true
@@ -376,6 +371,25 @@ struct DispatchScreen: View {
                     .accessibilityIdentifier("cta")
                 }
             }
+
+            // **ノードは板より上に置く。**
+            //
+            // 前は板より下にあり、`ScrollView` がタップを飲んでいた。
+            // 経路は奥へ向かって下へ降りるので、**深いステージほど板の下に入る**——
+            // つまり「新しいダンジョンだけ選べない」という形で出る。
+            // 拠点のチップで一度踏んだのと同じ穴を、地図でもう一度踏んでいた。
+            //
+            // XCUITest の `isHittable` は要素自身の可視性しか見ないので、
+            // 10個とも「押せる」と報告されていた。**検査は通っていた。**
+            GeometryReader { geo in
+                ForEach(Array(STAGES.enumerated()), id: \.element.id) { i, s in
+                    if let at = shell.hotspots["node\(i)"] {
+                        mapNode(s, selected: s.id == stageId)
+                            .position(x: at.x * geo.size.width, y: at.y * geo.size.height)
+                    }
+                }
+            }
+            .allowsHitTesting(true)
         }
     }
 
@@ -409,6 +423,7 @@ struct DispatchScreen: View {
                 }
             }
         }
+        .contentShape(Rectangle())   // 枠の中ならどこでも押せる
         .buttonStyle(PressStyle())
         .accessibilityIdentifier("node-\(s.id)")
     }

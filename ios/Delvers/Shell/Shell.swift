@@ -14,6 +14,8 @@ enum Route: Equatable {
     case base
     case dispatch
     case report(String)
+    /// 潜行中の1人の状況。**結果は見せない**（出発時に確定しているため）
+    case status(String)
     case opening
     case inventory
     case compendium
@@ -116,6 +118,7 @@ final class Shell: ObservableObject {
         switch route {
         case .title, .base: return nil
         case .alchemy: return .garden
+        case .status: return .base
         default: return .base
         }
     }
@@ -162,26 +165,66 @@ final class Shell: ObservableObject {
 }
 
 /// 帰還のローカル通知。**コア層はこの型を知らない**——protocol 越しに差す。
-final class LocalNotifier: ReturnNotifier {
-    private var granted = false
+///
+/// ここには一度に3つの欠陥があった。どれも「通知が来ない」という同じ症状を出す。
+///
+/// 1. **`trigger: nil` で作っていた。** あれは「今すぐ配信」の意味で、
+///    帰還時刻に出す指定ではない。時刻で出すなら `UNTimeIntervalNotificationTrigger`。
+/// 2. **帰還した瞬間に鳴らそうとしていた。** その処理はアプリが動いている
+///    `tick()` の中でしか走らないので、**閉じている間は永久に鳴らない**——
+///    放置ゲームで通知が要るのは、まさに閉じている時。
+/// 3. **前景では出ない。** Apple の文書に
+///    「The system silences notifications for foreground apps by default」とある。
+///    出したいなら `willPresent` の delegate が要る。
+///
+/// <https://developer.apple.com/library/archive/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/SchedulingandHandlingLocalNotifications.html>
+final class LocalNotifier: NSObject, ReturnNotifier, UNUserNotificationCenterDelegate {
+
+    override init() {
+        super.init()
+        UNUserNotificationCenter.current().delegate = self
+    }
 
     func requestPermission() {
         // 許可は「初めて派遣を出した瞬間」にだけ求める。
         // 起動直後に求めても何のための許可か分からず、まず拒否される。
-        Task { @MainActor in
-            let center = UNUserNotificationCenter.current()
-            granted = (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
+        UNUserNotificationCenter.current()
+            .requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+    }
+
+    func scheduleReturn(id: String, job: String, stage: String, afterSeconds: Double) {
+        // **許可の有無をこちらで覚えない。** 前は `granted` を持っていたが、
+        // あれは非同期で入るので、入る前に呼ばれると黙って捨てていた。
+        // 起動をまたぐと false に戻る問題もある。毎回 OS に訊く。
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized
+                    || settings.authorizationStatus == .provisional else { return }
+            let content = UNMutableNotificationContent()
+            content.title = "DELVERS"
+            content.body = "\(job)が\(stage)から帰ってきた"
+            content.sound = .default
+            // 0秒以下は指定できない。すでに帰っている派遣は通知しない
+            guard afterSeconds > 1 else { return }
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: afterSeconds,
+                                                            repeats: false)
+            center.add(UNNotificationRequest(identifier: id, content: content, trigger: trigger))
         }
     }
 
-    func notifyReturn(job: String, stage: String, outcome: String) {
-        guard granted else { return }
-        let content = UNMutableNotificationContent()
-        content.title = "DELVERS"
-        content.body = "\(job)が\(stage)から帰還した（\(outcome)）"
-        content.sound = .default
-        let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(req)
+    func cancelReturn(id: String) {
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: [id])
+    }
+
+    /// 前景でも出す。**既定では消音される**ので、ここで明示しないと
+    /// 「アプリを開いている時だけ鳴らない」という妙な挙動になる。
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
     }
 }
 
