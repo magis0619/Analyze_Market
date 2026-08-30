@@ -467,14 +467,17 @@ final class AlchemyScene: WorldScene {
             log.eulerAngles = SCNVector3(Float.pi / 2.4, Float(i) / 5 * .pi * 2, 0)
             hearth.addChildNode(log)
         }
+        // **火を強くしすぎない。** 3.0／0.55 では白飛びが 3.13% になり、
+        // 「3D が文字を邪魔しない」の基準（3%）を超えた。
+        // 鍋を「置いてある物」に見せるのに要るのは光の量ではなく、下からの向き
         let fireGlow = glow(UIColor(red: 1.0, green: 0.55, blue: 0.22, alpha: 1),
-                            size: 3.0, opacity: 0.55)
+                            size: 1.9, opacity: 0.30)
         fireGlow.position.y = 0.3
         hearth.addChildNode(fireGlow)
         hearth.position = SCNVector3(0, -3.9, 0)
         scene.rootNode.addChildNode(hearth)
         let fireLight = light(.omni, UIColor(red: 1.0, green: 0.52, blue: 0.20, alpha: 1),
-                              intensity: 1500, at: SCNVector3(0, -3.4, 0))
+                              intensity: 900, at: SCNVector3(0, -3.4, 0))
         fireLight.light?.attenuationEndDistance = 22
     }
 
@@ -488,10 +491,14 @@ final class AlchemyScene: WorldScene {
         let ft = Float(t)
         liquidMat.diffuse.contents = want
         liquidMat.emission.contents = want
-        liquidMat.emission.intensity = CGFloat(0.4 + power * 1.4)
+        // **選ばれている状態が既定になった。** 主要動線を生かすために
+        // 着いた時点で薬を1つ選ぶようにしたので、`power` は 0.15 ではなく
+        // 0.55 から始まる。前の係数のままだと液面が常時強く光り、
+        // 白飛びが 3.16%（基準 3%）に乗った——UX の直しが絵の基準を破った
+        liquidMat.emission.intensity = CGFloat(0.22 + power * 0.62)
         liquid.position.y = 1.0 + sin(ft * 1.4) * 0.04
         lamp.light?.color = want
-        lamp.light?.intensity = CGFloat(400 + power * 1400 + Double(sin(ft * 3.1)) * 60)
+        lamp.light?.intensity = CGFloat(300 + power * 800 + Double(sin(ft * 3.1)) * 50)
         // 調合中は泡立つ
         bubbles.opacity = CGFloat(max(0, power - 0.6) * 2.2)
         for b in bubbles.childNodes {

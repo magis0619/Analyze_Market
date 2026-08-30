@@ -60,7 +60,10 @@ def main():
     sigs = {}
     worst = []
     for p in shots:
-        s = stats(p)
+        # 同じ画面の別の瞬間（name.2.png / name.3.png）も見て、**一番悪い値**を採る
+        variants = [p] + [d / f"{p.stem}.{k}.png" for k in (2, 3)]
+        samples = [stats(v) for v in variants if v.exists()]
+        s = {k: max(x[k] for x in samples) for k in samples[0]}
         sigs[p.stem] = (signature(p, False), signature(p, True))
         flags = []
         if s["blown"] > 0.03:

@@ -446,3 +446,114 @@ struct PixelSheet {
     }
 }
 }
+
+// MARK: - UX の5軸（docs/UX-AXES.md）
+//
+// これまでの検査は「壊れていないか」しか見ていなかった。
+// ここは**外部の基準**（Nielsen・Apple HIG・放置ゲームの設計・game feel）から
+// 作った5軸のうち、機械で見られるものを見る。
+
+extension AuditTests {
+
+    /// 軸1 いま何が起きているか分かるか / 軸5d 次の報酬が近くに見えるか
+    func testUX軸1_状態が見えるか() {
+        // 潜行中の拠点
+        let app = launch(["-reset", "-devitems", "24", "-grown", "-gold", "5000",
+                          "-away", "-screen", "base"])
+        let texts = allTexts(app)
+        // 1a: 誰が・どこへ・あと何分
+        check("UX1a", "base", texts.contains { $0.contains("潜行中") }, "潜行中の表示が無い")
+        check("UX1a", "base", texts.contains { $0.contains("残り") && $0.contains("分") },
+              "残り時間が出ていない")
+        // 1c: 形でも出ている（進捗の帯）
+        check("UX1c", "base", app.progressIndicators.count > 0 || app.otherElements["progress"].exists,
+              "待ちの進み具合が形で出ていない")
+        // 5d: 次の報酬が近くに見える
+        check("UX5d", "base", texts.contains { $0.contains("次にやること") }, "次にやることが無い")
+        app.terminate()
+
+        // 1b: 戻ってきた時、留守のあいだの出来事がまとめて出る
+        let app2 = launch(["-reset", "-devitems", "24", "-report", "-screen", "base"])
+        let t2 = allTexts(app2)
+        check("UX1b", "base", t2.contains { $0.contains("帰") || $0.contains("レポート") },
+              "帰還したことが拠点で分からない")
+        app2.terminate()
+        report()
+    }
+
+    /// 軸2 間違えても戻れるか
+    func testUX軸2_戻れるか() {
+        // 2b/2c: 取り消せない操作（売却）に確認と「戻せない」の断り書き
+        let app = launch(["-reset", "-devitems", "24", "-gold", "5000", "-screen", "inventory"])
+        let cta = app.buttons["cta"]
+        check("UX2b", "inventory", cta.exists && cta.isEnabled, "売却の動線が無い")
+        if cta.exists, cta.isEnabled {
+            cta.tap()
+            Thread.sleep(forTimeInterval: 0.8)
+            let t = allTexts(app)
+            // **ボタンの文字は `staticTexts` に出ない。** 最初ここを見ていて
+            // 「やめるが無い」と報告したが、実際には在った。検査の見落とし
+            check("UX2b", "inventory", app.buttons["やめる"].exists, "確認に「やめる」が無い")
+            check("UX2c", "inventory", t.contains { $0.contains("戻せない") },
+                  "「戻せない」と書いていない")
+            // 2d: ロック品と装備中を巻き込まないと明記
+            check("UX2d", "inventory",
+                  t.contains { $0.contains("ロック") && $0.contains("装備中") },
+                  "何が除かれるか書いていない")
+        }
+        app.terminate()
+        report()
+    }
+
+    /// 軸3 覚えていなくても決められるか
+    func testUX軸3_その場で決められるか() {
+        let app = launch(["-reset", "-devitems", "24", "-grown", "-gold", "5000",
+                          "-screen", "dispatch"])
+        // 3a/3b: 装備を選ぶ場面で、今のものと候補が並び、差が数字で出る。
+        // **入口は `pick-weapon`。** 最初 `equip` を叩いていたが、あれは
+        // 選んだ後に確定する側のボタンで、選ぶ画面を開く口ではなかった
+        let equip = app.buttons["pick-weapon"]
+        if equip.exists, equip.isHittable {
+            equip.tap()
+            Thread.sleep(forTimeInterval: 1.2)
+
+            // まず**押す前**に差が見えていること。升目の各タイルには
+            // 今の装備との差が ▲▼ で出ている——ここで既に比べられるなら、
+            // 「別の画面の数字を覚えておく」必要がない
+            let beforeTap = allTexts(app)
+            check("UX3b", "dispatch",
+                  beforeTap.contains { $0.contains("▲") || $0.contains("▼") },
+                  "升目の時点で装備中との差が出ていない")
+
+            // 押したら、今のものと候補が並んで、差が言葉でも出る
+            var tapped = false
+            for i in 0..<app.buttons.count {
+                let e = app.buttons.element(boundBy: i)
+                if e.exists, e.isHittable, e.identifier.hasPrefix("tile-") {
+                    e.tap(); tapped = true; break
+                }
+            }
+            Thread.sleep(forTimeInterval: 1.0)
+            let t = allTexts(app)
+            check("UX3a", "dispatch",
+                  tapped && t.contains { $0.contains("現在") } && t.contains { $0.contains("候補") },
+                  "押しても今の装備と候補が並ばない")
+            check("UX3b", "dispatch",
+                  t.contains { $0.contains("強い") || $0.contains("互角") },
+                  "差が言葉で出ていない")
+        } else {
+            check("UX3a", "dispatch", false, "装備を選ぶ動線が無い")
+        }
+        app.terminate()
+        report()
+    }
+
+    private func allTexts(_ app: XCUIApplication) -> [String] {
+        var out: [String] = []
+        for i in 0..<app.staticTexts.count {
+            let e = app.staticTexts.element(boundBy: i)
+            if e.exists { out.append(e.label) }
+        }
+        return out
+    }
+}

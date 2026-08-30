@@ -102,6 +102,10 @@ final class Shell: ObservableObject {
     }
 
     func go(_ r: Route) {
+        // **画面の移動もひとつの操作。** ここは全部の遷移が通る唯一の口なので、
+        // ここで鳴らせば「押したのに何も起きない」が構造的に無くなる。
+        // 画面ごとに書くと、いつか書き忘れた画面だけ無反応になる
+        if r != route { Haptic.tap() }
         withAnimation(.easeOut(duration: DS.dPop)) { route = r }
     }
 

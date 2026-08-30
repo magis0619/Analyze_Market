@@ -152,7 +152,7 @@ struct DispatchScreen: View {
                         }
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressStyle())
             .accessibilityIdentifier("map-open")
         } action: {
             TierButton(
@@ -213,7 +213,7 @@ struct DispatchScreen: View {
                     .strokeBorder(DS.line, lineWidth: 1)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .accessibilityIdentifier("pick-\(slot.rawValue)")
     }
 
@@ -285,7 +285,7 @@ struct DispatchScreen: View {
             .frame(maxWidth: .infinity, minHeight: DS.tap, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
     }
 
     private func ruleCell(_ r: RetreatRuleDef) -> some View {
@@ -315,7 +315,7 @@ struct DispatchScreen: View {
                     .strokeBorder(on ? tone.opacity(0.7) : DS.line, lineWidth: 1)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .accessibilityIdentifier("rule-\(r.id.rawValue)")
     }
 
@@ -409,7 +409,7 @@ struct DispatchScreen: View {
                 }
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .accessibilityIdentifier("node-\(s.id)")
     }
 
@@ -487,7 +487,7 @@ struct DispatchScreen: View {
                 Image(systemName: "chevron.left")
                     .frame(width: DS.tap, height: DS.tap).contentShape(Rectangle())
             }
-            .buttonStyle(.plain).disabled(idx <= 0)
+            .buttonStyle(PressStyle()).disabled(idx <= 0)
             .foregroundStyle(idx <= 0 ? DS.faint : DS.dim)
             .accessibilityIdentifier("pick-prev")
             Spacer()
@@ -498,7 +498,7 @@ struct DispatchScreen: View {
                 Image(systemName: "chevron.right")
                     .frame(width: DS.tap, height: DS.tap).contentShape(Rectangle())
             }
-            .buttonStyle(.plain).disabled(idx >= count - 1)
+            .buttonStyle(PressStyle()).disabled(idx >= count - 1)
             .foregroundStyle(idx >= count - 1 ? DS.faint : DS.dim)
             .accessibilityIdentifier("pick-next")
         }

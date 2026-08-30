@@ -186,7 +186,7 @@ struct TierButton: View {
             }
             .foregroundStyle(tint)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .disabled(disabled)
         .opacity(disabled ? 0.42 : 1)
     }
@@ -285,21 +285,35 @@ enum Haptic {
     private static let medium = UIImpactFeedbackGenerator(style: .medium)
     private static let heavy = UIImpactFeedbackGenerator(style: .heavy)
     private static let notice = UINotificationFeedbackGenerator()
+    private static let light = UIImpactFeedbackGenerator(style: .light)
+
+    // **触覚と音は同じ入口で鳴らす。** 別々に呼び分けると、
+    // 片方だけ鳴る場面がいつか必ず生まれる。同じ出来事は同じ語彙で言う。
 
     /// 決めた（派遣する・装備する・調合する）
     static func commit() {
         medium.impactOccurred()
         medium.prepare()
+        Sfx.commit.play()
     }
     /// 手に入った（収穫・売却・解放）
     static func gain() {
         notice.notificationOccurred(.success)
         notice.prepare()
+        Sfx.gain.play()
     }
     /// 稀少以上が出た
     static func reveal() {
         heavy.impactOccurred()
         heavy.prepare()
+        Sfx.reveal.play()
+    }
+    /// 触れた。**軽い操作にも応えを返す**——
+    /// 主要な操作だけ鳴ると、それ以外が「効いていない」ように感じる
+    static func tap() {
+        light.impactOccurred()
+        light.prepare()
+        Sfx.tap.play()
     }
     // 「押せないものを押した」の合図は**置かない。**
     // 押せないものは `disabled` にしてあり、そもそも指を受け取らない。
@@ -322,6 +336,7 @@ struct TabBar: View {
         HStack(spacing: DS.sp1) {
             ForEach(Array(items.enumerated()), id: \.offset) { i, label in
                 Button {
+                    Haptic.tap()
                     withAnimation(.easeOut(duration: 0.18)) { selection = i }
                 } label: {
                     Text(label)
@@ -340,7 +355,7 @@ struct TabBar: View {
                         }
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .accessibilityIdentifier(identifier.map { "\($0)-\(i)" } ?? "tab-\(i)")
             }
         }
@@ -451,5 +466,46 @@ struct Surface: View {
                     .fill(raised ? AnyShapeStyle(.thinMaterial)
                                  : AnyShapeStyle(.ultraThinMaterial))
             )
+    }
+}
+
+// MARK: - 押した手応え
+
+/// **押した瞬間に見た目が応える。**
+///
+/// 既定の `.plain` は押しても何も起きない。指を置いてから画面が変わるまでの
+/// あいだ、プレイヤーは「効いたのか」を確かめる手がかりを持たない。
+/// game feel の資料が最初に挙げるのがこれ——押されたものは沈み、少し明るくなる。
+/// <https://egmatic.com/blog/how-to-make-your-game-feel-good>
+struct PressStyle: ButtonStyle {
+    var scale: CGFloat = 0.96
+    var lift: Double = 0.10
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? scale : 1)
+            .brightness(configuration.isPressed ? lift : 0)
+            .animation(.easeOut(duration: 0.10), value: configuration.isPressed)
+    }
+}
+
+/// 手に入った時の粒。**祝わないと、増えた数字はただの数字**。
+struct Burst: View {
+    var tint: Color
+    @State private var go = false
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<10, id: \.self) { i in
+                let a = Double(i) / 10 * .pi * 2
+                Circle()
+                    .fill(tint)
+                    .frame(width: 5, height: 5)
+                    .offset(x: go ? cos(a) * 46 : 0, y: go ? sin(a) * 46 : 0)
+                    .opacity(go ? 0 : 0.95)
+            }
+        }
+        .allowsHitTesting(false)
+        .onAppear { withAnimation(.easeOut(duration: 0.55)) { go = true } }
     }
 }

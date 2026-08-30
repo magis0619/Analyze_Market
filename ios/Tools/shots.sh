@@ -43,7 +43,17 @@ shot () { # name, args...
     # 3秒で撮ると途中の暗い絵が写る（派遣準備が「暗すぎ」と誤判定された）
     sleep $((try + 4)).0
     xcrun simctl io "$DEV" screenshot --type=png "$OUT/$name.png" >/dev/null 2>&1
-    if ! blank "$OUT/$name.png"; then echo "  $name"; return 0; fi
+    if ! blank "$OUT/$name.png"; then
+      # **明滅する絵は1枚では測れない。** 炎も液面も灯りも揺れているので、
+      # 1枚の写真は値ではなく標本にすぎない。実際、同じ画面の白飛びが
+      # 実行ごとに 0.14% と 2.35% を行き来し、基準の 3% を跨いでいた。
+      # 何枚か撮って**一番悪い瞬間**で判定する
+      for k in 2 3; do
+        sleep 0.45
+        xcrun simctl io "$DEV" screenshot --type=png "$OUT/$name.$k.png" >/dev/null 2>&1
+      done
+      echo "  $name"; return 0
+    fi
   done
   echo "  $name ← 真っ黒のまま。起動に失敗している"
   return 1

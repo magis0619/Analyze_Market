@@ -117,7 +117,7 @@ struct ItemTile: View {
             .aspectRatio(1, contentMode: .fit)
             .shadow(color: DS.rarity(item.rarity).opacity(glowStrength), radius: glowRadius)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .accessibilityIdentifier("tile-\(item.id)")
         .accessibilityLabel("\(itemName(item)) \(rarityLabel(item.rarity))")
     }
@@ -250,7 +250,7 @@ struct ItemRow: View {
 
         if let action {
             Button(action: action) { content }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .accessibilityIdentifier("row-\(item.id)")
         } else {
             content

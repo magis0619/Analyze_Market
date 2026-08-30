@@ -65,7 +65,7 @@ struct BaseScreen: View {
                     .frame(maxWidth: .infinity, minHeight: DS.tap)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .accessibilityIdentifier("detail")
             } action: {
                 TierButton(label: next.label, tier: .primary) { shell.go(next.route) }
@@ -160,7 +160,7 @@ struct BaseScreen: View {
             .foregroundStyle(isNext ? DS.gold : DS.dim)
             .shadow(color: isNext ? DS.gold.opacity(0.5) : .clear, radius: 8)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .accessibilityIdentifier("prop-\(p.id)")
         .accessibilityLabel(p.label)
     }
@@ -234,7 +234,7 @@ struct BaseScreen: View {
                         .frame(minWidth: 56, minHeight: DS.tap)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressStyle())
                 }
             }
         }
@@ -267,14 +267,14 @@ struct BaseScreen: View {
                                          text: "\(found.count)", label: "図鑑",
                                          tone: DS.rarity(.rare))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PressStyle())
                         .accessibilityIdentifier("compendium")
                         Button { shell.go(.inventory) } label: {
                             ProgressRing(value: Double(st.data.inventory.count), max: nil,
                                          text: "\(st.data.inventory.count)", label: "所持",
                                          tone: st.data.inventory.count >= 150 ? DS.down : DS.def)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PressStyle())
                         .accessibilityIdentifier("inventory")
                     }
                     .frame(maxWidth: .infinity)

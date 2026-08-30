@@ -95,7 +95,11 @@ struct Toasts: View {
             ForEach(items, id: \.self) { t in
                 Text(t)
                     .font(.delversLabel)
-                    .foregroundStyle(DS.dim)
+                    // 増えた報せは金色にする。**祝わない知らせは、ただの文字**——
+                    // 「+1,611G」が注記と同じ灰色で出るなら、
+                    // 手に入ったことを画面が喜んでいない
+                    .foregroundStyle(t.hasPrefix("+") ? DS.goldHi : DS.dim)
+                    .overlay { if t.hasPrefix("+") { Burst(tint: DS.gold) } }
                     .padding(.horizontal, DS.sp3).padding(.vertical, 6)
                     .background(Capsule().fill(DS.ground.opacity(0.70))
                         .background(Capsule().fill(.thinMaterial)))

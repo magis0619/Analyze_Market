@@ -92,7 +92,7 @@ struct GardenScreen: View {
                 } else if ready > 0 {
                     TierButton(label: "育った \(ready)枠を収穫する", tier: .primary) {
                         let n = shell.state.harvestAll()
-                        if n > 0 { Haptic.gain(); shell.changed(); shell.notify("まとめて収穫 +\(n)") }
+                        if n > 0 { Haptic.gain(); shell.changed(); shell.notify("+収穫 \(n)") }
                     }
                     .accessibilityIdentifier("cta")
                 } else if seedCount > 0 && st.data.garden.beds.contains(where: { $0 == nil }) {
@@ -119,7 +119,7 @@ struct GardenScreen: View {
                             .frame(width: 68, height: 68)
                             .contentShape(Circle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressStyle())
                     .accessibilityIdentifier("expand")
                     .accessibilityLabel("畑を広げる")
                     .position(x: min(max(at.x * geo.size.width, 40), geo.size.width - 40),
@@ -147,7 +147,7 @@ struct GardenScreen: View {
                     if done {
                         TierButton(label: "収穫 +\(p.herb.yieldCount)", tier: .secondary) {
                             let n = shell.state.harvest(i)
-                            if n > 0 { Haptic.gain(); shell.changed(); shell.notify("収穫 +\(n)") }
+                            if n > 0 { Haptic.gain(); shell.changed(); shell.notify("+収穫 \(n)") }
                         }
                     }
                 }
@@ -174,7 +174,7 @@ struct GardenScreen: View {
                             .foregroundStyle(DS.line)
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .accessibilityIdentifier("bed-\(i)")
             }
         }
@@ -230,7 +230,7 @@ struct GardenScreen: View {
                     }
                     .opacity(off ? 0.45 : 1)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .accessibilityIdentifier("herb-\(h.id)")
             }
         }
@@ -302,7 +302,7 @@ struct GardenScreen: View {
                     }
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .accessibilityIdentifier("stock-open")
     }
 
@@ -364,7 +364,7 @@ struct GardenScreen: View {
             cancel: { expanding = false },
             confirm: {
                 if shell.state.expandGarden() {
-                    Haptic.gain(); shell.changed(); shell.notify("畑を広げた")
+                    Haptic.gain(); shell.changed(); shell.notify("+畑がひと枠 広がった")
                 }
                 expanding = false
             }
@@ -448,7 +448,7 @@ struct AlchemyScreen: View {
                         try? await Task.sleep(for: .seconds(1.4))
                         brewing = false
                         shell.alchemyPower = 0.55
-                        shell.notify("《\(p.name)》ができた")
+                        shell.notify("+《\(p.name)》ができた")
                     }
                 }
                 .accessibilityIdentifier("cta")
@@ -519,7 +519,7 @@ struct AlchemyScreen: View {
             // 作れないことは**縁と理由**で言う。札ごと薄くすると文字まで薄くなる
             .opacity(ok ? 1 : 0.92)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .accessibilityIdentifier("potion-\(p.id)")
     }
 
